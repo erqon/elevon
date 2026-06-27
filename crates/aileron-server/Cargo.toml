@@ -22,7 +22,7 @@ required-features = ["postgres"]
 toasty = { version = "0.7.0", default-features = false, features = [] }
 toasty-driver-turso = { version = "0.7.0", optional = true }
 toasty-driver-postgresql = { version = "0.7.0", optional = true }
-tokio = { workspace = true }
 
 anyhow = { workspace = true }
 aileron-config = { workspace = true }
+tokio = { workspace = true }
