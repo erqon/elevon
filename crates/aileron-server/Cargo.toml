@@ -3,4 +3,26 @@ name = "aileron-server"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["turso"]
+turso = ["dep:toasty-driver-turso", "toasty/turso"]
+postgres = ["dep:toasty-driver-postgresql", "toasty/postgresql"]
+
+[[bin]]
+name = "aileron-server"
+path = "src/main.rs"
+required-features = ["turso"]
+
+[[bin]]
+name = "aileron-server-pg"
+path = "src/main.rs"
+required-features = ["postgres"]
+
 [dependencies]
+toasty = { version = "0.7.0", default-features = false, features = [] }
+toasty-driver-turso = { version = "0.7.0", optional = true }
+toasty-driver-postgresql = { version = "0.7.0", optional = true }
+tokio = { workspace = true }
+
+anyhow = { workspace = true }
+aileron-config = { workspace = true }
