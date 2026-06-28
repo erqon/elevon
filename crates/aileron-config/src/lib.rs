@@ -17,7 +17,7 @@ pub enum ConfigError {
     MissingEnv { name: String },
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     pub database: DatabaseConfig,
 }
@@ -52,7 +52,7 @@ impl Config {
 }
 
 pub fn load() -> Result<Config, ConfigError> {
-    Config::from_file("config.yml")
+    Config::from_file("aileron.yml")
 }
 
 fn resolve_env_or_literal(value: String) -> Result<String, ConfigError> {
@@ -68,25 +68,25 @@ fn resolve_env_or_literal(value: String) -> Result<String, ConfigError> {
 mod database {
     use serde::Deserialize;
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Clone, Deserialize)]
     #[serde(tag = "type", rename_all = "lowercase")]
     pub enum DatabaseConfig {
         Turso(TursoConfig),
         Postgres(PostgresConfig),
     }
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Clone, Deserialize)]
     pub struct TursoConfig {
         pub path: String,
     }
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Clone, Deserialize)]
     pub struct PostgresConfig {
         pub url: String,
         pub max_connections: Option<u32>,
     }
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Clone, Deserialize)]
     #[serde(rename_all = "lowercase")]
     pub enum Type {
         Turso,

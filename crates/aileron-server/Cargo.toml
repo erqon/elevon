@@ -18,11 +18,23 @@ name = "aileron-server-pg"
 path = "src/main.rs"
 required-features = ["postgres"]
 
+[[bin]]
+name = "cli"
+path = "src/bin/cli.rs"
+required-features = ["turso"]
+
 [dependencies]
-toasty = { version = "0.7.0", default-features = false, features = [] }
+axum = "0.8.9"
+toasty = { version = "0.7.0", default-features = false, features = ["jiff"] }
+toasty-cli = "0.7.0"
 toasty-driver-turso = { version = "0.7.0", optional = true }
 toasty-driver-postgresql = { version = "0.7.0", optional = true }
+tracing-subscriber = { version = "0.3.23", features = ["ansi", "env-filter", "json"] }
+tracing = "0.1.44"
+tower-http = { version = "0.7.0", features = ["trace"] }
+jiff = "0.2.29"
 
 anyhow = { workspace = true }
 aileron-config = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["net"] }
+uuid = { workspace = true }
