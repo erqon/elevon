@@ -1,4 +1,5 @@
 mod app;
+pub mod cli;
 pub mod db;
 mod routes;
 

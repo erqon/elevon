@@ -17,7 +17,7 @@ pub struct User {
     created_at: jiff::Timestamp,
 
     #[has_one]
-    role: toasty::Deferred<Role>,
+    role: toasty::Deferred<Option<Role>>,
 }
 
 #[derive(Debug, toasty::Model)]

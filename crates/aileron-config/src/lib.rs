@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::path::Path;
 
-pub use database::{DatabaseConfig, PostgresConfig, TursoConfig, Type as DatabaseType};
+pub use database::DatabaseConfig;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
@@ -39,14 +39,7 @@ impl Config {
     }
 
     fn resolve_env(&mut self) -> Result<(), ConfigError> {
-        match &mut self.database {
-            DatabaseConfig::Turso(cfg) => {
-                cfg.path = resolve_env_or_literal(std::mem::take(&mut cfg.path))?;
-            }
-            DatabaseConfig::Postgres(cfg) => {
-                cfg.url = resolve_env_or_literal(std::mem::take(&mut cfg.url))?;
-            }
-        }
+        self.database.path = resolve_env_or_literal(std::mem::take(&mut self.database.path))?;
         Ok(())
     }
 }
@@ -68,29 +61,9 @@ fn resolve_env_or_literal(value: String) -> Result<String, ConfigError> {
 mod database {
     use serde::Deserialize;
 
-    #[derive(Debug, Clone, Deserialize)]
-    #[serde(tag = "type", rename_all = "lowercase")]
-    pub enum DatabaseConfig {
-        Turso(TursoConfig),
-        Postgres(PostgresConfig),
-    }
-
-    #[derive(Debug, Clone, Deserialize)]
-    pub struct TursoConfig {
+    #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+    pub struct DatabaseConfig {
         pub path: String,
-    }
-
-    #[derive(Debug, Clone, Deserialize)]
-    pub struct PostgresConfig {
-        pub url: String,
-        pub max_connections: Option<u32>,
-    }
-
-    #[derive(Debug, Clone, Deserialize)]
-    #[serde(rename_all = "lowercase")]
-    pub enum Type {
-        Turso,
-        Postgres,
     }
 }
 
@@ -102,17 +75,16 @@ mod tests {
     fn test_from_str() -> Result<(), ConfigError> {
         let yaml = r#"
             database:
-                type: turso
                 path: ./data.db
         "#;
         let config = Config::from_str(yaml)?;
-        assert!(matches!(config.database, DatabaseConfig::Turso(_)));
+        assert_eq!(config.database.path, "./data.db");
         Ok(())
     }
 
     #[test]
     fn test_env_value() -> Result<(), ConfigError> {
-        const VAR: &str = "AILERON_TEST_TURSO_PATH";
+        const VAR: &str = "AILERON_TEST_DB_PATH";
         unsafe {
             std::env::set_var(VAR, "/tmp/test.db");
         }
@@ -120,16 +92,12 @@ mod tests {
         let yaml = format!(
             r#"
             database:
-                type: turso
                 path: ${VAR}
         "#
         );
 
         let config = Config::from_str(&yaml)?;
-        assert!(matches!(
-            config.database,
-            DatabaseConfig::Turso(TursoConfig { path }) if path == "/tmp/test.db"
-        ));
+        assert_eq!(config.database.path, "/tmp/test.db");
 
         unsafe {
             std::env::remove_var(VAR);
@@ -147,7 +115,6 @@ mod tests {
         let yaml = format!(
             r#"
             database:
-                type: turso
                 path: ${VAR}
         "#
         );
