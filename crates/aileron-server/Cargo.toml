@@ -12,6 +12,7 @@ name = "toasty"
 path = "src/bin/toasty.rs"
 
 [dependencies]
+argon2 = "0.5.3"
 axum = "0.8.9"
 toasty = { version = "0.7.0", default-features = false, features = ["jiff", "turso"] }
 toasty-cli = "0.7.0"
@@ -26,4 +27,3 @@ aileron-config = { workspace = true }
 tokio = { workspace = true, features = ["net"] }
 uuid = { workspace = true }
 serde = { workspace = true }
-argon2 = "0.5.3"
