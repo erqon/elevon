@@ -4,7 +4,7 @@ pub mod state;
 
 pub async fn serve(config: aileron_config::Config) -> anyhow::Result<()> {
     let db = crate::db::get_db(&config.database).await?;
-    let state = state::AppState { db, config };
+    let state = state::AppState { db };
 
     let app = router::router(state);
 
