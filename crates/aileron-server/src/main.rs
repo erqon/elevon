@@ -1,4 +1,3 @@
-use aileron_server::cli::create_user;
 use tracing_subscriber::{EnvFilter, fmt};
 
 fn init_logging() {
@@ -25,12 +24,6 @@ async fn main() -> anyhow::Result<()> {
     init_logging();
 
     let config = aileron_config::load()?;
-    create_user(
-        config.clone(),
-        "test@test.com".to_string(),
-        "test".to_string(),
-    )
-    .await?;
 
     aileron_server::run(config).await
 }

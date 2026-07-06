@@ -15,22 +15,10 @@ pub struct User {
 
     #[auto]
     created_at: jiff::Timestamp,
-
-    #[has_one]
-    role: toasty::Deferred<Option<Role>>,
 }
 
-#[derive(Debug, toasty::Model)]
-pub struct Role {
-    #[key]
-    #[auto(uuid(v7))]
-    id: uuid::Uuid,
-
-    #[index]
-    user_id: uuid::Uuid,
-
-    name: String,
-
-    #[belongs_to(key = user_id, references = id)]
-    user: toasty::Deferred<User>,
+impl User {
+    pub fn verify_password(&self, password: &str) -> anyhow::Result<bool> {
+        crate::services::auth::verify_password(password, &self.password)
+    }
 }

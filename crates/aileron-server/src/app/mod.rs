@@ -1,5 +1,6 @@
+pub mod error;
 mod router;
-mod state;
+pub mod state;
 
 pub async fn serve(config: aileron_config::Config) -> anyhow::Result<()> {
     let db = crate::db::get_db(&config.database).await?;
