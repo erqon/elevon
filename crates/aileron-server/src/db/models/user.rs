@@ -2,19 +2,19 @@
 pub struct User {
     #[key]
     #[auto(uuid(v7))]
-    id: uuid::Uuid,
+    pub id: uuid::Uuid,
 
     #[unique]
-    email: String,
+    pub email: String,
 
-    first_name: Option<String>,
+    pub first_name: Option<String>,
 
-    last_name: Option<String>,
+    pub last_name: Option<String>,
 
     password: String,
 
     #[auto]
-    created_at: jiff::Timestamp,
+    pub created_at: jiff::Timestamp,
 }
 
 impl User {

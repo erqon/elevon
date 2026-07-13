@@ -1,10 +1,18 @@
+use std::sync::Arc;
+
+use crate::services::auth::TokenService;
+
 pub mod error;
 mod router;
 pub mod state;
 
 pub async fn serve(config: aileron_config::Config) -> anyhow::Result<()> {
     let db = crate::db::get_db(&config.database).await?;
-    let state = state::AppState { db };
+    let token_service = TokenService::new()?;
+    let state = state::AppState {
+        db,
+        tokens: Arc::new(token_service),
+    };
 
     let app = router::router(state);
 
