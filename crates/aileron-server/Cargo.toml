@@ -21,14 +21,15 @@ tracing-subscriber = { version = "0.3.23", features = ["ansi", "env-filter", "js
 tracing = "0.1.44"
 tower-http = { version = "0.7.0", features = ["trace"] }
 jiff = "0.2.29"
-
-anyhow = { workspace = true }
-aileron-config = { workspace = true }
-tokio = { workspace = true, features = ["net"] }
-uuid = { workspace = true }
-serde = { workspace = true }
 pasetors = "0.7.8"
 base64 = "0.22.1"
 axum-extra = { version = "0.12.6", features = ["cookie"] }
 time = "0.3.53"
 serde_json = "1.0.150"
+
+anyhow.workspace = true
+aileron-config = { workspace = true }
+dotenvy.workspace = true
+tokio = { workspace = true, features = ["net"] }
+uuid.workspace = true
+serde.workspace = true

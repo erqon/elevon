@@ -4,6 +4,7 @@ members = ["./crates/*"]
 
 [workspace.dependencies]
 anyhow = "1"
+dotenvy = "0.15.7"
 serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "1.52.3", features = ["rt-multi-thread"] }
 uuid = { version = "1.23.4", features = ["v7"] }

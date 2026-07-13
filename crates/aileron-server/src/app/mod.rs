@@ -7,6 +7,8 @@ mod router;
 pub mod state;
 
 pub async fn serve(config: aileron_config::Config) -> anyhow::Result<()> {
+    dotenvy::dotenv().ok();
+
     let db = crate::db::get_db(&config.database).await?;
     let token_service = TokenService::new()?;
     let state = state::AppState {
