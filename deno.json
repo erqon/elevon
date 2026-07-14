@@ -2,6 +2,7 @@
   "nodeModulesDir": "auto",
   "workspace": ["apps/*"],
   "tasks": {
+    "dashboard:dev": "deno task -f dashboard dev",
     "format": "deno run -A npm:@biomejs/biome format --write",
     "lint": "deno run -A npm:@biomejs/biome lint --write"
   }
