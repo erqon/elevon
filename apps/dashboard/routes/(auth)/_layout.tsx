@@ -1,18 +1,9 @@
 import { define } from "@/utils.ts";
 
-export default define.layout(({ Component, url }) => {
+export default define.layout(({ Component }) => {
   return (
-    <div class="layout">
-      <nav>
-        <a href="/" class={url.pathname === "/" ? "active" : ""}>
-          Home
-        </a>
-        <a href="/about">About</a>
-      </nav>
-      <main>
-        <Component />
-      </main>
-      <footer>&copy; 2026</footer>
+    <div class="flex min-h-screen items-center justify-center bg-background px-4">
+      <Component />
     </div>
   );
 });
