@@ -31,16 +31,14 @@ async fn login(
         Err(err) => return Err(AppError::Db(err)),
     };
 
-    if !user.verify_password(&payload.password)? {
-        return Err(AppError::Unauthorized);
-    }
-
-    let token = state
+    let session_token = state
         .tokens
         .create_access_token(user.id)
         .map_err(AppError::from)?;
 
-    let cookie = Cookie::build(("access_token", token))
+    let (refresh_token, hashed_refresh_token) = state.tokens.create_refresh_token();
+
+    let session_token = Cookie::build(("session_token", session_token))
         .http_only(true)
         .secure(false)
         .same_site(SameSite::Lax)
@@ -48,11 +46,21 @@ async fn login(
         .max_age(time::Duration::hours(1))
         .build();
 
-    Ok((jar.add(cookie), StatusCode::NO_CONTENT))
+    let refresh_token = Cookie::build(("refresh_token", refresh_token))
+        .http_only(false)
+        .secure(false)
+        .same_site(SameSite::Lax)
+        .path("/")
+        .max_age(time::Duration::days(1))
+        .build();
+
+    let updated_jar = jar.add(session_token).add(refresh_token);
+
+    Ok((updated_jar, StatusCode::NO_CONTENT))
 }
 
 async fn logout(jar: CookieJar) -> impl IntoResponse {
-    let cookie = Cookie::build(("access_token", ""))
+    let cookie = Cookie::build(("session_token", ""))
         .http_only(true)
         .path("/")
         .max_age(time::Duration::seconds(0))

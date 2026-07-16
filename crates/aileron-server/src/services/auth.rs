@@ -2,46 +2,24 @@ use std::convert::TryFrom;
 use std::time::Duration;
 
 use anyhow::Result;
-use argon2::{
-    Argon2,
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
-};
 use axum::{
     extract::{FromRequestParts, Request, State},
     http::{HeaderMap, header},
     middleware::Next,
     response::Response,
 };
+use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD};
 use pasetors::claims::{Claims, ClaimsValidationRules};
 use pasetors::keys::SymmetricKey;
 use pasetors::token::UntrustedToken;
 use pasetors::{Local, local, version4::V4};
+use rand::Rng;
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::app::{error::AppError, state::AppState};
 
 const ACCESS_TOKEN_EXPIRES_IN: Duration = Duration::from_secs(60 * 60);
-
-pub fn verify_password(password: &str, password_hash: &str) -> Result<bool> {
-    let argon2 = Argon2::default();
-    let parsed_hash = PasswordHash::new(password_hash)
-        .map_err(|err| anyhow::anyhow!("Failed to verify password: {err}"))?;
-
-    Ok(argon2
-        .verify_password(password.as_bytes(), &parsed_hash)
-        .is_ok())
-}
-
-pub fn hash_password(password: &str) -> Result<String> {
-    let salt = SaltString::generate(&mut OsRng);
-    let argon2 = Argon2::default();
-    let password_hash = argon2
-        .hash_password(password.as_bytes(), &salt)
-        .map_err(|err| anyhow::anyhow!("Failed to hash password: {err}"))?
-        .to_string();
-
-    Ok(password_hash)
-}
 
 pub struct TokenService {
     key: SymmetricKey<V4>,
@@ -77,6 +55,23 @@ impl TokenService {
             .ok_or_else(|| anyhow::anyhow!("missing sub claim"))?;
 
         Uuid::parse_str(&sub.to_string()).map_err(Into::into)
+    }
+
+    pub fn create_refresh_token(&self) -> (String, String) {
+        let mut bytes = [0u8; 32];
+        rand::rng().fill_bytes(&mut bytes);
+
+        let refresh_token = BASE64_URL_SAFE_NO_PAD.encode(bytes);
+
+        let mut hasher = Sha256::new();
+        hasher.update(refresh_token.as_bytes());
+        let hashed_token = hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+
+        (refresh_token, hashed_token)
     }
 }
 
