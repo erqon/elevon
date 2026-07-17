@@ -1,3 +1,7 @@
+import { getCookies } from "@std/http";
+import type { Context } from "fresh";
+import type { State } from "@/utils.ts";
+
 type RequestOptions = {
   body?: unknown;
   headers?: Record<string, string>;
@@ -25,17 +29,23 @@ export type ApiResult<T> = ApiOk<T> | ApiErr;
 const API_BASE_URL = Deno.env.get("API_URL");
 
 async function request<T>(
+  ctx: Context<State>,
   path: string,
   method: string,
   options?: RequestOptions,
 ): Promise<ApiResult<T>> {
   const url = `${API_BASE_URL}${path}`;
   const headers = new Headers(options?.headers);
+  const cookies = getCookies(ctx.req.headers);
 
   let body: BodyInit | null = null;
   if (options?.body !== undefined) {
     headers.set("Content-Type", "application/json");
     body = JSON.stringify(options.body);
+  }
+
+  if (cookies.session) {
+    headers.set("Authorization", `Bearer ${cookies.session}`);
   }
 
   let response: Response;
@@ -44,7 +54,6 @@ async function request<T>(
       method,
       headers,
       body,
-      credentials: "include",
     });
   } catch (err) {
     return {
@@ -90,15 +99,29 @@ async function request<T>(
 }
 
 export const http = {
-  get: <T>(path: string, headers?: Record<string, string>) =>
-    request<T>(path, "GET", { headers }),
+  get: <T>(
+    ctx: Context<State>,
+    path: string,
+    headers?: Record<string, string>,
+  ) => request<T>(ctx, path, "GET", { headers }),
 
-  post: <T>(path: string, body?: unknown, headers?: Record<string, string>) =>
-    request<T>(path, "POST", { body, headers }),
+  post: <T>(
+    ctx: Context<State>,
+    path: string,
+    body?: unknown,
+    headers?: Record<string, string>,
+  ) => request<T>(ctx, path, "POST", { body, headers }),
 
-  put: <T>(path: string, body?: unknown, headers?: Record<string, string>) =>
-    request<T>(path, "PUT", { body, headers }),
+  put: <T>(
+    ctx: Context<State>,
+    path: string,
+    body?: unknown,
+    headers?: Record<string, string>,
+  ) => request<T>(ctx, path, "PUT", { body, headers }),
 
-  delete: <T>(path: string, headers?: Record<string, string>) =>
-    request<T>(path, "DELETE", { headers }),
+  delete: <T>(
+    ctx: Context<State>,
+    path: string,
+    headers?: Record<string, string>,
+  ) => request<T>(ctx, path, "DELETE", { headers }),
 };

@@ -1,6 +1,7 @@
-import { define } from "@/utils.ts";
+import { setCookie } from "@std/http";
 import { btn, input } from "@/components/ui.tsx";
 import { api } from "@/lib/api/mod.ts";
+import { define } from "@/utils.ts";
 
 export const handler = define.handlers({
   async POST(ctx) {
@@ -11,13 +12,28 @@ export const handler = define.handlers({
       return { data: { message: "Access key is required!" } };
     }
 
-    const result = await api.auth.login({ key: key as string });
+    const result = await api.auth.login(ctx, { key: key as string });
 
     if (!result.ok) {
       return { data: { message: result.error.message } };
     }
 
-    return ctx.redirect("/");
+    const headers = new Headers();
+    setCookie(headers, {
+      name: "session",
+      value: result.data.sessionToken,
+      httpOnly: true,
+      secure: false,
+      sameSite: "Lax",
+      path: "/",
+      maxAge: 60 * 60 * 24,
+    });
+    headers.set("Location", "/");
+
+    return new Response(null, {
+      status: 303,
+      headers,
+    });
   },
 });
 
@@ -44,7 +60,6 @@ export default define.page<typeof handler>(({ data }) => {
                 id="key"
                 name="key"
                 type="password"
-                autoFocus
                 autoComplete="off"
                 placeholder="••••••••"
                 class={input}

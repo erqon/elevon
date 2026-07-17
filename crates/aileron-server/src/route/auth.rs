@@ -2,29 +2,26 @@ use axum::{
     Router,
     extract::{ConnectInfo, State},
     http::StatusCode,
-    response::IntoResponse,
     routing::{get, post},
 };
-use axum_extra::{
-    TypedHeader,
-    extract::cookie::{Cookie, CookieJar, SameSite},
-};
+use axum_extra::TypedHeader;
 use headers::UserAgent;
 use std::net::SocketAddr;
 
-use crate::app::state::AppState;
 use crate::db::model::{AccessKey, Session};
-use crate::payload::auth::LoginPayload;
 use crate::service::auth::{create_session_token, device_name_from_ua, hash_raw_token};
 use crate::{
     app::error::{AppError, AppJson},
     service::auth::AuthUser,
 };
+use crate::{
+    app::state::AppState,
+    payload::auth::{AuthMe, LoginPayload, LoginResponse},
+};
 
 pub fn auth_router() -> Router<AppState> {
     Router::new()
         .route("/login", post(login))
-        .route("/logout", post(logout))
         .route("/me", get(me))
 }
 
@@ -32,9 +29,8 @@ async fn login(
     State(state): State<AppState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     TypedHeader(user_agent): TypedHeader<UserAgent>,
-    jar: CookieJar,
     AppJson(payload): AppJson<LoginPayload>,
-) -> Result<(CookieJar, StatusCode), AppError> {
+) -> Result<AppJson<LoginResponse>, AppError> {
     let mut db_pool = state.db.clone();
 
     let hashed_key = hash_raw_token(&payload.key);
@@ -66,36 +62,9 @@ async fn login(
     .exec(&mut db_pool)
     .await?;
 
-    let session_token = Cookie::build(("session_token", raw))
-        .http_only(true)
-        .secure(false)
-        .same_site(SameSite::Lax)
-        .path("/")
-        .max_age(time::Duration::hours(1))
-        .build();
-
-    Ok((jar.add(session_token), StatusCode::NO_CONTENT))
+    Ok(AppJson(LoginResponse { session_token: raw }))
 }
 
-async fn logout(jar: CookieJar) -> impl IntoResponse {
-    let cookie = Cookie::build(("session_token", ""))
-        .http_only(true)
-        .path("/")
-        .max_age(time::Duration::seconds(0))
-        .build();
-
-    (jar.add(cookie), StatusCode::NO_CONTENT)
-}
-
-async fn me(
-    AuthUser { user, session_id }: AuthUser,
-) -> anyhow::Result<AppJson<serde_json::Value>, AppError> {
-    Ok(AppJson(serde_json::json!({
-        "id": user.id,
-        "email": user.email,
-        "first_name": user.first_name,
-        "last_name": user.last_name,
-        "created_at": user.created_at.to_string(),
-        "session_id": session_id,
-    })))
+async fn me(AuthUser { user, session_id }: AuthUser) -> anyhow::Result<AppJson<AuthMe>, AppError> {
+    Ok(AppJson(AuthMe::from_user(user, session_id)))
 }

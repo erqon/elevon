@@ -39,6 +39,7 @@ pub struct AccessKey {
 
     pub key_prefix: String,
 
+    #[unique]
     pub key_hash: String,
 
     pub last_used_at: Option<jiff::Timestamp>,
