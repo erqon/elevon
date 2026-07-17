@@ -30,7 +30,7 @@ export default define.page(() => {
                 class={input}
               />
             </div>
-  
+
             <button type="submit" class={`${btn.primary} w-full`}>
               Sign in
             </button>
