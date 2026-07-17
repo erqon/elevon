@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 pub mod error;
 mod router;
 pub mod state;
@@ -13,7 +15,11 @@ pub async fn serve(config: aileron_config::Config) -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
     tracing::info!("listening on http://{}", listener.local_addr()?);
 
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }

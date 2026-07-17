@@ -39,9 +39,27 @@ where
 pub enum AppError {
     NotFound,
     Unauthorized,
+    Client(ClientAppError),
     Db(toasty::Error),
     Internal(anyhow::Error),
     JsonRejection(JsonRejection),
+}
+
+#[derive(Debug)]
+pub struct ClientAppError {
+    status: StatusCode,
+    code: &'static str,
+    message: String,
+}
+
+impl AppError {
+    pub fn client(status: StatusCode, code: &'static str, message: impl Into<String>) -> Self {
+        Self::Client(ClientAppError {
+            status,
+            code,
+            message: message.into(),
+        })
+    }
 }
 
 impl IntoResponse for AppError {
@@ -59,6 +77,11 @@ impl IntoResponse for AppError {
                 StatusCode::UNAUTHORIZED,
                 "unauthorized",
                 "Unauthorized".to_string(),
+            ),
+            AppError::Client(client_err) => (
+                client_err.status,
+                client_err.code,
+                client_err.message.to_string(),
             ),
             AppError::Db(db_err) if db_err.is_record_not_found() => {
                 (StatusCode::NOT_FOUND, "not_found", "Not found".to_string())

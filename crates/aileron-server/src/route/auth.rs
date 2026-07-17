@@ -1,6 +1,9 @@
 use axum::{
-    Router, extract::ConnectInfo, extract::State, http::StatusCode, response::IntoResponse,
-    routing::post,
+    Router,
+    extract::{ConnectInfo, State},
+    http::StatusCode,
+    response::IntoResponse,
+    routing::{get, post},
 };
 use axum_extra::{
     TypedHeader,
@@ -9,16 +12,20 @@ use axum_extra::{
 use headers::UserAgent;
 use std::net::SocketAddr;
 
-use crate::app::error::{AppError, AppJson};
 use crate::app::state::AppState;
 use crate::db::model::{AccessKey, Session};
 use crate::payload::auth::LoginPayload;
 use crate::service::auth::{create_session_token, device_name_from_ua, hash_raw_token};
+use crate::{
+    app::error::{AppError, AppJson},
+    service::auth::AuthUser,
+};
 
 pub fn auth_router() -> Router<AppState> {
     Router::new()
         .route("/login", post(login))
         .route("/logout", post(logout))
+        .route("/me", get(me))
 }
 
 async fn login(
@@ -36,7 +43,11 @@ async fn login(
         .exec(&mut db_pool)
         .await?
     else {
-        return Err(AppError::Unauthorized);
+        return Err(AppError::client(
+            StatusCode::UNAUTHORIZED,
+            "invalid_access_key",
+            "Invalid access key",
+        ));
     };
 
     let (raw, hash) = create_session_token();
@@ -74,4 +85,17 @@ async fn logout(jar: CookieJar) -> impl IntoResponse {
         .build();
 
     (jar.add(cookie), StatusCode::NO_CONTENT)
+}
+
+async fn me(
+    AuthUser { user, session_id }: AuthUser,
+) -> anyhow::Result<AppJson<serde_json::Value>, AppError> {
+    Ok(AppJson(serde_json::json!({
+        "id": user.id,
+        "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "created_at": user.created_at.to_string(),
+        "session_id": session_id,
+    })))
 }
