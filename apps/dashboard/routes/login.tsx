@@ -1,7 +1,27 @@
 import { define } from "@/utils.ts";
 import { btn, input } from "@/components/ui.tsx";
+import { api } from "@/lib/api/mod.ts";
 
-export default define.page(() => {
+export const handler = define.handlers({
+  async POST(ctx) {
+    const form = await ctx.req.formData();
+    const key = form.get("key");
+
+    if (!key) {
+      return { data: { message: "Access key is required!" } };
+    }
+
+    const result = await api.auth.login({ key: key as string });
+
+    if (!result.ok) {
+      return { data: { message: result.error.message } };
+    }
+
+    return ctx.redirect("/");
+  },
+});
+
+export default define.page<typeof handler>(({ data }) => {
   return (
     <div class="flex min-h-screen items-center justify-center bg-background px-4">
       <div class="w-full max-w-sm">
@@ -12,7 +32,7 @@ export default define.page(() => {
           <p class="mt-2 text-sm text-muted-foreground">
             Enter the shared access key to open the console.
           </p>
-          <form class="mt-5 space-y-4">
+          <form method="post" class="mt-5 space-y-4">
             <div>
               <label
                 htmlFor="key"
@@ -28,7 +48,17 @@ export default define.page(() => {
                 autoComplete="off"
                 placeholder="••••••••"
                 class={input}
+                required
               />
+              {data.message ? (
+                <p
+                  id="key-error"
+                  role="alert"
+                  class="mt-1.5 text-xs text-red-400"
+                >
+                  {data.message}
+                </p>
+              ) : null}
             </div>
 
             <button type="submit" class={`${btn.primary} w-full`}>
