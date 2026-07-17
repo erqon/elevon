@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     app::{error::AppError, state::AppState},
-    db::models::{Session, User},
+    db::model::{Session, User},
 };
 
 pub fn create_session_token() -> (String, String) {
@@ -33,7 +33,6 @@ pub fn hash_raw_token(raw_token: &str) -> String {
         .collect::<String>()
 }
 
-#[derive(Clone, Debug)]
 pub struct AuthUser {
     pub user: User,
     pub session_id: Uuid,

@@ -7,13 +7,13 @@ use axum_extra::{
     extract::cookie::{Cookie, CookieJar, SameSite},
 };
 use headers::UserAgent;
-use serde::Deserialize;
 use std::net::SocketAddr;
 
 use crate::app::error::{AppError, AppJson};
 use crate::app::state::AppState;
-use crate::db::models::{AccessKey, Session};
-use crate::services::auth::{create_session_token, device_name_from_ua, hash_raw_token};
+use crate::db::model::{AccessKey, Session};
+use crate::payload::auth::LoginPayload;
+use crate::service::auth::{create_session_token, device_name_from_ua, hash_raw_token};
 
 pub fn auth_router() -> Router<AppState> {
     Router::new()
@@ -21,22 +21,19 @@ pub fn auth_router() -> Router<AppState> {
         .route("/logout", post(logout))
 }
 
-#[derive(Deserialize)]
-struct Login {
-    key: String,
-}
-
 async fn login(
-    State(mut state): State<AppState>,
-    jar: CookieJar,
-    TypedHeader(user_agent): TypedHeader<UserAgent>,
+    State(state): State<AppState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    AppJson(payload): AppJson<Login>,
+    TypedHeader(user_agent): TypedHeader<UserAgent>,
+    jar: CookieJar,
+    AppJson(payload): AppJson<LoginPayload>,
 ) -> Result<(CookieJar, StatusCode), AppError> {
+    let mut db_pool = state.db.clone();
+
     let hashed_key = hash_raw_token(&payload.key);
     let Some(access_key) = AccessKey::filter(AccessKey::fields().key_hash().eq(hashed_key))
         .first()
-        .exec(&mut state.db)
+        .exec(&mut db_pool)
         .await?
     else {
         return Err(AppError::Unauthorized);
@@ -55,7 +52,7 @@ async fn login(
         last_used_at: now,
         expires_at
     })
-    .exec(&mut state.db)
+    .exec(&mut db_pool)
     .await?;
 
     let session_token = Cookie::build(("session_token", raw))

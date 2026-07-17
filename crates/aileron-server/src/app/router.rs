@@ -3,18 +3,18 @@ use crate::{
         error::{AppError, AppJson},
         state::AppState,
     },
-    routes,
-    services::auth::AuthUser,
+    route,
+    service::auth::AuthUser,
 };
 use axum::{Router, middleware::from_fn, routing::get};
 use tower_http::trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, TraceLayer};
 use tracing::Level;
 
-use crate::routes::auth_router;
+use crate::route::auth_router;
 
 pub fn router(state: AppState) -> Router {
     Router::new()
-        .route("/health", get(routes::health::health))
+        .route("/health", get(route::health::health))
         .route("/me", get(me))
         .nest("/auth", auth_router())
         .fallback(crate::app::error::not_found)

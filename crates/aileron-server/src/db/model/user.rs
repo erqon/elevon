@@ -1,8 +1,8 @@
 use uuid::Uuid;
 
-use crate::db::models::auth::Session;
+use crate::db::model::auth::{LoginEvent, Session};
 
-#[derive(Clone, Debug, toasty::Model)]
+#[derive(toasty::Model)]
 pub struct User {
     #[key]
     #[auto(uuid(v7))]
@@ -18,5 +18,8 @@ pub struct User {
     pub created_at: jiff::Timestamp,
 
     #[has_many]
-    session: toasty::Deferred<Vec<Session>>,
+    pub sessions: toasty::Deferred<Vec<Session>>,
+
+    #[has_many]
+    pub login_events: toasty::Deferred<Vec<LoginEvent>>,
 }

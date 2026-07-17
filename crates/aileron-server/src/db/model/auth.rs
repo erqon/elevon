@@ -1,8 +1,8 @@
 use uuid::Uuid;
 
-use crate::db::models::user::User;
+use crate::db::model::user::User;
 
-#[derive(Clone, Debug, toasty::Model)]
+#[derive(toasty::Model)]
 pub struct Session {
     #[key]
     #[auto(uuid(v7))]
@@ -45,4 +45,30 @@ pub struct AccessKey {
     pub revoked_at: Option<jiff::Timestamp>,
     #[auto]
     pub created_at: jiff::Timestamp,
+}
+
+#[derive(toasty::Embed)]
+pub enum LoginEventOucome {
+    Success,
+    InvalidKey,
+}
+
+#[derive(toasty::Model)]
+pub struct LoginEvent {
+    #[key]
+    #[auto(uuid(v7))]
+    pub id: Uuid,
+
+    #[index]
+    pub user_id: Uuid,
+
+    #[index]
+    pub access_key_id: Uuid,
+
+    pub ip_address: String,
+    pub user_agent: String,
+    pub outcome: LoginEventOucome,
+
+    #[belongs_to(key = user_id, references = id)]
+    pub user: toasty::Deferred<User>,
 }
