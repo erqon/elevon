@@ -3,7 +3,7 @@
   "workspace": ["apps/*"],
   "tasks": {
     "dashboard:dev": "deno task -f dashboard dev",
-    "format": "deno run -A npm:@biomejs/biome format --write",
+    "format": "deno run -A npm:@biomejs/biome check --write",
     "lint": "deno run -A npm:@biomejs/biome lint --write"
   }
 }
