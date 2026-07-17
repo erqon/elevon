@@ -1,12 +1,19 @@
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
-use axum::{Router, extract::State, routing::post};
-use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
+use axum::{
+    Router, extract::ConnectInfo, extract::State, http::StatusCode, response::IntoResponse,
+    routing::post,
+};
+use axum_extra::{
+    TypedHeader,
+    extract::cookie::{Cookie, CookieJar, SameSite},
+};
+use headers::UserAgent;
 use serde::Deserialize;
+use std::net::SocketAddr;
 
 use crate::app::error::{AppError, AppJson};
 use crate::app::state::AppState;
-use crate::db::models::user::User;
+use crate::db::models::{AccessKey, Session};
+use crate::services::auth::{create_session_token, device_name_from_ua, hash_raw_token};
 
 pub fn auth_router() -> Router<AppState> {
     Router::new()
@@ -16,29 +23,42 @@ pub fn auth_router() -> Router<AppState> {
 
 #[derive(Deserialize)]
 struct Login {
-    email: String,
-    password: String,
+    key: String,
 }
 
 async fn login(
     State(mut state): State<AppState>,
     jar: CookieJar,
+    TypedHeader(user_agent): TypedHeader<UserAgent>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     AppJson(payload): AppJson<Login>,
 ) -> Result<(CookieJar, StatusCode), AppError> {
-    let user = match User::get_by_email(&mut state.db, payload.email).await {
-        Ok(user) => user,
-        Err(err) if err.is_record_not_found() => return Err(AppError::Unauthorized),
-        Err(err) => return Err(AppError::Db(err)),
+    let hashed_key = hash_raw_token(&payload.key);
+    let Some(access_key) = AccessKey::filter(AccessKey::fields().key_hash().eq(hashed_key))
+        .first()
+        .exec(&mut state.db)
+        .await?
+    else {
+        return Err(AppError::Unauthorized);
     };
 
-    let session_token = state
-        .tokens
-        .create_access_token(user.id)
-        .map_err(AppError::from)?;
+    let (raw, hash) = create_session_token();
+    let now = jiff::Timestamp::now();
+    let expires_at = now + jiff::Span::new().hours(24);
 
-    let (refresh_token, hashed_refresh_token) = state.tokens.create_refresh_token();
+    toasty::create!(Session {
+        user_id: access_key.user_id,
+        user_agent: user_agent.as_str(),
+        ip_address: addr.ip().to_string(),
+        device_name: device_name_from_ua(user_agent.as_str()),
+        token_hash: hash,
+        last_used_at: now,
+        expires_at
+    })
+    .exec(&mut state.db)
+    .await?;
 
-    let session_token = Cookie::build(("session_token", session_token))
+    let session_token = Cookie::build(("session_token", raw))
         .http_only(true)
         .secure(false)
         .same_site(SameSite::Lax)
@@ -46,17 +66,7 @@ async fn login(
         .max_age(time::Duration::hours(1))
         .build();
 
-    let refresh_token = Cookie::build(("refresh_token", refresh_token))
-        .http_only(false)
-        .secure(false)
-        .same_site(SameSite::Lax)
-        .path("/")
-        .max_age(time::Duration::days(1))
-        .build();
-
-    let updated_jar = jar.add(session_token).add(refresh_token);
-
-    Ok((updated_jar, StatusCode::NO_CONTENT))
+    Ok((jar.add(session_token), StatusCode::NO_CONTENT))
 }
 
 async fn logout(jar: CookieJar) -> impl IntoResponse {

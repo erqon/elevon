@@ -1,83 +1,42 @@
-use std::convert::TryFrom;
-use std::time::Duration;
-
 use anyhow::Result;
 use axum::{
-    extract::{FromRequestParts, Request, State},
+    extract::FromRequestParts,
     http::{HeaderMap, header},
-    middleware::Next,
-    response::Response,
 };
 use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD};
-use pasetors::claims::{Claims, ClaimsValidationRules};
-use pasetors::keys::SymmetricKey;
-use pasetors::token::UntrustedToken;
-use pasetors::{Local, local, version4::V4};
 use rand::Rng;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use crate::app::{error::AppError, state::AppState};
+use crate::{
+    app::{error::AppError, state::AppState},
+    db::models::{Session, User},
+};
 
-const ACCESS_TOKEN_EXPIRES_IN: Duration = Duration::from_secs(60 * 60);
+pub fn create_session_token() -> (String, String) {
+    let mut bytes = [0u8; 32];
+    rand::rng().fill_bytes(&mut bytes);
 
-pub struct TokenService {
-    key: SymmetricKey<V4>,
+    let raw = BASE64_URL_SAFE_NO_PAD.encode(bytes);
+    let hash = hash_raw_token(&raw);
+
+    (raw, hash)
 }
 
-impl TokenService {
-    pub fn new() -> Result<Self> {
-        let b64 = std::env::var("AILERON_TOKEN_KEY")?;
-        let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, b64)?;
-        let key = SymmetricKey::<V4>::from(&bytes)?;
-        Ok(Self { key })
-    }
-
-    pub fn create_access_token(&self, user_id: Uuid) -> anyhow::Result<String> {
-        let mut claims = Claims::new()?;
-
-        claims.subject(&user_id.to_string())?;
-        claims.set_expires_in(&ACCESS_TOKEN_EXPIRES_IN)?;
-
-        let token = local::encrypt(&self.key, &claims, None, None)?;
-        Ok(token)
-    }
-
-    pub fn validate_access_token(&self, token: &str) -> anyhow::Result<Uuid> {
-        let untrusted = UntrustedToken::<Local, V4>::try_from(token)?;
-        let rules = ClaimsValidationRules::new();
-
-        let trusted = local::decrypt(&self.key, &untrusted, &rules, None, None)?;
-        let sub = trusted
-            .payload_claims()
-            .ok_or_else(|| anyhow::anyhow!("missing claims"))?
-            .get_claim("sub")
-            .ok_or_else(|| anyhow::anyhow!("missing sub claim"))?;
-
-        Uuid::parse_str(&sub.to_string()).map_err(Into::into)
-    }
-
-    pub fn create_refresh_token(&self) -> (String, String) {
-        let mut bytes = [0u8; 32];
-        rand::rng().fill_bytes(&mut bytes);
-
-        let refresh_token = BASE64_URL_SAFE_NO_PAD.encode(bytes);
-
-        let mut hasher = Sha256::new();
-        hasher.update(refresh_token.as_bytes());
-        let hashed_token = hasher
-            .finalize()
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
-
-        (refresh_token, hashed_token)
-    }
+pub fn hash_raw_token(raw_token: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(raw_token.as_bytes());
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>()
 }
 
 #[derive(Clone, Debug)]
 pub struct AuthUser {
-    pub user_id: Uuid,
+    pub user: User,
+    pub session_id: Uuid,
 }
 
 impl FromRequestParts<AppState> for AuthUser {
@@ -89,12 +48,10 @@ impl FromRequestParts<AppState> for AuthUser {
     ) -> std::prelude::v1::Result<Self, Self::Rejection> {
         let token = extract_token_from_headers(&parts.headers).ok_or(AppError::Unauthorized)?;
 
-        let user_id = state
-            .tokens
-            .validate_access_token(&token)
-            .map_err(|_| AppError::Unauthorized)?;
+        let mut db = state.db.clone();
+        let auth_user = check_user_session(&mut db, token).await?;
 
-        Ok(AuthUser { user_id })
+        Ok(auth_user)
     }
 }
 
@@ -109,22 +66,73 @@ fn extract_token_from_headers(headers: &HeaderMap) -> Option<String> {
     let cookie_header = headers.get(header::COOKIE)?.to_str().ok()?;
     cookie_header.split(';').map(str::trim).find_map(|pair| {
         let (name, value) = pair.split_once('=')?;
-        (name == "access_token").then(|| value.to_string())
+        (name == "session_token").then(|| value.to_string())
     })
 }
 
-pub async fn require_auth(
-    State(state): State<AppState>,
-    mut req: Request,
-    next: Next,
-) -> Result<Response, AppError> {
-    let token = extract_token_from_headers(req.headers()).ok_or(AppError::Unauthorized)?;
+async fn check_user_session(
+    db: &mut toasty::Db,
+    session_token: String,
+) -> Result<AuthUser, AppError> {
+    let hashed_token = hash_raw_token(&session_token);
 
-    let user_id = state
-        .tokens
-        .validate_access_token(&token)
-        .map_err(|_| AppError::Unauthorized)?;
+    let session = Session::filter(Session::fields().token_hash().eq(hashed_token))
+        .first()
+        .exec(db)
+        .await?;
 
-    req.extensions_mut().insert(AuthUser { user_id });
-    Ok(next.run(req).await)
+    if let Some(session) = session {
+        if session.expires_at < jiff::Timestamp::now() {
+            session.delete().exec(db).await?;
+            return Err(AppError::Unauthorized);
+        }
+
+        let user = User::get_by_id(db, session.user_id).await?;
+
+        Ok(AuthUser {
+            user,
+            session_id: session.id,
+        })
+    } else {
+        return Err(AppError::Unauthorized);
+    }
+}
+
+pub fn device_name_from_ua(ua: &str) -> String {
+    let platform = ua
+        .split_once('(')
+        .and_then(|(_, rest)| rest.split_once(')'))
+        .map(|(inside, _)| {
+            inside
+                .split(';')
+                .map(str::trim)
+                .find(|part| {
+                    part.starts_with("Linux")
+                        || part.starts_with("Windows")
+                        || part.starts_with("Macintosh")
+                        || part.starts_with("Android")
+                        || part.starts_with("iPhone")
+                        || part.starts_with("iPad")
+                })
+                .map(|part| match part {
+                    "Macintosh" => "macOS",
+                    other => other,
+                })
+                .unwrap_or("Unknown")
+        })
+        .unwrap_or("Unknown");
+
+    let browser = if ua.contains("Edg/") {
+        "Edge"
+    } else if ua.contains("Chrome/") && !ua.contains("Edg/") {
+        "Chrome"
+    } else if ua.contains("Firefox/") {
+        "Firefox"
+    } else if ua.contains("Safari/") && !ua.contains("Chrome/") {
+        "Safari"
+    } else {
+        "Unknown"
+    };
+
+    format!("{platform}, {browser}")
 }
