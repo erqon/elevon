@@ -1,9 +1,17 @@
 import { setCookie } from "@std/http";
+import { page } from "fresh";
 import { btn, input } from "@/components/ui.tsx";
 import { api } from "@/lib/api/mod.ts";
 import { define } from "@/utils.ts";
 
-export const handler = define.handlers({
+export const handler = define.handlers<{ message: string | null }>({
+  GET(ctx) {
+    if (ctx.state.user) {
+      return ctx.redirect("/");
+    }
+
+    return page({ message: null });
+  },
   async POST(ctx) {
     const form = await ctx.req.formData();
     const key = form.get("key");

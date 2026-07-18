@@ -23,6 +23,7 @@ pub fn auth_router() -> Router<AppState> {
     Router::new()
         .route("/login", post(login))
         .route("/me", get(me))
+        .route("/logout", post(logout))
 }
 
 async fn login(
@@ -65,6 +66,20 @@ async fn login(
     Ok(AppJson(LoginResponse { session_token: raw }))
 }
 
-async fn me(AuthUser { user, session_id }: AuthUser) -> anyhow::Result<AppJson<AuthMe>, AppError> {
+async fn me(AuthUser { user, session_id }: AuthUser) -> Result<AppJson<AuthMe>, AppError> {
     Ok(AppJson(AuthMe::from_user(user, session_id)))
+}
+
+async fn logout(
+    AuthUser {
+        user: _,
+        session_id,
+    }: AuthUser,
+    State(state): State<AppState>,
+) -> Result<StatusCode, AppError> {
+    let mut db_pool = state.db.clone();
+
+    Session::delete_by_id(&mut db_pool, session_id).await?;
+
+    Ok(StatusCode::NO_CONTENT)
 }

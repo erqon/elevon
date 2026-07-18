@@ -10,4 +10,7 @@ export const authApi = {
   me: (ctx: Context<State>) => {
     return http.get<User>(ctx, "/auth/me");
   },
+  logout: (ctx: Context<State>) => {
+    return http.post<void>(ctx, "/auth/logout");
+  },
 };
