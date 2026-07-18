@@ -1,6 +1,5 @@
 import { getCookies } from "@std/http";
-import type { Context } from "fresh";
-import type { State } from "@/utils.ts";
+import type { AppContext } from "@/lib/types.ts";
 
 export interface ApiErrorBody {
   code: string;
@@ -24,7 +23,7 @@ export type ApiResult<T> = ApiOk<T> | ApiErr;
 const API_BASE_URL = Deno.env.get("API_URL");
 
 async function request<T>(
-  ctx: Context<State>,
+  ctx: AppContext,
   path: string,
   method: string,
   requestBody?: unknown,
@@ -94,14 +93,13 @@ async function request<T>(
 }
 
 export const http = {
-  get: <T>(ctx: Context<State>, path: string) => request<T>(ctx, path, "GET"),
+  get: <T>(ctx: AppContext, path: string) => request<T>(ctx, path, "GET"),
 
-  post: <T>(ctx: Context<State>, path: string, body?: unknown) =>
+  post: <T>(ctx: AppContext, path: string, body?: unknown) =>
     request<T>(ctx, path, "POST", { body }),
 
-  put: <T>(ctx: Context<State>, path: string, body?: unknown) =>
+  put: <T>(ctx: AppContext, path: string, body?: unknown) =>
     request<T>(ctx, path, "PUT", { body }),
 
-  delete: <T>(ctx: Context<State>, path: string) =>
-    request<T>(ctx, path, "DELETE"),
+  delete: <T>(ctx: AppContext, path: string) => request<T>(ctx, path, "DELETE"),
 };
