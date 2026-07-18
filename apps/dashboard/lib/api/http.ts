@@ -2,11 +2,6 @@ import { getCookies } from "@std/http";
 import type { Context } from "fresh";
 import type { State } from "@/utils.ts";
 
-interface RequestOptions {
-  body?: unknown;
-  headers?: Record<string, string>;
-}
-
 export interface ApiErrorBody {
   code: string;
   message: string;
@@ -32,16 +27,16 @@ async function request<T>(
   ctx: Context<State>,
   path: string,
   method: string,
-  options?: RequestOptions,
+  requestBody?: unknown,
 ): Promise<ApiResult<T>> {
   const url = `${API_BASE_URL}${path}`;
   const headers = new Headers(ctx.req.headers);
   const cookies = getCookies(headers);
 
   let body: BodyInit | null = null;
-  if (options?.body !== undefined) {
+  if (requestBody !== undefined) {
     headers.set("Content-Type", "application/json");
-    body = JSON.stringify(options.body);
+    body = JSON.stringify(requestBody);
   }
 
   if (cookies.session) {
