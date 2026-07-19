@@ -49,7 +49,7 @@ pub struct AccessKey {
 }
 
 #[derive(toasty::Embed)]
-pub enum LoginEventOucome {
+pub enum LoginEventOutcome {
     Success,
     InvalidKey,
 }
@@ -68,7 +68,7 @@ pub struct LoginEvent {
 
     pub ip_address: String,
     pub user_agent: String,
-    pub outcome: LoginEventOucome,
+    pub outcome: LoginEventOutcome,
 
     #[belongs_to(key = user_id, references = id)]
     pub user: toasty::Deferred<User>,
