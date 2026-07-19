@@ -1,6 +1,12 @@
 [workspace]
 resolver = "3"
-members = ["./crates/*", "crates/aileron-cli"]
+members = [
+  "crates/aileron-agent",
+  "crates/aileron-cli",
+  "crates/aileron-config",
+  "crates/aileron-proxy",
+  "crates/aileron-server",
+]
 
 [workspace.dependencies]
 anyhow = "1"
