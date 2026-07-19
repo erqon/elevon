@@ -67,6 +67,7 @@ name = "aileron-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "thiserror",
  "tokio",
 ]
 
