@@ -1,7 +1,11 @@
 use clap::{
-    Parser,
+    Parser, Subcommand,
     builder::styling::{AnsiColor, Styles},
 };
+
+mod dashboard;
+
+use dashboard::DashboardCommands;
 
 const STYLES: Styles = Styles::styled()
     .header(AnsiColor::Yellow.on_default())
@@ -9,7 +13,7 @@ const STYLES: Styles = Styles::styled()
     .literal(AnsiColor::Green.on_default())
     .placeholder(AnsiColor::Green.on_default());
 
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[command(
     name = "aileron",
     version,
@@ -17,7 +21,7 @@ const STYLES: Styles = Styles::styled()
     long_about = "Aileron: A zero-SSH, agent-driven container orchestrator and Pingora-powered edge proxy featuring a unified dashboard to monitor, manage, and load-balance server clusters with zero downtime.",
     styles = STYLES
 )]
-struct Args {
+struct Cli {
     #[arg(
         short,
         long,
@@ -25,9 +29,18 @@ struct Args {
         help = "Path to the config file"
     )]
     config: Option<String>,
+
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    #[command(subcommand, version = "0.1.0")]
+    Dashboard(DashboardCommands),
 }
 
 #[tokio::main]
 async fn main() {
-    let _args = Args::parse();
+    let _cli = Cli::parse();
 }
