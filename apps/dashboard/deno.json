@@ -4,7 +4,7 @@
     "build": "vite build",
     "start": "deno serve -A _fresh/server.js",
     "update": "deno run -A -r jsr:@fresh/update .",
-    "compile": "deno task build && deno compile --output dist/aileron-dashboard --include _fresh -A _fresh/compiled-entry.js"
+    "compile": "deno compile --output dist/aileron-dashboard -A . "
   },
   "lint": {
     "rules": {
