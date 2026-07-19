@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-serde = { workspace = true }
 serde_yml = "0.0.13"
-thiserror = "2.0.18"
+
+serde.workspace = true
+thiserror.workspace = true

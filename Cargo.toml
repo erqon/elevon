@@ -6,7 +6,8 @@ members = ["./crates/*", "crates/aileron-cli"]
 anyhow = "1"
 dotenvy = "0.15.7"
 serde = { version = "1.0", features = ["derive"] }
-tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros"] }
-uuid = { version = "1.23.4", features = ["v7"] }
+tokio = { version = "1.53.0", features = ["rt-multi-thread", "macros"] }
+thiserror = "2.0.19"
+uuid = { version = "1.24.0", features = ["v7"] }
 
 aileron-config = { path = "./crates/aileron-config" }
