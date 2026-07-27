@@ -30,7 +30,7 @@ fn main() {
     my_server.bootstrap();
 
     let mut upstreams =
-        LoadBalancer::try_from_iter(["127.0.0.1:3001", "127.0.0.1:3002", "127.0.0.1:3003"])
+        LoadBalancer::try_from_iter(["127.0.0.1:3000", "127.0.0.1:3001", "127.0.0.1:3002"])
             .unwrap();
 
     let hc = TcpHealthCheck::new();

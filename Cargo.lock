@@ -87,6 +87,9 @@ dependencies = [
 [[package]]
 name = "aileron-agent"
 version = "0.1.0"
+dependencies = [
+ "clap",
+]
 
 [[package]]
 name = "aileron-cli"

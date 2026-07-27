@@ -16,7 +16,7 @@ const STYLES: Styles = Styles::styled()
     name = "aileron",
     version,
     about,
-    long_about = "Aileron: A zero-SSH, agent-driven container orchestrator and Pingora-powered edge proxy featuring a unified dashboard to monitor, manage, and load-balance server clusters with zero downtime.",
+    long_about = "Aileron: A Pingora-powered edge proxy featuring a unified dashboard to monitor, manage, and load-balance server clusters with zero downtime, and a zero-SSH, agent-driven container orchestrator.",
     styles = STYLES
 )]
 pub struct Cli {

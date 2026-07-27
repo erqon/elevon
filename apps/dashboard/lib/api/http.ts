@@ -96,10 +96,10 @@ export const http = {
   get: <T>(ctx: AppContext, path: string) => request<T>(ctx, path, "GET"),
 
   post: <T>(ctx: AppContext, path: string, body?: unknown) =>
-    request<T>(ctx, path, "POST", { body }),
+    request<T>(ctx, path, "POST", body),
 
   put: <T>(ctx: AppContext, path: string, body?: unknown) =>
-    request<T>(ctx, path, "PUT", { body }),
+    request<T>(ctx, path, "PUT", body),
 
   delete: <T>(ctx: AppContext, path: string) => request<T>(ctx, path, "DELETE"),
 };
