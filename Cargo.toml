@@ -3,7 +3,8 @@ resolver = "3"
 members = [
   "crates/aileron-agent",
   "crates/aileron-cli",
-  "crates/aileron-config",
+  "crates/aileron-config", 
+  "crates/aileron-deploy",
   "crates/aileron-proxy",
   "crates/aileron-server",
 ]

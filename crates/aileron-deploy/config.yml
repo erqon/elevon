@@ -1,0 +1,38 @@
+name: project-name
+image: project/project-name
+
+aileron:
+  dashboard: https://dash.example.com
+  project: my-app
+
+registry:
+  server: ghcr.io
+  username: $GHCR_USERNAME
+  password: $GHCR_PASSWORD
+
+routing:
+  domain: app.example.com
+  port: 3000
+
+env:
+  NODE_ENV: production
+  PORT: 3000
+  DATABASE_URL: $DATABASE_URL
+
+runtime:
+  restart: unless-stopped
+  memory_limit: 512mb
+  cpu_limit: "1.0"
+
+  healthcheck:
+    path: /healthz
+    interval: 5s
+    timeout: 2s
+    retries: 3
+
+servers:
+  - host: 10.0.0.5
+    role: web
+    
+  - host: 10.0.0.6
+    role: web
