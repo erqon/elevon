@@ -1,3 +1,8 @@
+use aileron_config::AileronConfig;
+use aileron_deploy::config::Config;
+
 fn main() {
-    println!("Hello, world!");
+    let config = Config::from_file("./config.yml").unwrap();
+
+    println!("{config:#?}");
 }

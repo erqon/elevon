@@ -1,6 +1,8 @@
 mod error;
 
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer};
+use std::collections::HashMap;
 use std::path::Path;
 
 pub use error::ConfigError;
@@ -38,4 +40,27 @@ pub fn resolve_env_or_literal(value: String) -> Result<String, ConfigError> {
     } else {
         Ok(value)
     }
+}
+
+pub fn deserialize_string_map<'de, D>(deserializer: D) -> Result<HashMap<String, String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let raw: HashMap<String, serde_yml::Value> = HashMap::deserialize(deserializer)?;
+    raw.into_iter()
+        .map(|(k, v)| {
+            let s = match v {
+                serde_yml::Value::String(s) => s,
+                serde_yml::Value::Number(n) => n.to_string(),
+                serde_yml::Value::Bool(b) => b.to_string(),
+                serde_yml::Value::Null => String::new(),
+                other => {
+                    return Err(serde::de::Error::custom(format!(
+                        "env var `{k}` must be a scalar, got {other:?}"
+                    )));
+                }
+            };
+            Ok((k, s))
+        })
+        .collect()
 }

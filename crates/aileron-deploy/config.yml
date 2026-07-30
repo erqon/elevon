@@ -15,9 +15,11 @@ routing:
   port: 3000
 
 env:
-  NODE_ENV: production
-  PORT: 3000
-  DATABASE_URL: $DATABASE_URL
+  vars:
+    NODE_ENV: production
+    PORT: 3000
+  inherit:
+    - DATABASE_URL
 
 runtime:
   restart: unless-stopped
