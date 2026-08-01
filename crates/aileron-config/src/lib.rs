@@ -32,13 +32,13 @@ where
     }
 }
 
-pub fn resolve_env_or_literal(value: String) -> Result<String, ConfigError> {
+pub fn resolve_env_or_literal(value: &str) -> Result<String, ConfigError> {
     if let Some(name) = value.strip_prefix('$') {
         std::env::var(name).map_err(|_| ConfigError::MissingEnv {
             name: name.to_string(),
         })
     } else {
-        Ok(value)
+        Ok(value.to_string())
     }
 }
 
