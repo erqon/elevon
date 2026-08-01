@@ -1,5 +1,5 @@
 use clap::{
-    Parser,
+    Parser, Subcommand,
     builder::styling::{AnsiColor, Styles},
 };
 
@@ -17,4 +17,10 @@ const STYLES: Styles = Styles::styled()
     long_about = "Aileron Agent: A zero-SSH, agent-driven container orchestrator.",
     styles = STYLES
 )]
-pub struct Cli {}
+pub struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {}

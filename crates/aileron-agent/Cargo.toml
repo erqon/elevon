@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 clap.workspace = true
+x25519-dalek = { version = "3.0.0", features = ["getrandom", "static_secrets"] }
