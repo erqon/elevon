@@ -19,7 +19,7 @@ impl ResolveEnv for EnvConfig {
         let mut resolved = HashMap::new();
 
         for (key, value) in std::mem::take(&mut self.vars) {
-            resolved.insert(key, resolve_env_or_literal(value)?);
+            resolved.insert(key, resolve_env_or_literal(&value)?);
         }
 
         for name in std::mem::take(&mut self.inherit) {

@@ -10,8 +10,8 @@ pub struct RegistryConfig {
 
 impl ResolveEnv for RegistryConfig {
     fn resolve_env(&mut self) -> Result<(), ConfigError> {
-        self.username = resolve_env_or_literal(std::mem::take(&mut self.username))?;
-        self.password = resolve_env_or_literal(std::mem::take(&mut self.password))?;
+        self.username = resolve_env_or_literal(&self.username)?;
+        self.password = resolve_env_or_literal(&self.password)?;
         Ok(())
     }
 }
