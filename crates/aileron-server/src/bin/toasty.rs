@@ -1,8 +1,10 @@
+use aileron_config::AileronConfig;
+use aileron_server::Config;
 use toasty_cli::{Config as ToastyCliConfig, ToastyCli};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let app_config = aileron_config::load()?;
+    let app_config = Config::from_file("aileron.yml")?;
     let db = aileron_server::db::get_db(&app_config.database).await?;
 
     let toasty_config = ToastyCliConfig::load()?;

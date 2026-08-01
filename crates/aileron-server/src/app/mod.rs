@@ -1,10 +1,10 @@
-use std::net::SocketAddr;
-
 pub mod error;
 mod router;
 pub mod state;
 
-pub async fn serve(config: aileron_config::Config) -> anyhow::Result<()> {
+use std::net::SocketAddr;
+
+pub async fn serve(config: crate::Config) -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
 
     let db = crate::db::get_db(&config.database).await?;

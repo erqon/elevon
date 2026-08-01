@@ -1,9 +1,12 @@
 mod app;
+pub mod config;
 pub mod db;
 mod payload;
 mod route;
 pub mod service;
 
-pub async fn run(config: aileron_config::Config) -> anyhow::Result<()> {
+pub use config::*;
+
+pub async fn run(config: Config) -> anyhow::Result<()> {
     app::serve(config).await
 }

@@ -1,7 +1,8 @@
-use aileron_config::DatabaseConfig;
+pub mod model;
+
 use anyhow::Result;
 
-pub mod model;
+use crate::DatabaseConfig;
 
 pub async fn get_db(config: &DatabaseConfig) -> Result<toasty::Db> {
     let driver = toasty_driver_turso::Turso::file(config.path.clone()).concurrent_writes();

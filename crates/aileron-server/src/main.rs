@@ -1,3 +1,5 @@
+use aileron_config::AileronConfig;
+use aileron_server::Config;
 use tracing_subscriber::{EnvFilter, fmt};
 
 fn init_logging() {
@@ -23,7 +25,7 @@ fn init_logging() {
 async fn main() -> anyhow::Result<()> {
     init_logging();
 
-    let config = aileron_config::load()?;
+    let config = Config::from_file("aileron.yml")?;
 
     aileron_server::run(config).await
 }
