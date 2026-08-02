@@ -1,13 +1,18 @@
 import { getCookies } from "@tanstack/react-start/server";
-import { ApiError } from "@/lib/api-error.ts";
+import type { ApiError, ApiResult } from "@/lib/api-error.ts";
 
 const API_BASE_URL = Deno.env.get("API_URL");
+
+function fail(error: ApiError): ApiResult<never> {
+  console.error(`[api] ${error.status} ${error.code}: ${error.message}`);
+  return { ok: false, error };
+}
 
 async function request<T>(
   path: string,
   method: string,
   requestBody?: unknown,
-): Promise<T> {
+): Promise<ApiResult<T>> {
   const url = `${API_BASE_URL}${path}`;
   const headers = new Headers();
   const cookies = getCookies();
@@ -30,30 +35,30 @@ async function request<T>(
       body,
     });
   } catch (err) {
-    throw new ApiError(
-      0,
-      "network",
-      err instanceof Error ? err.message : "Network error",
-    );
+    return fail({
+      status: 0,
+      code: "network",
+      message: err instanceof Error ? err.message : "Network error",
+    });
   }
 
   if (!response.ok) {
-    const error = await response.json().catch(() => null);
+    const payload = await response.json().catch(() => null);
 
-    throw new ApiError(
-      response.status,
-      typeof error?.code === "string" ? error.code : "unknown",
-      typeof error?.message === "string"
-        ? error.message
+    return fail({
+      status: response.status,
+      code: typeof payload?.code === "string" ? payload.code : "unknown",
+      message: typeof payload?.message === "string"
+        ? payload.message
         : `API Error: ${response.status}`,
-    );
+    });
   }
 
   if (response.status === 204) {
-    return undefined as T;
+    return { ok: true, data: undefined as T };
   }
 
-  return (await response.json()) as T;
+  return { ok: true, data: (await response.json()) as T };
 }
 
 export const http = {

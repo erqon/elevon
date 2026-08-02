@@ -7,9 +7,10 @@ use axum::{
 use axum_extra::TypedHeader;
 use headers::UserAgent;
 use std::net::SocketAddr;
+use aileron_auth::token::{issue, hash};
 
 use crate::db::model::{AccessKey, Session};
-use crate::service::auth::{create_session_token, device_name_from_ua, hash_raw_token};
+use crate::service::auth::device_name_from_ua;
 use crate::{
     app::error::{AppError, AppJson},
     service::auth::AuthUser,
@@ -34,7 +35,7 @@ async fn login(
 ) -> Result<AppJson<LoginResponse>, AppError> {
     let mut db_pool = state.db.clone();
 
-    let hashed_key = hash_raw_token(&payload.key);
+    let hashed_key = hash(&payload.key);
     let Some(access_key) = AccessKey::filter(AccessKey::fields().key_hash().eq(hashed_key))
         .first()
         .exec(&mut db_pool)
@@ -47,7 +48,7 @@ async fn login(
         ));
     };
 
-    let (raw, hash) = create_session_token();
+    let session_token = issue();
     let now = jiff::Timestamp::now();
     let expires_at = now + jiff::Span::new().hours(24);
 
@@ -56,14 +57,14 @@ async fn login(
         user_agent: user_agent.as_str(),
         ip_address: addr.ip().to_string(),
         device_name: device_name_from_ua(user_agent.as_str()),
-        token_hash: hash,
+        token_hash: session_token.hash,
         last_used_at: now,
         expires_at
     })
     .exec(&mut db_pool)
     .await?;
 
-    Ok(AppJson(LoginResponse { session_token: raw }))
+    Ok(AppJson(LoginResponse { session_token: session_token.raw }))
 }
 
 async fn me(AuthUser { user, session_id }: AuthUser) -> Result<AppJson<AuthMe>, AppError> {

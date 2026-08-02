@@ -3,30 +3,21 @@ use axum::{
     extract::FromRequestParts,
     http::{HeaderMap, header},
 };
-use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD};
-use rand::Rng;
-use sha2::{Digest, Sha256};
 use uuid::Uuid;
+use aileron_auth::token::{access_key, hash};
 
 use crate::{
     app::{error::AppError, state::AppState},
     db::model::{AccessKey, Session, User},
 };
 
-pub fn create_session_token() -> (String, String) {
-    let raw = generate_opaque_key();
-    let hash = hash_raw_token(&raw);
-
-    (raw, hash)
-}
-
 pub async fn create_access_key(
     mut db: toasty::Db,
     user_id: Uuid,
     name: impl Into<String>,
 ) -> Result<(String, AccessKey)> {
-    let key = generate_access_key();
-    let hash = hash_raw_token(&key);
+    let key = access_key();
+    let hash = hash(&key);
 
     let access_key = toasty::create!(AccessKey {
         user_id,
@@ -38,27 +29,6 @@ pub async fn create_access_key(
     .await?;
 
     Ok((key, access_key))
-}
-
-pub fn hash_raw_token(raw_token: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(raw_token.as_bytes());
-    hasher
-        .finalize()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>()
-}
-
-fn generate_opaque_key() -> String {
-    let mut bytes = [0u8; 32];
-    rand::rng().fill_bytes(&mut bytes);
-    BASE64_URL_SAFE_NO_PAD.encode(bytes)
-}
-
-fn generate_access_key() -> String {
-    let opaque_key = generate_opaque_key();
-    format!("aileron_ak_{}", opaque_key)
 }
 
 pub struct AuthUser {
@@ -97,7 +67,7 @@ async fn check_user_session(
     db: &mut toasty::Db,
     session_token: String,
 ) -> Result<AuthUser, AppError> {
-    let hashed_token = hash_raw_token(&session_token);
+    let hashed_token = hash(&session_token);
 
     let session = Session::filter(Session::fields().token_hash().eq(hashed_token))
         .first()

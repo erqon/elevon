@@ -4,5 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+axum.workspace = true
 clap.workspace = true
-x25519-dalek = { version = "3.0.0", features = ["getrandom", "static_secrets"] }
+tokio = { workspace = true, features = ["net"] }

@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { useState } from "react";
+import { useActionState, useEffect } from "react";
 import { Button } from "@/components/ui/button.tsx";
 import {
   Card,
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { safeRedirectPath } from "@/lib/utils.ts";
 import { userQueryOptions } from "@/queries/auth.ts";
+import { loginAction } from "@/actions/auth.actions.ts";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -34,8 +35,17 @@ export const Route = createFileRoute("/login")({
 });
 
 function RouteComponent() {
-  const [key, setKey] = useState("");
-  const canSubmit = key.trim().length > 0;
+  const { redirect } = Route.useSearch();
+
+  const [state, formAction, isPending] = useActionState(loginAction, {
+    status: "idle",
+  });
+
+  useEffect(() => {
+    if (state.status === "success") {
+      globalThis.location.href = safeRedirectPath(redirect);
+    }
+  }, [state, redirect]);
 
   return (
     <div className="flex min-h-svh items-center justify-center px-4">
@@ -48,11 +58,8 @@ function RouteComponent() {
         </CardHeader>
         <CardContent>
           <form
-            method="post"
+            action={formAction}
             className="flex flex-col gap-4"
-            onSubmit={(event) => {
-              if (!canSubmit) event.preventDefault();
-            }}
           >
             <div className="flex flex-col gap-2">
               <Label htmlFor="key">Access key</Label>
@@ -63,11 +70,13 @@ function RouteComponent() {
                 placeholder="••••••••"
                 autoComplete="off"
                 required
-                value={key}
-                onValueChange={setKey}
               />
             </div>
-            <Button type="submit" className="w-full" disabled={!canSubmit}>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={isPending}
+            >
               Sign in
             </Button>
           </form>
