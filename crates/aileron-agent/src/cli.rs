@@ -19,8 +19,14 @@ const STYLES: Styles = Styles::styled()
 )]
 pub struct Cli {
     #[command(subcommand)]
-    command: Commands,
+    pub command: Commands,
 }
 
 #[derive(Subcommand)]
-enum Commands {}
+pub enum Commands {
+    #[command(about = "Run the agent as a daemon")]
+    Serve,
+
+    #[command(about = "Run the reverse proxy for the agent.")]
+    Proxy,
+}
