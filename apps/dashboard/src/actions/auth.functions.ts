@@ -1,29 +1,29 @@
-import { redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
-import { clearSessionCookie } from "@/actions/auth.server.ts";
-import { ApiError } from "@/lib/api-error.ts";
-import { fetchUser, logout } from "@/lib/server/endpoints/mod.server.ts";
+import { clearSessionCookie, setSessionCookie } from "@/actions/auth.server.ts";
+import { actionFail, actionOk, type ActionState } from "@/lib/action.ts";
+import { fetchUser, login, logout } from "@/lib/server/endpoints/mod.server.ts";
+import { parseLoginForm } from "@/lib/schema/auth.ts";
+
+export const loginFn = createServerFn({ method: "POST" })
+  .validator(parseLoginForm)
+  .handler(async ({ data }): Promise<ActionState> => {
+    const result = await login(data);
+    if (!result.ok) {
+      return actionFail(result.error.message, result.error.code);
+    }
+
+    setSessionCookie(result.data.sessionToken);
+    return actionOk();
+  });
 
 export const getCurrentUserFn = createServerFn({ method: "GET" }).handler(
   async () => {
-    try {
-      return await fetchUser();
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) return null;
-      console.error("getCurrentUser failed:", err);
-      return null;
-    }
+    const result = await fetchUser();
+    return result.ok ? result.data : null;
   },
 );
 
 export const logoutFn = createServerFn({ method: "POST" }).handler(async () => {
-  try {
-    await logout();
-  } catch (err) {
-    // Session already gone server-side - still clear the cookie locally.
-    if (!(err instanceof ApiError && err.status === 401)) throw err;
-  }
-
+  await logout();
   clearSessionCookie();
-  throw redirect({ to: "/login" });
 });

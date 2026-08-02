@@ -1,3 +1,5 @@
+import type { ApiResult } from "@/lib/api-error.ts";
+
 export type ActionStatus = "idle" | "pending" | "failed" | "success";
 
 export type ActionState<T = null> = {
@@ -7,7 +9,28 @@ export type ActionState<T = null> = {
   errorMessage?: string | null;
 };
 
-type ServerFn<TResult extends ActionState = ActionState> = (args: {
+export const actionOk = <T = null>(data?: T): ActionState<T> => ({
+  status: "success",
+  ...(data !== undefined ? { data } : {}),
+});
+
+export const actionFail = <T = null>(
+  errorMessage: string,
+  errorTitle?: string | null,
+): ActionState<T> => ({
+  status: "failed",
+  errorMessage,
+  errorTitle,
+});
+
+export function fromApiResult<T>(result: ApiResult<T>): ActionState<T> {
+  if (!result.ok) {
+    return actionFail(result.error.message, result.error.code);
+  }
+  return actionOk(result.data);
+}
+
+type FormServerFn<TResult extends ActionState = ActionState> = (opts: {
   data: FormData;
 }) => Promise<TResult>;
 
@@ -20,7 +43,7 @@ type Options<TResult extends ActionState> = {
 };
 
 export function createFormAction<TResult extends ActionState = ActionState>(
-  serverFn: ServerFn<TResult>,
+  serverFn: FormServerFn<TResult>,
   options?: Options<TResult>,
 ) {
   return async (_: ActionState, formData: FormData): Promise<ActionState> => {
