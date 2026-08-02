@@ -1,10 +1,10 @@
+use aileron_auth::token::{access_key, hash};
 use anyhow::Result;
 use axum::{
     extract::FromRequestParts,
     http::{HeaderMap, header},
 };
 use uuid::Uuid;
-use aileron_auth::token::{access_key, hash};
 
 use crate::{
     app::{error::AppError, state::AppState},

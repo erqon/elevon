@@ -88,6 +88,7 @@ dependencies = [
 name = "aileron-agent"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "axum",
  "clap",
  "tokio",
@@ -137,6 +138,8 @@ dependencies = [
  "axum",
  "clap",
  "pingora",
+ "serde",
+ "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",

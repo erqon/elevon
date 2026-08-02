@@ -1,3 +1,4 @@
+use aileron_auth::token::{hash, issue};
 use axum::{
     Router,
     extract::{ConnectInfo, State},
@@ -7,7 +8,6 @@ use axum::{
 use axum_extra::TypedHeader;
 use headers::UserAgent;
 use std::net::SocketAddr;
-use aileron_auth::token::{issue, hash};
 
 use crate::db::model::{AccessKey, Session};
 use crate::service::auth::device_name_from_ua;
@@ -64,7 +64,9 @@ async fn login(
     .exec(&mut db_pool)
     .await?;
 
-    Ok(AppJson(LoginResponse { session_token: session_token.raw }))
+    Ok(AppJson(LoginResponse {
+        session_token: session_token.raw,
+    }))
 }
 
 async fn me(AuthUser { user, session_id }: AuthUser) -> Result<AppJson<AuthMe>, AppError> {

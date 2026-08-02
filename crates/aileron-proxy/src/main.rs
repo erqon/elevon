@@ -12,13 +12,20 @@ impl ProxyHttp for LB {
         ()
     }
 
-    async fn upstream_peer(&self, _session: &mut Session, _ctx: &mut ()) -> Result<Box<HttpPeer>> {
+    async fn upstream_peer(&self, session: &mut Session, _ctx: &mut ()) -> Result<Box<HttpPeer>> {
         let upstream = self
             .0
             .select(b"", 256) // hash doesn't matter for round robin
             .unwrap();
 
+        let req = session.req_header();
+        let host = session
+            .get_header("host")
+            .map(|v| v.to_str().unwrap_or_default())
+            .unwrap_or("-");
+
         println!("upstream peer is: {upstream:?}");
+        println!("request {} {} (Host: {host})", req.method, req.uri);
 
         let peer = Box::new(HttpPeer::new(upstream, false, String::new()));
         Ok(peer)
