@@ -15,9 +15,9 @@ pub fn get_proxy_systemd_content(exec: &str) -> String {
     format!(
         "
         [Unit]
-        Description=elevon Agent Proxy
+        Description=Elevon Agent Proxy
         After=network.target
-        Wants=elevon-agent-server.service
+        Wants=elevon-agent-api.service
         
         [Service]
         ExecStart={exec} proxy
@@ -34,7 +34,7 @@ pub fn get_api_systemd_content(exec: &str) -> String {
     format!(
         "
         [Unit]
-        Description=elevon Agent HTTP Control API
+        Description=Elevon Agent HTTP Control API
         After=network.target
         
         [Service]
