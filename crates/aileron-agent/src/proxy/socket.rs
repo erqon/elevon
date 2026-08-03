@@ -1,4 +1,4 @@
-use std::{error::Error, path::PathBuf, sync::Arc};
+use std::{error::Error, sync::Arc};
 
 use async_trait::async_trait;
 use pingora::{server::ShutdownWatch, services::background::BackgroundService};
@@ -29,10 +29,7 @@ struct Message {
 }
 
 async fn run_socket_listener(state: Arc<ProxyState>) -> Result<(), Box<dyn Error>> {
-    let socket = PathBuf::from("/tmp/aileron-agent.sock");
-    if socket.exists() {
-        std::fs::remove_file(&socket)?;
-    }
+    let socket = aileron_fs::agent::get_socket_path();
 
     let listener = UnixListener::bind(&socket)?;
     tracing::info!(path = %socket.display(), "socket listener ready");

@@ -9,6 +9,7 @@ async-trait.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 clap.workspace = true
+futures = "0.3.33"
 serde.workspace = true
 serde_json.workspace = true
 pingora = { version = "0.8.1", features = ["lb", "proxy"] }
@@ -17,6 +18,4 @@ tower-http.workspace = true
 tracing.workspace = true
 
 aileron-auth.workspace = true
-futures = "0.3.33"
-
-
+aileron-fs = { workspace = true, features = ["agent"] }

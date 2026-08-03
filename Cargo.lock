@@ -89,6 +89,7 @@ name = "aileron-agent"
 version = "0.1.0"
 dependencies = [
  "aileron-auth",
+ "aileron-fs",
  "anyhow",
  "arc-swap",
  "async-trait",
@@ -139,6 +140,10 @@ dependencies = [
  "bollard",
  "serde",
 ]
+
+[[package]]
+name = "aileron-fs"
+version = "0.1.0"
 
 [[package]]
 name = "aileron-proxy"

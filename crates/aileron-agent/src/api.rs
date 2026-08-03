@@ -1,5 +1,3 @@
-mod app;
-
 use std::{net::SocketAddr, path::PathBuf};
 
 use axum::{Router, http::StatusCode, routing::post};
@@ -7,7 +5,7 @@ use serde_json::json;
 use tokio::{io::AsyncWriteExt, net::UnixStream};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 
-pub async fn run_server() {
+pub async fn run_api_server() {
     let app = Router::new()
         .route("/test-socket", post(test_socket))
         .layer(

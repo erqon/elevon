@@ -1,5 +1,5 @@
 use clap::{
-    Parser, Subcommand,
+    Args, Parser, Subcommand,
     builder::styling::{AnsiColor, Styles},
 };
 
@@ -24,9 +24,19 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    #[command(about = "Run the agent as a daemon")]
-    Serve,
-
     #[command(about = "Run the reverse proxy for the agent.")]
     Proxy,
+
+    #[command(about = "Run the agent HTTP control API")]
+    Api,
+
+    #[command(about = "Install systemd units for the server and proxy")]
+    InstallSystemd(InstallSystemdArgs),
+}
+
+#[derive(Args)]
+pub struct InstallSystemdArgs {
+    /// Run systemctl daemon-reload && enable --now after writing units
+    #[arg(long)]
+    pub enable: bool,
 }
