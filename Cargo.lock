@@ -85,109 +85,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aileron-agent"
-version = "0.0.1"
-dependencies = [
- "aileron-auth",
- "aileron-fs",
- "anyhow",
- "arc-swap",
- "async-trait",
- "axum",
- "clap",
- "futures",
- "pingora",
- "serde",
- "serde_json",
- "tokio",
- "tower-http",
- "tracing",
-]
-
-[[package]]
-name = "aileron-auth"
-version = "0.1.0"
-dependencies = [
- "base64 0.23.0",
- "rand 0.10.2",
- "sha2 0.11.0",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "aileron-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "thiserror 2.0.19",
- "tokio",
-]
-
-[[package]]
-name = "aileron-config"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_yml",
- "thiserror 2.0.19",
-]
-
-[[package]]
-name = "aileron-deploy"
-version = "0.1.0"
-dependencies = [
- "aileron-config",
- "bollard",
- "serde",
-]
-
-[[package]]
-name = "aileron-fs"
-version = "0.1.0"
-
-[[package]]
-name = "aileron-proxy"
-version = "0.1.0"
-dependencies = [
- "aileron-auth",
- "async-trait",
- "axum",
- "clap",
- "pingora",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "aileron-server"
-version = "0.1.0"
-dependencies = [
- "aileron-auth",
- "aileron-config",
- "anyhow",
- "axum",
- "axum-client-ip",
- "axum-extra",
- "dotenvy",
- "headers",
- "jiff",
- "serde",
- "serde_json",
- "time",
- "toasty",
- "toasty-cli",
- "toasty-driver-turso",
- "tokio",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
 name = "alloc-no-stdlib"
 version = "2.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1407,6 +1304,109 @@ name = "either"
 version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91622ff5e7162018101f2fea40d6ebf4a78bbe5a49736a2020649edf9693679e"
+
+[[package]]
+name = "elevon-agent"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "arc-swap",
+ "async-trait",
+ "axum",
+ "clap",
+ "elevon-auth",
+ "elevon-fs",
+ "futures",
+ "pingora",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower-http",
+ "tracing",
+]
+
+[[package]]
+name = "elevon-auth"
+version = "0.1.0"
+dependencies = [
+ "base64 0.23.0",
+ "rand 0.10.2",
+ "sha2 0.11.0",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "elevon-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "thiserror 2.0.19",
+ "tokio",
+]
+
+[[package]]
+name = "elevon-config"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_yml",
+ "thiserror 2.0.19",
+]
+
+[[package]]
+name = "elevon-deploy"
+version = "0.1.0"
+dependencies = [
+ "bollard",
+ "elevon-config",
+ "serde",
+]
+
+[[package]]
+name = "elevon-fs"
+version = "0.1.0"
+
+[[package]]
+name = "elevon-proxy"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "clap",
+ "elevon-auth",
+ "pingora",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "elevon-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "axum-client-ip",
+ "axum-extra",
+ "dotenvy",
+ "elevon-auth",
+ "elevon-config",
+ "headers",
+ "jiff",
+ "serde",
+ "serde_json",
+ "time",
+ "toasty",
+ "toasty-cli",
+ "toasty-driver-turso",
+ "tokio",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
 
 [[package]]
 name = "encode_unicode"

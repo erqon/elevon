@@ -3,7 +3,6 @@
   "workspace": ["apps/*"],
   "unstable": ["no-legacy-abort"],
   "tasks": {
-    "dashboard:dev": "deno task -f=@aileron/dashboard-new dev",
     "check": "deno fmt --check && deno lint"
   },
   "fmt": {

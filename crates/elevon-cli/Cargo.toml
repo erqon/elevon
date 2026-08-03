@@ -1,0 +1,13 @@
+[package]
+name = "elevon-cli"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "elevon"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+tokio.workspace = true
+thiserror.workspace = true
