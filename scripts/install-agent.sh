@@ -40,7 +40,7 @@ release_url() {
 }
 
 download_and_extract() {
-  local url="$1" dest="$2" asset tmp
+  local url="$1" asset tmp
   asset="$(basename "$url")"
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' EXIT
