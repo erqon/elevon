@@ -1,26 +1,31 @@
 [workspace]
 resolver = "3"
 members = [
-  "crates/aileron-agent", 
+  "crates/aileron-agent",
   "crates/aileron-auth",
   "crates/aileron-cli",
-  "crates/aileron-config", 
+  "crates/aileron-config",
   "crates/aileron-deploy",
+  "crates/aileron-fs",
   "crates/aileron-proxy",
   "crates/aileron-server",
 ]
 
 [workspace.dependencies]
+async-trait = "0.1.91"
 anyhow = "1"
 axum = "0.8.9"
 clap = { version = "4.6.2", features = ["color", "derive"] }
 dotenvy = "0.15.7"
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.151"
 tokio = { version = "1.53.0", features = ["rt-multi-thread", "macros"] }
+tower-http = { version = "0.7.0", features = ["trace"] }
 tracing = "0.1.44"
-tracing-subscriber = "0.3.23"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"]}
 thiserror = "2.0.19"
 uuid = { version = "1.24.0", features = ["v7"] }
 
 aileron-auth = { path = "./crates/aileron-auth" }
 aileron-config = { path = "./crates/aileron-config" }
+aileron-fs = { path = "./crates/aileron-fs" }

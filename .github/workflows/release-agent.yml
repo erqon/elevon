@@ -1,0 +1,55 @@
+name: Release Agent
+
+on:
+  push:
+    tags: ["aileron-agent-v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (e.g. 0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check its main branch
+        run: |
+          git fetch origin main
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            test "${{ github.ref }}" = "refs/heads/main"
+          else
+            git merge-base --is-ancestor "${{ github.sha }}" origin/main
+          fi
+
+      - name: Resolve tag
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=aileron-agent-v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build
+        run: cargo build -p aileron-agent --release
+
+      - name: Package
+        run: |
+          cp target/release/aileron-agent aileron-agent-linux-x86_64
+          tar -czf aileron-agent-linux-x86_64.tar.gz aileron-agent-linux-x86_64
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }}
+          generate_release_notes: true
+          files: aileron-agent-linux-x86_64.tar.gz
