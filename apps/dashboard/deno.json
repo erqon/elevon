@@ -1,12 +1,12 @@
 {
-  "name": "@aileron/dashboard-new",
+  "name": "@elevon/dashboard-new",
   "exports": "./main.ts",
   "tasks": {
     "generate": "tsr generate",
     "dev": "tsr watch & deno run -A --unstable-no-legacy-abort npm:vite dev",
     "build": "vite build",
     "start": "deno run -A --unstable-no-legacy-abort .output/server/index.mjs",
-    "compile": "deno task build && deno compile -A --unstable-no-legacy-abort --include=.output/public --output=dist/aileron-dashboard .output/server/index.mjs",
+    "compile": "deno task build && deno compile -A --unstable-no-legacy-abort --include=.output/public --output=dist/elevon-dashboard .output/server/index.mjs",
     "format": "deno fmt",
     "lint": "deno lint",
     "check": "deno fmt --check && deno lint"

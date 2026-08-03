@@ -1,0 +1,10 @@
+[package]
+name = "elevon-config"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde_yml = "0.0.13"
+
+serde.workspace = true
+thiserror.workspace = true

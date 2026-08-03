@@ -16,7 +16,7 @@ import { loginAction } from "@/actions/auth.actions.ts";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
-    meta: [{ title: "Login - Aileron Dashboard" }],
+    meta: [{ title: "Login - elevon Dashboard" }],
   }),
   validateSearch: (search: Record<string, unknown>): { redirect?: string } => {
     if (typeof search.redirect === "string") {
