@@ -2,7 +2,7 @@ name: Release Agent
 
 on:
   push:
-    tags: ["aileron-agent-v*"]
+    tags: ["elevon-agent-v*"]
   workflow_dispatch:
     inputs:
       version:
@@ -34,22 +34,22 @@ jobs:
         id: meta
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=aileron-agent-v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+            echo "tag=elevon-agent-v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
           else
             echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build
-        run: cargo build -p aileron-agent --release
+        run: cargo build -p elevon-agent --release
 
       - name: Package
         run: |
-          cp target/release/aileron-agent aileron-agent-linux-x86_64
-          tar -czf aileron-agent-linux-x86_64.tar.gz aileron-agent-linux-x86_64
+          cp target/release/elevon-agent elevon-agent-linux-x86_64
+          tar -czf elevon-agent-linux-x86_64.tar.gz elevon-agent-linux-x86_64
 
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: ${{ steps.meta.outputs.tag }}
           generate_release_notes: true
-          files: aileron-agent-linux-x86_64.tar.gz
+          files: elevon-agent-linux-x86_64.tar.gz
