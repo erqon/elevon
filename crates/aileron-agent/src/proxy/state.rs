@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use arc_swap::ArcSwap;
-use pingora::lb::{LoadBalancer, selection::RoundRobin};
+use pingora::lb::{LoadBalancer, health_check::TcpHealthCheck, selection::RoundRobin};
 
 #[derive(Debug, Clone)]
 pub struct RouteConfig {
@@ -35,8 +35,10 @@ impl ProxyState {
         let backends = routes.get(&name).cloned().unwrap_or_default();
         let addrs = backends.iter().map(|b| format!("{}:{}", b.host, b.port));
 
-        let lb =
-            Arc::new(LoadBalancer::<RoundRobin>::try_from_iter(addrs).expect("valid backends"));
+        let mut lb = LoadBalancer::<RoundRobin>::try_from_iter(addrs).expect("valid backends");
+        lb.set_health_check(TcpHealthCheck::new());
+        lb.parallel_health_check = true;
+        let lb = Arc::new(lb);
 
         self.lbs.rcu(|current| {
             let mut next = (**current).clone();

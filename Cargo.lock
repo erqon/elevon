@@ -94,6 +94,7 @@ dependencies = [
  "async-trait",
  "axum",
  "clap",
+ "futures",
  "pingora",
  "serde",
  "serde_json",
@@ -143,6 +144,7 @@ dependencies = [
 name = "aileron-proxy"
 version = "0.1.0"
 dependencies = [
+ "aileron-auth",
  "async-trait",
  "axum",
  "clap",

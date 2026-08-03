@@ -17,5 +17,6 @@ tower-http.workspace = true
 tracing.workspace = true
 
 aileron-auth.workspace = true
+futures = "0.3.33"
 
 

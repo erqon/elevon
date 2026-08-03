@@ -18,3 +18,5 @@ serde.workspace = true
 serde_json = "1"
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+aileron-auth.workspace = true

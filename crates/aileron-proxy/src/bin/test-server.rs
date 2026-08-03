@@ -1,6 +1,8 @@
 use axum::{Router, routing::get};
 use clap::Parser;
 
+use aileron_auth::http::init_logging;
+
 #[derive(Parser)]
 struct Cli {
     #[arg(long, short, default_value_t = 3000)]
@@ -9,7 +11,7 @@ struct Cli {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    init_logging();
 
     let cli = Cli::parse();
 

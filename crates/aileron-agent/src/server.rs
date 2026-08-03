@@ -38,9 +38,9 @@ async fn test_socket() -> Result<StatusCode, (StatusCode, String)> {
         "event": "upsert_route",
         "data": {
             "name": "app.local",
-            "id": "app_1234",
+            "id": "2",
             "host": "127.0.0.1",
-            "port": 3002
+            "port": 3003
         }
     }))
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
