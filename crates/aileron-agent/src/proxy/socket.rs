@@ -62,6 +62,7 @@ async fn run_socket_listener(state: Arc<ProxyState>) -> Result<(), Box<dyn Error
                         state.upsert_route(
                             route.name,
                             RouteConfig {
+                                id: route.id,
                                 host: route.host,
                                 port: route.port,
                             },
@@ -79,6 +80,7 @@ async fn run_socket_listener(state: Arc<ProxyState>) -> Result<(), Box<dyn Error
 #[derive(Debug, Deserialize)]
 struct RouteUpsert {
     name: String, // Host header key, e.g. "app.local"
+    id: String,
     host: String,
     port: u16,
 }
