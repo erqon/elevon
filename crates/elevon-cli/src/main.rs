@@ -1,5 +1,5 @@
-use elevon_cli::cli::Cli;
 use clap::Parser;
+use elevon_cli::cli::Cli;
 
 #[tokio::main]
 async fn main() {
