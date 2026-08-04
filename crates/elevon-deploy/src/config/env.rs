@@ -1,4 +1,4 @@
-use elevon_config::{deserialize_string_map, resolve_env_or_literal, ConfigError, ResolveEnv};
+use elevon_config::{ConfigError, ResolveEnv, deserialize_string_map, resolve_env_or_literal};
 use serde::Deserialize;
 use std::collections::HashMap;
 
