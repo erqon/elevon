@@ -1,9 +1,9 @@
-use elevon_auth::token::{access_key, hash};
 use anyhow::Result;
 use axum::{
     extract::FromRequestParts,
     http::{HeaderMap, header},
 };
+use elevon_auth::token::{access_key, hash};
 use uuid::Uuid;
 
 use crate::{

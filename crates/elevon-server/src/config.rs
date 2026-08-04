@@ -1,4 +1,4 @@
-use elevon_config::{ElevonConfig, resolve_env_or_literal, ResolveEnv};
+use elevon_config::{ElevonConfig, ResolveEnv, resolve_env_or_literal};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]

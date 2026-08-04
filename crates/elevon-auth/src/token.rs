@@ -1,4 +1,4 @@
-use base64::{prelude::BASE64_URL_SAFE_NO_PAD, Engine};
+use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD};
 use rand::Rng;
 use sha2::{Digest, Sha256};
 

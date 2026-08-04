@@ -1,4 +1,3 @@
-use elevon_auth::token::{hash, issue};
 use axum::{
     Router,
     extract::{ConnectInfo, State},
@@ -6,6 +5,7 @@ use axum::{
     routing::{get, post},
 };
 use axum_extra::TypedHeader;
+use elevon_auth::token::{hash, issue};
 use headers::UserAgent;
 use std::net::SocketAddr;
 
