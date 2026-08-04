@@ -1357,6 +1357,7 @@ dependencies = [
 name = "elevon-deploy"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bollard",
  "elevon-config",
  "serde",

@@ -1,7 +1,7 @@
 mod env;
 mod registry;
 
-use elevon_config::{ElevonConfig, ConfigError, ResolveEnv};
+use elevon_config::{ConfigError, ElevonConfig, ResolveEnv};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
