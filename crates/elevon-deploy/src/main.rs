@@ -2,6 +2,7 @@ use clap::Parser;
 use elevon_config::{ElevonConfig, ResolveEnvCredentials};
 use elevon_deploy::cli::{Cli, Commands};
 use elevon_deploy::config::Config;
+use elevon_deploy::config::app::AppConfig;
 use tracing_indicatif::IndicatifLayer;
 use tracing_indicatif::filter::IndicatifFilter;
 use tracing_indicatif::style::ProgressStyle;
@@ -42,24 +43,43 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::from_file(&cli.config)?;
 
     match cli.command {
-        Commands::Build(_args) => {
-            let app = config
-                .app_config
-                .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("missing root app config"))?;
+        Commands::Build(args) => {
+            let apps = config.apps()?;
 
-            let image = app
-                .image
-                .as_deref()
-                .ok_or_else(|| anyhow::anyhow!("missing image"))?;
+            let selected: Vec<(&String, &AppConfig)> = if args.apps.is_empty() {
+                apps.iter().map(|(n, a)| (n, *a)).collect()
+            } else {
+                let mut out = Vec::with_capacity(args.apps.len());
+                for name in &args.apps {
+                    let app = apps
+                        .get(name)
+                        .copied()
+                        .ok_or_else(|| anyhow::anyhow!("unknown app `{name}`"))?;
+                    out.push((name, app));
+                }
+                out
+            };
 
-            let build = app
-                .build
-                .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("missing build"))?;
+            for (name, app) in selected {
+                let image = app
+                    .image
+                    .as_deref()
+                    .ok_or_else(|| anyhow::anyhow!("app `{name}` is missing `image`"))?
+                    .to_owned();
+                let build = app
+                    .build
+                    .as_ref()
+                    .ok_or_else(|| anyhow::anyhow!("app `{name}` is missing `build`"))?
+                    .clone();
 
-            elevon_deploy::image::build_image(image, &config.registry.server, build, &cli.config)
+                elevon_deploy::image::build_image(
+                    &image,
+                    &config.registry.server,
+                    &build,
+                    &cli.config,
+                )
                 .await?;
+            }
         }
         Commands::Push => {
             let app = config

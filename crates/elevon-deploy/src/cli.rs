@@ -41,6 +41,6 @@ pub enum Commands {
 
 #[derive(Args)]
 pub struct BuildArgs {
-    #[arg(long, help = "List of apps you want to build")]
-    pub app: Option<Vec<String>>,
+    #[arg(long = "app", help = "List of apps you want to build")]
+    pub apps: Vec<String>,
 }

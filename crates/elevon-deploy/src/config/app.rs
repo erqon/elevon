@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
     #[serde(default)]
     pub image: Option<String>,
@@ -12,13 +12,13 @@ pub struct AppConfig {
     pub routing: Option<RoutingConfig>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct RoutingConfig {
     pub domain: String,
     pub port: u16,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(untagged)]
 pub enum BuildConfig {
     Path(String),
@@ -31,7 +31,7 @@ impl Default for BuildConfig {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct BuildOptions {
     pub path: String,
     #[serde(default)]
