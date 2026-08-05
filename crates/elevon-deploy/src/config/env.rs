@@ -33,6 +33,16 @@ impl ResolveEnv for EnvConfig {
     }
 }
 
+impl Default for EnvConfig {
+    fn default() -> Self {
+        Self {
+            vars: HashMap::new(),
+            inherit: vec![],
+            resolved: HashMap::new(),
+        }
+    }
+}
+
 impl EnvConfig {
     pub fn resolved(&self) -> &HashMap<String, String> {
         &self.resolved
