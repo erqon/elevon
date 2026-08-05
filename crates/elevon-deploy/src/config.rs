@@ -1,37 +1,30 @@
-mod app;
+pub mod app;
 mod env;
-mod registry;
-mod shared;
+pub mod registry;
 
 use std::collections::HashMap;
 
-use elevon_config::{ConfigError, ElevonConfig, ResolveEnv};
+use elevon_config::ElevonConfig;
 use serde::Deserialize;
 
-use crate::config::{app::AppConfig, shared::RoutingConfig};
+use crate::config::app::AppConfig;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub name: String,
 
-    #[serde(default)]
-    pub routing: Option<RoutingConfig>,
-
     pub registry: registry::RegistryConfig,
+
     #[serde(default)]
     pub env: env::EnvConfig,
+
+    #[serde(default, flatten)]
+    pub app_config: Option<AppConfig>,
 
     #[serde(default)]
     pub apps: HashMap<String, AppConfig>,
 }
 
-impl ResolveEnv for Config {
-    fn resolve_env(&mut self) -> Result<(), ConfigError> {
-        self.registry.resolve_env()?;
-        self.env.resolve_env()?;
-
-        Ok(())
-    }
-}
+impl Config {}
 
 impl ElevonConfig for Config {}

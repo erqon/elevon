@@ -7,12 +7,19 @@ elevon:
 
 registry:
   server: ghcr.io
-  username: GHCR_USERNAME
-  password: GHCR_PASSWORD
+  username: $GHCR_USERNAME
+  password: $GHCR_PASSWORD
 
 routing:
   domain: app.example.com
   port: 3000
+
+env:
+  vars:
+    PORT: 3000
+    API_URL: $BASE_API_URL
+  inherit:
+    - DATABASE_URL
 
 apps:
   api: {}                          # → apps/api.app.yml (auto)
@@ -20,6 +27,11 @@ apps:
     include: ./custom/worker.yml   # custom path
   web:
     image: project/web             # fully inline, no file
+
+    build:
+      path: ./dev
+      dockerfile: ./Dockerfile.dev
+
     routing:
       domain: app.example.com
       port: 3000

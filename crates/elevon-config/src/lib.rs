@@ -7,18 +7,23 @@ use std::path::Path;
 
 pub use error::ConfigError;
 
+/// Expand `$VAR` fields in place.
 pub trait ResolveEnv {
-    /// Resolve `$VAR` fields. Override in each config crate.
     fn resolve_env(&mut self) -> Result<(), ConfigError>;
 }
 
-pub trait ElevonConfig: ResolveEnv + DeserializeOwned + Sized
+/// Resolve `$VAR`/env refs into a new map; config is left unchanged.
+pub trait ResolveEnvCredentials {
+    type Output;
+    fn resolved_credentials(&self) -> Result<Self::Output, ConfigError>;
+}
+
+pub trait ElevonConfig: DeserializeOwned + Sized
 where
     Self: 'static,
 {
     fn from_str(yaml: &str) -> Result<Self, ConfigError> {
-        let mut config: Self = serde_yml::from_str(yaml)?;
-        config.resolve_env()?;
+        let config: Self = serde_yml::from_str(yaml)?;
         Ok(config)
     }
 

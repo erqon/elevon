@@ -5,7 +5,15 @@ edition = "2024"
 
 [dependencies]
 bollard = "0.21.0"
+walkdir = "2.5.0"
+futures-util = "0.3.33"
+tar = "0.4.46"
 
 anyhow.workspace = true
+clap.workspace = true
 elevon-config.workspace = true
 serde.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-indicatif.workspace = true
+tracing-subscriber.workspace = true
