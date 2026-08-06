@@ -1,7 +1,7 @@
 use elevon_config::{ConfigError, ResolveEnvCredentials, resolve_env_or_literal};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RegistryConfig {
     pub server: String,
     pub username: String,

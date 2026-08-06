@@ -36,11 +36,17 @@ pub enum Commands {
     Build(BuildArgs),
 
     #[command(about = "Push already built image to the registry")]
-    Push,
+    Push(PushArgs),
 }
 
 #[derive(Args)]
 pub struct BuildArgs {
     #[arg(long = "app", help = "List of apps you want to build")]
+    pub apps: Vec<String>,
+}
+
+#[derive(Args)]
+pub struct PushArgs {
+    #[arg(long = "app", help = "List of apps you want to push")]
     pub apps: Vec<String>,
 }

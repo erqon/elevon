@@ -81,20 +81,33 @@ async fn main() -> anyhow::Result<()> {
                 .await?;
             }
         }
-        Commands::Push => {
-            let app = config
-                .app_config
-                .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("missing root app config"))?;
-
-            let image = app
-                .image
-                .as_deref()
-                .ok_or_else(|| anyhow::anyhow!("missing image"))?;
-
+        Commands::Push(args) => {
+            let apps = config.apps()?;
             let registry_credentials = config.registry.resolved_credentials()?;
 
-            elevon_deploy::image::push_image(image, registry_credentials).await?;
+            let selected: Vec<(&String, &AppConfig)> = if args.apps.is_empty() {
+                apps.iter().map(|(n, a)| (n, *a)).collect()
+            } else {
+                let mut out = Vec::with_capacity(args.apps.len());
+                for name in &args.apps {
+                    let app = apps
+                        .get(name)
+                        .copied()
+                        .ok_or_else(|| anyhow::anyhow!("unknown app `{name}`"))?;
+                    out.push((name, app));
+                }
+                out
+            };
+
+            for (name, app) in selected {
+                let image = app
+                    .image
+                    .as_deref()
+                    .ok_or_else(|| anyhow::anyhow!("app `{name}` is missing `image`"))?
+                    .to_owned();
+
+                elevon_deploy::image::push_image(&image, registry_credentials.clone()).await?;
+            }
         }
     }
 
