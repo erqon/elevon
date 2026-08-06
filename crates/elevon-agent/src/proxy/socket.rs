@@ -5,7 +5,8 @@ use pingora::{server::ShutdownWatch, services::background::BackgroundService};
 use serde::{Deserialize, Serialize};
 use tokio::{io::AsyncReadExt, net::UnixListener};
 
-use crate::proxy::state::{ProxyState, RouteConfig};
+use crate::proxy::state::ProxyState;
+use crate::proxy::types::{DeleteRoute, UpsertRoute};
 
 pub struct SocketControl {
     pub state: Arc<ProxyState>,
@@ -21,11 +22,11 @@ impl BackgroundService for SocketControl {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct Message {
-    event: String,
-    #[serde(default)]
-    data: serde_json::Value,
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "event", content = "data")]
+pub enum AgentEvent {
+    UpsertRoute(UpsertRoute),
+    DeleteRoute(DeleteRoute),
 }
 
 async fn run_socket_listener(state: Arc<ProxyState>) -> Result<(), Box<dyn Error>> {
@@ -45,7 +46,7 @@ async fn run_socket_listener(state: Arc<ProxyState>) -> Result<(), Box<dyn Error
                 return;
             }
 
-            let message: Message = match serde_json::from_slice(&buf) {
+            let message: AgentEvent = match serde_json::from_slice(&buf) {
                 Ok(m) => m,
                 Err(err) => {
                     tracing::error!(%err, "invalid json");
@@ -53,31 +54,14 @@ async fn run_socket_listener(state: Arc<ProxyState>) -> Result<(), Box<dyn Error
                 }
             };
 
-            match message.event.as_str() {
-                "upsert_route" => match serde_json::from_value::<RouteUpsert>(message.data) {
-                    Ok(route) => {
-                        state.upsert_route(
-                            route.name,
-                            RouteConfig {
-                                id: route.id,
-                                host: route.host,
-                                port: route.port,
-                            },
-                        );
-                        tracing::info!("route upserted");
-                    }
-                    Err(err) => tracing::error!(%err, "bad upsert_route data"),
-                },
-                other => tracing::warn!(event = other, "unknown event"),
+            match message {
+                AgentEvent::UpsertRoute(route) => {
+                    let id = route.config.id.clone();
+                    state.upsert_route(route.domain, route.config);
+                    tracing::info!("route {} upserted", &id);
+                }
+                AgentEvent::DeleteRoute(_route) => {}
             }
         });
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct RouteUpsert {
-    name: String, // Host header key, e.g. "app.local"
-    id: String,
-    host: String,
-    port: u16,
 }

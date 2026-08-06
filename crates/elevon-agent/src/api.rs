@@ -1,13 +1,19 @@
-use std::{net::SocketAddr, path::PathBuf};
+mod router;
+mod state;
 
-use axum::{Router, http::StatusCode, routing::post};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+
+use axum::{Router, http::StatusCode};
 use serde_json::json;
 use tokio::{io::AsyncWriteExt, net::UnixStream};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 
 pub async fn run_api_server() {
+    let state = Arc::new(state::AppState::new());
+
     let app = Router::new()
-        .route("/test-socket", post(test_socket))
+        .nest("/", router::router())
+        .with_state(state)
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::default().include_headers(true)),
