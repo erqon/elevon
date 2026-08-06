@@ -1,36 +1,49 @@
-mod app;
+pub mod app;
 mod env;
-mod registry;
-mod shared;
+pub mod registry;
 
 use std::collections::HashMap;
 
-use elevon_config::{ConfigError, ElevonConfig, ResolveEnv};
+use elevon_config::ElevonConfig;
 use serde::Deserialize;
 
-use crate::config::{app::AppConfig, shared::RoutingConfig};
+use crate::config::app::AppConfig;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub name: String,
 
-    #[serde(default)]
-    pub routing: Option<RoutingConfig>,
-
     pub registry: registry::RegistryConfig,
+
     #[serde(default)]
     pub env: env::EnvConfig,
+
+    #[serde(default, flatten)]
+    pub app_config: Option<AppConfig>,
 
     #[serde(default)]
     pub apps: HashMap<String, AppConfig>,
 }
 
-impl ResolveEnv for Config {
-    fn resolve_env(&mut self) -> Result<(), ConfigError> {
-        self.registry.resolve_env()?;
-        self.env.resolve_env()?;
+impl Config {
+    pub fn apps(&self) -> anyhow::Result<HashMap<String, &AppConfig>> {
+        let has_root = self
+            .app_config
+            .as_ref()
+            .is_some_and(|a| a.image.is_some() || a.build.is_some() || a.routing.is_some());
+        let has_apps = !self.apps.is_empty();
 
-        Ok(())
+        match (has_root, has_apps) {
+            (true, true) => {
+                anyhow::bail!("use either a root app (image/build/...) or `apps:`, not both")
+            }
+            (false, false) => anyhow::bail!("no app config found"),
+            (true, false) => {
+                let app = self.app_config.as_ref().unwrap();
+                Ok(HashMap::from([(self.name.clone(), app)]))
+            }
+            (false, true) => Ok(self.apps.iter().map(|(k, v)| (k.clone(), v)).collect()),
+        }
     }
 }
 

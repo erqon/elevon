@@ -1,17 +1,21 @@
-use elevon_config::{ConfigError, ResolveEnv, resolve_env_or_literal};
-use serde::Deserialize;
+use elevon_config::{ConfigError, ResolveEnvCredentials, resolve_env_or_literal};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RegistryConfig {
     pub server: String,
     pub username: String,
     pub password: String,
 }
 
-impl ResolveEnv for RegistryConfig {
-    fn resolve_env(&mut self) -> Result<(), ConfigError> {
-        self.username = resolve_env_or_literal(&self.username)?;
-        self.password = resolve_env_or_literal(&self.password)?;
-        Ok(())
+impl ResolveEnvCredentials for RegistryConfig {
+    type Output = Self;
+
+    fn resolved_credentials(&self) -> Result<Self::Output, ConfigError> {
+        Ok(Self {
+            server: self.server.clone(),
+            username: resolve_env_or_literal(&self.username)?,
+            password: resolve_env_or_literal(&self.password)?,
+        })
     }
 }
