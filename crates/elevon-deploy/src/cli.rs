@@ -14,7 +14,7 @@ const STYLES: Styles = Styles::styled()
     name = "elevon-deploy",
     version,
     about,
-    long_about = "Elevon Deploy: A container orchestrator, working alongside with Elevon Agent.",
+    long_about = "Elevon Deploy: build and push container images for Elevon apps.",
     styles = STYLES
 )]
 pub struct Cli {
@@ -22,7 +22,7 @@ pub struct Cli {
         short,
         long,
         default_value = ".elevon/deploy.yml",
-        help = "Path to the config file"
+        help = "Path to the deploy configuration file"
     )]
     pub config: String,
 
@@ -35,18 +35,21 @@ pub enum Commands {
     #[command(about = "Build container images from the deploy config")]
     Build(BuildArgs),
 
-    #[command(about = "Push already built image to the registry")]
+    #[command(about = "Push configured images to the registry")]
     Push(PushArgs),
 }
 
 #[derive(Args)]
 pub struct BuildArgs {
-    #[arg(long = "app", help = "List of apps you want to build")]
+    #[arg(long = "app", help = "Limit the operation to the specified app(s)")]
     pub apps: Vec<String>,
 }
 
 #[derive(Args)]
 pub struct PushArgs {
-    #[arg(long = "app", help = "List of apps you want to push")]
+    #[arg(long = "app", help = "Limit the operation to the specified app(s)")]
     pub apps: Vec<String>,
+
+    #[arg(long, short, help = "Build the image before pushing it")]
+    pub build: bool,
 }

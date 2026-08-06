@@ -106,6 +106,22 @@ async fn main() -> anyhow::Result<()> {
                     .ok_or_else(|| anyhow::anyhow!("app `{name}` is missing `image`"))?
                     .to_owned();
 
+                if args.build {
+                    let build = app
+                        .build
+                        .as_ref()
+                        .ok_or_else(|| anyhow::anyhow!("app `{name}` is missing `build`"))?
+                        .clone();
+
+                    elevon_deploy::image::build_image(
+                        &image,
+                        &config.registry.server,
+                        &build,
+                        &cli.config,
+                    )
+                    .await?;
+                }
+
                 elevon_deploy::image::push_image(&image, registry_credentials.clone()).await?;
             }
         }
