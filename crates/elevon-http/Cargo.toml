@@ -13,4 +13,5 @@ anyhow.workspace = true
 axum.workspace = true
 serde.workspace = true
 tracing.workspace = true
+tracing-indicatif.workspace = true
 toasty.workspace = true

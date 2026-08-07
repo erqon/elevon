@@ -1364,14 +1364,17 @@ dependencies = [
  "elevon-fs",
  "elevon-http",
  "futures",
+ "jiff",
  "pingora",
  "serde",
  "serde_json",
  "toasty",
+ "toasty-cli",
  "toasty-driver-turso",
  "tokio",
  "tower-http",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -1429,6 +1432,7 @@ dependencies = [
  "sha2 0.11.0",
  "toasty",
  "tracing",
+ "tracing-indicatif",
  "tracing-subscriber",
 ]
 

@@ -2,6 +2,7 @@
 name = "elevon-agent"
 version = "0.0.1"
 edition = "2024"
+default-run = "elevon-agent"
 
 [dependencies]
 arc-swap = "1.9.2"
@@ -11,14 +12,17 @@ async-trait.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 clap.workspace = true
+jiff.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 pingora = { version = "0.8.1", features = ["lb", "proxy"] }
 tokio = { workspace = true, features = ["net"] }
 tower-http.workspace = true
 toasty.workspace = true
+toasty-cli.workspace = true
 toasty-driver-turso = { workspace = true, features = ["sync"] }
 tracing.workspace = true
+uuid.workspace = true
 
 elevon-fs = { workspace = true, features = ["agent"] }
 elevon-http.workspace = true

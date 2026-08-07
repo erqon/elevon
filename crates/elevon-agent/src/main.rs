@@ -1,18 +1,22 @@
 use clap::Parser;
 use elevon_agent::cli::{Cli, Commands};
 
-fn main() -> anyhow::Result<()> {
-    elevon_http::init_logging();
+fn main() {
+    elevon_http::init_cli_logging();
 
     let cli = Cli::parse();
 
     match cli.command {
         Commands::Setup(args) => {
-            tokio::runtime::Builder::new_multi_thread()
+            let rt = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()
-                .unwrap()
-                .block_on(elevon_agent::setup::setup(args.turso_remote_url));
+                .unwrap();
+
+            if let Err(err) = rt.block_on(elevon_agent::setup::setup(args.turso_remote_url)) {
+                tracing::error!("{err:#}");
+                std::process::exit(1);
+            }
         }
         Commands::Api => {
             tokio::runtime::Builder::new_multi_thread()
@@ -31,6 +35,4 @@ fn main() -> anyhow::Result<()> {
             }
         }
     }
-
-    Ok(())
 }
