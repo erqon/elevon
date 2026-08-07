@@ -2,7 +2,10 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use elevon_fs::agent::get_socket_path;
+use tokio::io::AsyncWriteExt;
 use tokio::net::UnixStream;
+
+use crate::proxy::types::AgentEvent;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -34,7 +37,14 @@ impl SocketClient {
         Ok(stream)
     }
 
-    // pub async fn send(&self, event_name: &str, data: ) {
+    pub async fn send(&self, mut stream: UnixStream, event: AgentEvent) -> Result<()> {
+        let payload = serde_json::to_vec(&serde_json::json!(event))?;
+        stream.write_all(&payload).await?;
+        Ok(())
+    }
 
-    // }
+    pub async fn shutdown(&self, mut stream: UnixStream) -> Result<()> {
+        stream.shutdown().await?;
+        Ok(())
+    }
 }

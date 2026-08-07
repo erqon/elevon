@@ -1314,8 +1314,8 @@ dependencies = [
  "async-trait",
  "axum",
  "clap",
- "elevon-auth",
  "elevon-fs",
+ "elevon-http",
  "futures",
  "pingora",
  "serde",
@@ -1323,16 +1323,6 @@ dependencies = [
  "tokio",
  "tower-http",
  "tracing",
-]
-
-[[package]]
-name = "elevon-auth"
-version = "0.1.0"
-dependencies = [
- "base64 0.23.0",
- "rand 0.10.2",
- "sha2 0.11.0",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -1376,13 +1366,28 @@ name = "elevon-fs"
 version = "0.1.0"
 
 [[package]]
+name = "elevon-http"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "base64 0.23.0",
+ "rand 0.10.2",
+ "serde",
+ "sha2 0.11.0",
+ "toasty",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "elevon-proxy"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "axum",
  "clap",
- "elevon-auth",
+ "elevon-http",
  "pingora",
  "serde",
  "serde_json",
@@ -1400,8 +1405,8 @@ dependencies = [
  "axum-client-ip",
  "axum-extra",
  "dotenvy",
- "elevon-auth",
  "elevon-config",
+ "elevon-http",
  "headers",
  "jiff",
  "serde",

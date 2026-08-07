@@ -1,5 +1,12 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "event", content = "data")]
+pub enum AgentEvent {
+    UpsertRoute(UpsertRoute),
+    DeleteRoute(DeleteRoute),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RouteConfig {
     pub id: String,

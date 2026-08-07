@@ -2,7 +2,7 @@ use clap::Parser;
 use elevon_agent::cli::{Cli, Commands};
 
 fn main() {
-    elevon_auth::http::init_logging();
+    elevon_http::init_logging();
 
     let cli = Cli::parse();
 

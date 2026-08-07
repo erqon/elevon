@@ -2,11 +2,10 @@ use std::{error::Error, sync::Arc};
 
 use async_trait::async_trait;
 use pingora::{server::ShutdownWatch, services::background::BackgroundService};
-use serde::{Deserialize, Serialize};
 use tokio::{io::AsyncReadExt, net::UnixListener};
 
 use crate::proxy::state::ProxyState;
-use crate::proxy::types::{DeleteRoute, UpsertRoute};
+use crate::proxy::types::AgentEvent;
 
 pub struct SocketControl {
     pub state: Arc<ProxyState>,
@@ -20,13 +19,6 @@ impl BackgroundService for SocketControl {
                 _ = run_socket_listener(self.state.clone()) => {}
         }
     }
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "event", content = "data")]
-pub enum AgentEvent {
-    UpsertRoute(UpsertRoute),
-    DeleteRoute(DeleteRoute),
 }
 
 async fn run_socket_listener(state: Arc<ProxyState>) -> Result<(), Box<dyn Error>> {
