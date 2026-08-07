@@ -1,7 +1,36 @@
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::{
+    fs::{OpenOptions, create_dir_all},
     io::Result,
     path::{Path, PathBuf},
 };
+
+pub fn get_elevon_data_path() -> Result<PathBuf> {
+    let base = std::env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            let home = std::env::var_os("HOME").expect("HOME not set");
+            PathBuf::from(home).join(".local/share")
+        });
+
+    let path = base.join("elevon");
+    create_dir_all(&path)?;
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700))?;
+    Ok(path)
+}
+
+pub fn get_database_path() -> Result<PathBuf> {
+    let db_path = get_elevon_data_path()?.join("elevon.db");
+
+    OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .mode(0o600)
+        .open(&db_path)?;
+
+    Ok(db_path)
+}
 
 pub fn get_socket_path() -> PathBuf {
     let path = PathBuf::from("/run/elevon-agent.sock");

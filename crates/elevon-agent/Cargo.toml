@@ -5,16 +5,19 @@ edition = "2024"
 
 [dependencies]
 arc-swap = "1.9.2"
+futures = "0.3.33"
+
 async-trait.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 clap.workspace = true
-futures = "0.3.33"
 serde.workspace = true
 serde_json.workspace = true
 pingora = { version = "0.8.1", features = ["lb", "proxy"] }
 tokio = { workspace = true, features = ["net"] }
 tower-http.workspace = true
+toasty.workspace = true
+toasty-driver-turso = { workspace = true, features = ["sync"] }
 tracing.workspace = true
 
 elevon-fs = { workspace = true, features = ["agent"] }

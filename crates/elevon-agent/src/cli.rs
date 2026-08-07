@@ -24,6 +24,9 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
+    #[command(about = "Setup agent in your vps")]
+    Setup(SetupArgs),
+
     #[command(about = "Run the reverse proxy for the agent.")]
     Proxy,
 
@@ -36,7 +39,18 @@ pub enum Commands {
 
 #[derive(Args)]
 pub struct InstallSystemdArgs {
-    /// Run systemctl daemon-reload && enable --now after writing units
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Run systemctl daemon-reload && enable --now after writing units"
+    )]
     pub enable: bool,
+}
+
+#[derive(Args)]
+pub struct SetupArgs {
+    #[arg(
+        long,
+        help = "Optional Turso remote URL for syncing local data to the cloud"
+    )]
+    pub turso_remote_url: Option<String>,
 }

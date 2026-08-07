@@ -3,6 +3,10 @@ use std::process::Command;
 use anyhow::{Context, Result, bail};
 use elevon_fs::agent::{install_api_unit, install_proxy_unit};
 
+pub async fn setup(remote_url: Option<String>) {
+    crate::db::init_db(remote_url).await.unwrap();
+}
+
 pub fn install_systemd(enable: bool) -> Result<()> {
     ensure_systemd_writable()?;
 
