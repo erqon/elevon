@@ -4,11 +4,21 @@ pub struct AuthKey {
     #[auto]
     id: uuid::Uuid,
 
-    api_key: String,
+    pub name: String,
+
+    key_hash: String,
+
+    pub enabled: bool,
+
+    pub last_used_at: Option<jiff::Timestamp>,
+
+    pub expires_at: jiff::Timestamp,
+
+    pub revoked_at: Option<jiff::Timestamp>,
 
     #[auto]
-    created_at: jiff::Timestamp,
+    pub created_at: jiff::Timestamp,
 
     #[auto]
-    updated_at: jiff::Timestamp,
+    pub updated_at: jiff::Timestamp,
 }

@@ -1,3 +1,5 @@
+pub mod key;
+
 use clap::{
     Args, Parser, Subcommand,
     builder::styling::{AnsiColor, Styles},
@@ -35,6 +37,12 @@ pub enum Commands {
 
     #[command(about = "Install systemd units for the server and proxy")]
     InstallSystemd(InstallSystemdArgs),
+
+    #[command(about = "Manage auth keys")]
+    Key {
+        #[command(subcommand)]
+        subcommand: key::KeyCommands,
+    },
 }
 
 #[derive(Args)]

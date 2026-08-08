@@ -2,12 +2,12 @@ pub mod models;
 
 use anyhow::Result;
 
-pub async fn get_db(remote_url: Option<String>) -> Result<toasty::Db> {
+pub async fn get_db(turso_remote_url: Option<&str>) -> Result<toasty::Db> {
     let db_path = elevon_fs::agent::get_database_path()?;
 
     let mut driver = toasty_driver_turso::Turso::file(db_path).concurrent_writes();
 
-    if let Some(remote_url) = remote_url {
+    if let Some(remote_url) = turso_remote_url {
         driver = driver.with_remote_url(remote_url);
     }
 
@@ -19,8 +19,8 @@ pub async fn get_db(remote_url: Option<String>) -> Result<toasty::Db> {
     Ok(db)
 }
 
-pub async fn init_db(remote_url: Option<String>) -> Result<toasty::Db> {
-    let db = get_db(remote_url).await?;
+pub async fn init_db(turso_remote_url: Option<&str>) -> Result<toasty::Db> {
+    let db = get_db(turso_remote_url).await?;
 
     match db.push_schema().await {
         Ok(()) => Ok(db),
