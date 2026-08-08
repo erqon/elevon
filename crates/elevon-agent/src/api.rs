@@ -4,21 +4,26 @@ mod state;
 
 use std::{net::SocketAddr, sync::Arc};
 
-pub async fn run_api_server() {
+use anyhow::{Context, Result};
+
+pub async fn run_api_server() -> Result<()> {
     let state = Arc::new(state::AppState::new());
     let app = router::create_app(state);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await
-        .unwrap();
-    tracing::info!("listening on {}", listener.local_addr().unwrap());
+        .context("failed to bind API listener to 127.0.0.1:3000")?;
+
+    tracing::info!("listening on {}", listener.local_addr()?);
 
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .await
-    .unwrap();
+    .context("API server failed")?;
+
+    Ok(())
 }
 
 // async fn test_socket() -> Result<StatusCode, (StatusCode, String)> {
