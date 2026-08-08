@@ -1,10 +1,14 @@
 use clap::Parser;
-use elevon_agent::cli::{Cli, Commands, key::KeyCommands};
+use elevon_agent::{
+    cli::{Cli, Commands, key::KeyCommands},
+    env::ElevonEnv,
+};
 
 fn main() -> anyhow::Result<()> {
     elevon_http::init_cli_logging();
 
     let cli = Cli::parse();
+    let env = ElevonEnv::load()?;
 
     match cli.command {
         Commands::Setup(args) => {
@@ -20,7 +24,7 @@ fn main() -> anyhow::Result<()> {
             elevon_agent::setup::install_systemd(args.enable)?;
         }
         Commands::Key { subcommand } => {
-            run_async(KeyCommands::run(&subcommand));
+            run_async(KeyCommands::run(&subcommand, &env))?;
         }
     }
 

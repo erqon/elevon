@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 use jiff::{Timestamp, ToSpan};
 
-use crate::db::models::AuthKey;
+use crate::{db::models::AuthKey, env::ElevonEnv};
 
 #[derive(Subcommand)]
 pub enum KeyCommands {
@@ -12,19 +12,23 @@ pub enum KeyCommands {
 }
 
 impl KeyCommands {
-    pub async fn run(command: &KeyCommands) {
+    pub async fn run(command: &KeyCommands, env: &ElevonEnv) -> Result<()> {
         match command {
-            KeyCommands::Create(_args) => {}
+            KeyCommands::Create(args) => {
+                create(args.name.clone(), env.turso_remote_url.clone()).await?;
+            }
             KeyCommands::List => {}
             KeyCommands::Revoke => {}
         }
+
+        Ok(())
     }
 }
 
 #[derive(Args)]
 pub struct KeyCreateArgs {
     #[arg(long, short, help = "A name for the key", default_value = "Default")]
-    pub name: Option<String>,
+    pub name: String,
 }
 
 pub async fn create(name: impl Into<String>, remote_url: Option<String>) -> Result<()> {
