@@ -1,30 +1,40 @@
+use anyhow::{Context, Result};
 use clap::Parser;
 use elevon_agent::{
     cli::{Cli, Commands, key::KeyCommands},
     env::ElevonEnv,
 };
 
-fn main() -> anyhow::Result<()> {
+fn main() {
     elevon_http::init_cli_logging();
 
+    if let Err(err) = run() {
+        tracing::error!("{err:#}");
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<()> {
     let cli = Cli::parse();
-    let env = ElevonEnv::load()?;
+    let env = ElevonEnv::load().context("failed to load agent environment from /etc/elevon/env")?;
 
     match cli.command {
         Commands::Setup(args) => {
-            run_async(elevon_agent::setup::setup(args.turso_remote_url))?;
+            run_async(elevon_agent::setup::setup(args.turso_remote_url))
+                .context("setup command failed")?;
         }
         Commands::Api => {
-            run_async(elevon_agent::api::run_api_server());
+            run_async(elevon_agent::api::run_api_server()).context("api command failed")?;
         }
         Commands::Proxy => {
             elevon_agent::proxy::run_proxy();
         }
         Commands::InstallSystemd(args) => {
-            elevon_agent::setup::install_systemd(args.enable)?;
+            elevon_agent::setup::install_systemd(args.enable)
+                .context("failed to install systemd units")?;
         }
         Commands::Key { subcommand } => {
-            run_async(KeyCommands::run(&subcommand, &env))?;
+            run_async(KeyCommands::run(&subcommand, &env)).context("key command failed")?;
         }
     }
 

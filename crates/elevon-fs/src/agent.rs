@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 pub fn get_elevon_data_path() -> Result<PathBuf> {
     let base = std::env::var_os("XDG_DATA_HOME")
@@ -44,10 +44,11 @@ pub fn get_env_path() -> Result<PathBuf> {
     Ok(base)
 }
 
-pub fn get_app_env(app_name: &str) -> Result<PathBuf> {
+pub fn get_app_env(app_name: &str, bypass_default: Option<bool>) -> Result<PathBuf> {
+    let bypass = bypass_default.unwrap_or(false);
     let base = get_env_path()?;
 
-    if app_name == "default" {
+    if app_name == "default" && !bypass {
         anyhow::bail!("App can't be named 'default'");
     }
 
@@ -60,8 +61,11 @@ pub fn get_app_env(app_name: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
-pub fn load_app_env(app_name: &str) -> Result<HashMap<String, String>> {
-    let app_path = get_app_env(app_name)?;
+pub fn load_app_env(
+    app_name: &str,
+    bypass_default: Option<bool>,
+) -> Result<HashMap<String, String>> {
+    let app_path = get_app_env(app_name, bypass_default)?;
 
     let mut env = HashMap::new();
     env.extend(read_env_file(app_path)?);
@@ -69,13 +73,19 @@ pub fn load_app_env(app_name: &str) -> Result<HashMap<String, String>> {
     Ok(env)
 }
 
-pub fn add_app_env(app_name: &str, key: String, value: String) -> Result<()> {
-    let mut env = load_app_env(app_name)?;
+pub fn add_app_env(
+    app_name: &str,
+    bypass_default: Option<bool>,
+    key: String,
+    value: String,
+) -> Result<()> {
+    let mut env = load_app_env(app_name, bypass_default)?;
 
     env.insert(key, value);
 
-    let path = get_app_env(app_name)?;
-    write_env_file(&path, &env)?;
+    let path = get_app_env(app_name, None).context("failed to resolve env file path")?;
+    write_env_file(&path, &env)
+        .with_context(|| format!("failed to write env file {}", path.display()))?;
 
     Ok(())
 }

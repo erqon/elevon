@@ -10,7 +10,7 @@ pub struct ElevonEnv {
 
 impl ElevonEnv {
     pub fn load() -> Result<Self> {
-        let vars = load_app_env("default")?;
+        let vars = load_app_env("default", Some(true))?;
         Ok(Self {
             turso_remote_url: vars.get(&ElevonEnvKey::TursoRemoteUrl.env_name()).cloned(),
         })
@@ -22,6 +22,7 @@ impl ElevonEnv {
                 self.turso_remote_url = Some(value.into());
                 add_app_env(
                     "default",
+                    Some(true),
                     ElevonEnvKey::TursoRemoteUrl.env_name(),
                     self.turso_remote_url.clone().unwrap_or_default(),
                 )?;

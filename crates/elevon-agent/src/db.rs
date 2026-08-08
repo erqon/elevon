@@ -27,7 +27,6 @@ pub async fn init_db(turso_remote_url: Option<&str>) -> Result<toasty::Db> {
         Err(err) => {
             let msg = err.to_string().to_lowercase();
             if msg.contains("already exists") || msg.contains("exist") {
-                tracing::info!("Schema already initialized");
                 Ok(db)
             } else {
                 Err(err.into())
