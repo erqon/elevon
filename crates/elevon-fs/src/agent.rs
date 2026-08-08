@@ -8,21 +8,15 @@ use std::{
 use anyhow::{Context, Result};
 
 pub fn get_elevon_data_path() -> Result<PathBuf> {
-    let base = std::env::var_os("XDG_DATA_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            let home = std::env::var_os("HOME").expect("HOME not set");
-            PathBuf::from(home).join(".local/share")
-        });
-
-    let path = base.join("elevon");
-    create_dir_all(&path)?;
-    set_permissions(&path, std::fs::Permissions::from_mode(0o700))?;
+    let path = AgentPath::Data.ensure()?;
+    if dev_root().is_none() {
+        set_permissions(&path, std::fs::Permissions::from_mode(0o700))?;
+    }
     Ok(path)
 }
 
 pub fn get_database_path() -> Result<PathBuf> {
-    let db_path = get_elevon_data_path()?.join("elevon.db");
+    let db_path = AgentPath::Database.ensure()?;
 
     OpenOptions::new()
         .create(true)
@@ -35,28 +29,26 @@ pub fn get_database_path() -> Result<PathBuf> {
 }
 
 pub fn get_env_path() -> Result<PathBuf> {
-    let base = PathBuf::from("/etc/elevon/env");
-    if !base.exists() {
-        create_dir_all(&base)?;
+    let p = AgentPath::EnvDir.ensure()?;
+    if dev_root().is_none() {
+        set_permissions(&p, std::fs::Permissions::from_mode(0o700))?;
     }
-    set_permissions(&base, std::fs::Permissions::from_mode(0o700))?;
-
-    Ok(base)
+    Ok(p)
 }
 
 pub fn get_app_env(app_name: &str, bypass_default: Option<bool>) -> Result<PathBuf> {
     let bypass = bypass_default.unwrap_or(false);
-    let base = get_env_path()?;
-
-    if app_name == "default" && !bypass {
+    if app_name == "default" && !bypass && dev_root().is_none() {
         anyhow::bail!("App can't be named 'default'");
     }
 
-    let path = base.join(format!("{app_name}.env"));
+    let path = AgentPath::AppEnv(app_name.to_string(), bypass).ensure()?;
     if !path.exists() {
         std::fs::File::create(&path)?;
     }
-    set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
+    if dev_root().is_none() {
+        set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
+    }
 
     Ok(path)
 }
@@ -91,9 +83,11 @@ pub fn add_app_env(
 }
 
 pub fn get_socket_path() -> PathBuf {
-    let path = PathBuf::from("/run/elevon-agent.sock");
+    let path = AgentPath::Socket
+        .ensure()
+        .unwrap_or_else(|_| PathBuf::from("/run/elevon-agent.sock"));
     if path.exists() {
-        std::fs::remove_file(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
     }
     path
 }
@@ -136,13 +130,15 @@ pub fn get_api_systemd_content(exec: &str) -> String {
 
 pub fn install_proxy_unit(exec: &Path) -> Result<()> {
     let unit = get_proxy_systemd_content(&exec.display().to_string());
-    std::fs::write("/etc/systemd/system/elevon-agent-proxy.service", unit)?;
+    let dest = AgentPath::SystemdUnit("elevon-agent-proxy.service".into()).ensure()?;
+    std::fs::write(dest, unit)?;
     Ok(())
 }
 
 pub fn install_api_unit(exec: &Path) -> Result<()> {
     let unit = get_api_systemd_content(&exec.display().to_string());
-    std::fs::write("/etc/systemd/system/elevon-agent-api.service", unit)?;
+    let dest = AgentPath::SystemdUnit("elevon-agent-api.service".into()).ensure()?;
+    std::fs::write(dest, unit)?;
     Ok(())
 }
 
@@ -166,4 +162,97 @@ fn write_env_file(path: impl AsRef<Path>, env: &HashMap<String, String>) -> Resu
 
     std::fs::write(path, contents)?;
     Ok(())
+}
+
+fn dev_root() -> Option<PathBuf> {
+    if cfg!(debug_assertions) {
+        Some(PathBuf::from("./devroot"))
+    } else {
+        None
+    }
+}
+
+pub enum AgentPath {
+    Data,
+    Database,
+    EnvDir,
+    AppEnv(String, bool),
+    Socket,
+    SystemdUnit(String),
+}
+
+impl AgentPath {
+    pub fn resolve(&self) -> Result<PathBuf> {
+        let base = match dev_root() {
+            Some(root) => root,
+            None => PathBuf::from("/"),
+        };
+
+        let p = match self {
+            AgentPath::Data => {
+                if dev_root().is_some() {
+                    base.join("var").join("lib").join("elevon")
+                } else {
+                    // XDG_DATA_HOME logic kept as before
+                    let base = std::env::var_os("XDG_DATA_HOME")
+                        .map(PathBuf::from)
+                        .unwrap_or_else(|| {
+                            let home = std::env::var_os("HOME").expect("HOME not set");
+                            PathBuf::from(home).join(".local/share")
+                        });
+                    base.join("elevon")
+                }
+            }
+
+            AgentPath::Database => {
+                let data = AgentPath::Data.resolve()?;
+                data.join("elevon.db")
+            }
+
+            AgentPath::EnvDir => {
+                if dev_root().is_some() {
+                    base.join("etc").join("elevon").join("env")
+                } else {
+                    PathBuf::from("/etc").join("elevon").join("env")
+                }
+            }
+
+            AgentPath::AppEnv(app, bypass_default) => {
+                if app == "default" && !*bypass_default && dev_root().is_none() {
+                    anyhow::bail!("App can't be named 'default'")
+                }
+                AgentPath::EnvDir.resolve()?.join(format!("{app}.env"))
+            }
+
+            AgentPath::Socket => {
+                if dev_root().is_some() {
+                    base.join("run").join("elevon-agent.sock")
+                } else {
+                    PathBuf::from("/run").join("elevon-agent.sock")
+                }
+            }
+
+            AgentPath::SystemdUnit(name) => {
+                if dev_root().is_some() {
+                    base.join("etc").join("systemd").join("system").join(name)
+                } else {
+                    PathBuf::from("/etc")
+                        .join("systemd")
+                        .join("system")
+                        .join(name)
+                }
+            }
+        };
+
+        Ok(p)
+    }
+
+    /// Ensure parent dirs exist and optionally set perms.
+    pub fn ensure(&self) -> Result<PathBuf> {
+        let p = self.resolve()?;
+        if let Some(parent) = p.parent() {
+            create_dir_all(parent)?;
+        }
+        Ok(p)
+    }
 }
