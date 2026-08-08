@@ -5,7 +5,7 @@ use axum::{
     routing::{get, post},
 };
 use axum_extra::TypedHeader;
-use elevon_auth::token::{hash, issue};
+use elevon_http::token::{hash, issue};
 use headers::UserAgent;
 use std::net::SocketAddr;
 

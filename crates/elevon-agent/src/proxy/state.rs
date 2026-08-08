@@ -3,12 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use arc_swap::ArcSwap;
 use pingora::lb::{LoadBalancer, health_check::TcpHealthCheck, selection::RoundRobin};
 
-#[derive(Debug, Clone)]
-pub struct RouteConfig {
-    pub id: String,
-    pub host: String,
-    pub port: u16,
-}
+use crate::proxy::types::RouteConfig;
 
 pub struct ProxyState {
     pub routes: ArcSwap<HashMap<String, Vec<RouteConfig>>>,

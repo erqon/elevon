@@ -1,5 +1,6 @@
 mod socket;
 mod state;
+pub mod types;
 
 use std::{collections::HashMap, sync::Arc, time::Duration};
 

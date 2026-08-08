@@ -8,3 +8,5 @@ default = ["agent"]
 agent = []
 
 [dependencies]
+anyhow.workspace = true
+dotenvy.workspace = true

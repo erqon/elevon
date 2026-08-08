@@ -1,17 +1,12 @@
-use std::{net::SocketAddr, path::PathBuf};
+mod dto;
+mod router;
+mod state;
 
-use axum::{Router, http::StatusCode, routing::post};
-use serde_json::json;
-use tokio::{io::AsyncWriteExt, net::UnixStream};
-use tower_http::trace::{DefaultMakeSpan, TraceLayer};
+use std::{net::SocketAddr, sync::Arc};
 
 pub async fn run_api_server() {
-    let app = Router::new()
-        .route("/test-socket", post(test_socket))
-        .layer(
-            TraceLayer::new_for_http()
-                .make_span_with(DefaultMakeSpan::default().include_headers(true)),
-        );
+    let state = Arc::new(state::AppState::new());
+    let app = router::create_app(state);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await
@@ -26,31 +21,31 @@ pub async fn run_api_server() {
     .unwrap();
 }
 
-async fn test_socket() -> Result<StatusCode, (StatusCode, String)> {
-    let socket = PathBuf::from("/tmp/elevon-agent.sock");
-    let mut stream = UnixStream::connect(&socket)
-        .await
-        .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+// async fn test_socket() -> Result<StatusCode, (StatusCode, String)> {
+//     let socket = PathBuf::from("/tmp/elevon-agent.sock");
+//     let mut stream = UnixStream::connect(&socket)
+//         .await
+//         .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
 
-    let payload = serde_json::to_vec(&json!({
-        "event": "upsert_route",
-        "data": {
-            "name": "app.local",
-            "id": "2",
-            "host": "127.0.0.1",
-            "port": 3003
-        }
-    }))
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+//     let payload = serde_json::to_vec(&json!({
+//         "event": "upsert_route",
+//         "data": {
+//             "name": "app.local",
+//             "id": "2",
+//             "host": "127.0.0.1",
+//             "port": 3003
+//         }
+//     }))
+//     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    stream
-        .write_all(&payload)
-        .await
-        .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
-    stream
-        .shutdown()
-        .await
-        .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+//     stream
+//         .write_all(&payload)
+//         .await
+//         .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
+//     stream
+//         .shutdown()
+//         .await
+//         .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
 
-    Ok(StatusCode::NO_CONTENT)
-}
+//     Ok(StatusCode::NO_CONTENT)
+// }

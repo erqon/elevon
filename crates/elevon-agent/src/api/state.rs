@@ -1,0 +1,50 @@
+use std::path::PathBuf;
+
+use anyhow::Result;
+use elevon_fs::agent::get_socket_path;
+use tokio::io::AsyncWriteExt;
+use tokio::net::UnixStream;
+
+use crate::proxy::types::AgentEvent;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub socket_client: SocketClient,
+}
+
+impl AppState {
+    pub fn new() -> Self {
+        Self {
+            socket_client: SocketClient::new(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct SocketClient {
+    pub socket_path: PathBuf,
+}
+
+impl SocketClient {
+    pub fn new() -> Self {
+        Self {
+            socket_path: get_socket_path(),
+        }
+    }
+
+    pub async fn connect(&self) -> Result<UnixStream> {
+        let stream = UnixStream::connect(&self.socket_path).await?;
+        Ok(stream)
+    }
+
+    pub async fn send(&self, mut stream: UnixStream, event: AgentEvent) -> Result<()> {
+        let payload = serde_json::to_vec(&serde_json::json!(event))?;
+        stream.write_all(&payload).await?;
+        Ok(())
+    }
+
+    pub async fn shutdown(&self, mut stream: UnixStream) -> Result<()> {
+        stream.shutdown().await?;
+        Ok(())
+    }
+}

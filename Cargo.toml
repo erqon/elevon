@@ -2,11 +2,11 @@
 resolver = "3"
 members = [
   "crates/elevon-agent",
-  "crates/elevon-auth",
   "crates/elevon-cli",
   "crates/elevon-config",
   "crates/elevon-deploy",
   "crates/elevon-fs",
+  "crates/elevon-http",
   "crates/elevon-proxy",
   "crates/elevon-server",
 ]
@@ -15,11 +15,18 @@ members = [
 async-trait = "0.1.91"
 anyhow = "1"
 axum = "0.8.9"
-clap = { version = "4.6.2", features = ["color", "derive"] }
+clap = { version = "4.6.6", features = ["color", "derive"] }
 dotenvy = "0.15.7"
+jiff = { version = "0.2.35", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.151"
-tokio = { version = "1.53.0", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros"] }
+toasty = { version = "0.9.0", default-features = false, features = [
+  "jiff",
+  "turso",
+] }
+toasty-cli = "0.9.0"
+toasty-driver-turso = "0.9.0"
 tower-http = { version = "0.7.0", features = ["trace"] }
 tracing = "0.1.44"
 tracing-indicatif = "0.3.14"
@@ -27,6 +34,6 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"]}
 thiserror = "2.0.19"
 uuid = { version = "1.24.0", features = ["v7"] }
 
-elevon-auth = { path = "./crates/elevon-auth" }
 elevon-config = { path = "./crates/elevon-config" }
 elevon-fs = { path = "./crates/elevon-fs" }
+elevon-http = { path = "./crates/elevon-http" }
