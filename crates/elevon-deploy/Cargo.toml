@@ -11,9 +11,11 @@ tar = "0.4.46"
 
 anyhow.workspace = true
 clap.workspace = true
-elevon-config.workspace = true
 serde.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-indicatif.workspace = true
 tracing-subscriber.workspace = true
+
+elevon-config.workspace = true
+elevon-http.workspace = true

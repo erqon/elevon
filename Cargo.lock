@@ -1403,6 +1403,7 @@ dependencies = [
  "bollard",
  "clap",
  "elevon-config",
+ "elevon-http",
  "futures-util",
  "serde",
  "tar",
