@@ -38,11 +38,17 @@ where
 }
 
 pub fn resolve_env_or_literal(value: &str) -> Result<String, ConfigError> {
-    if let Some(name) = value.strip_prefix('$') {
-        std::env::var(name).map_err(|_| ConfigError::MissingEnv {
-            name: name.to_string(),
+    if let Some(rest) = value.strip_prefix('$') {
+        // Check for $VAR:-default syntax
+        if let Some((name, default)) = rest.split_once(":-") {
+            return Ok(std::env::var(name).unwrap_or_else(|_| default.to_string()));
+        }
+        // Plain $VAR (no default, must be set)
+        std::env::var(rest).map_err(|_| ConfigError::MissingEnv {
+            name: rest.to_string(),
         })
     } else {
+        // Literal value
         Ok(value.to_string())
     }
 }
