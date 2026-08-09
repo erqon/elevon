@@ -8,3 +8,7 @@
 .vscode
 
 devroot/
+crates/aileron-server/data
+crates/aileron-server/toasty
+crates/aileron-server/aileron.yml
+crates/elevon-deploy/.elevon
