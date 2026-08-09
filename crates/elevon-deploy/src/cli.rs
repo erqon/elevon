@@ -39,7 +39,7 @@ pub enum Commands {
     Push(PushArgs),
 
     #[command(about = "Checks for deployment needed assets")]
-    Check(CheckArgs)
+    Check
 }
 
 #[derive(Args)]
@@ -55,10 +55,4 @@ pub struct PushArgs {
 
     #[arg(long, short, help = "Build the image before pushing it")]
     pub build: bool,
-}
-
-#[derive(Args)]
-pub struct CheckArgs {
-    #[arg(long, help = "Check config file existance and if able to be parsed")]
-    pub config: bool
 }

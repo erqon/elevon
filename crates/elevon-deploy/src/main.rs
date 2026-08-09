@@ -125,11 +125,8 @@ async fn main() -> anyhow::Result<()> {
                 elevon_deploy::image::push_image(&image, registry_credentials.clone()).await?;
             }
         }
-        Commands::Check(args) => {
-            if args.config {
-                Config::from_file(&cli.config)?;
-                println!("Successfully passed config file check {}", &cli.config);
-            }
+        Commands::Check => {
+            println!("Successfully passed config file check {}", &cli.config);
         }
     }
 
