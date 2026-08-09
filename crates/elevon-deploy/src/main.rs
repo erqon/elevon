@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+
+use anyhow::Result;
 use clap::Parser;
 use elevon_config::{ElevonConfig, ResolveEnvCredentials};
 use elevon_deploy::cli::{Cli, Commands};
@@ -5,7 +8,7 @@ use elevon_deploy::config::Config;
 use elevon_deploy::config::app::AppConfig;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<()> {
     elevon_http::init_cli_logging();
 
     let cli = Cli::parse();
@@ -46,9 +49,9 @@ async fn main() -> anyhow::Result<()> {
 }
 
 fn select_apps<'a>(
-    apps: &'a std::collections::HashMap<String, &'a AppConfig>,
+    apps: &'a HashMap<String, &'a AppConfig>,
     names: &'a [String],
-) -> anyhow::Result<Vec<(&'a String, &'a AppConfig)>> {
+) -> Result<Vec<(&'a String, &'a AppConfig)>> {
     if names.is_empty() {
         Ok(apps.iter().map(|(n, a)| (n, *a)).collect())
     } else {
