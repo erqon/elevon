@@ -1,7 +1,8 @@
+mod auth;
 mod dto;
 mod router;
 mod routes;
-mod state;
+pub mod state;
 
 use std::net::SocketAddr;
 
