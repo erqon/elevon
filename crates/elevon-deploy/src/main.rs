@@ -126,7 +126,7 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Commands::Check => {
-            println!("Successfully passed config file check {}", &cli.config);
+            tracing::info!("Successfully passed config file check {}", &cli.config);
         }
     }
 

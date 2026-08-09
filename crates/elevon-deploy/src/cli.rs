@@ -39,7 +39,7 @@ pub enum Commands {
     Push(PushArgs),
 
     #[command(about = "Checks for deployment needed assets")]
-    Check
+    Check,
 }
 
 #[derive(Args)]
