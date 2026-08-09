@@ -41,7 +41,14 @@ pub fn resolve_env_or_literal(value: &str) -> Result<String, ConfigError> {
     if let Some(rest) = value.strip_prefix('$') {
         // Check for $VAR:-default syntax
         if let Some((name, default)) = rest.split_once(":-") {
-            return Ok(std::env::var(name).unwrap_or_else(|_| default.to_string()));
+            return match std::env::var(name) {
+                Ok(v) if !v.is_empty() => Ok(v),
+                Ok(_) => Ok(default.to_string()),
+                Err(std::env::VarError::NotPresent) => Ok(default.to_string()),
+                Err(_) => Err(ConfigError::MissingEnv {
+                    name: name.to_string(),
+                }),
+            };
         }
         // Plain $VAR (no default, must be set)
         std::env::var(rest).map_err(|_| ConfigError::MissingEnv {
