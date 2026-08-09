@@ -37,6 +37,9 @@ pub enum Commands {
 
     #[command(about = "Push configured images to the registry")]
     Push(PushArgs),
+
+    #[command(about = "Checks for deployment needed assets")]
+    Check,
 }
 
 #[derive(Args)]

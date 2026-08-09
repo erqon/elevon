@@ -125,6 +125,9 @@ async fn main() -> anyhow::Result<()> {
                 elevon_deploy::image::push_image(&image, registry_credentials.clone()).await?;
             }
         }
+        Commands::Check => {
+            tracing::info!("Successfully passed config file check {}", &cli.config);
+        }
     }
 
     Ok(())
