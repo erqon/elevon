@@ -4,6 +4,9 @@ image: project/project-name
 elevon:
   dashboard: https://dash.example.com
   project: my-app
+  agent:
+    url: $AGENT_URL
+    key: $AGENT_KEY
 
 registry:
   server: ghcr.io

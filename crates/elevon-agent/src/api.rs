@@ -1,14 +1,19 @@
 mod dto;
 mod router;
+mod routes;
 mod state;
 
-use std::{net::SocketAddr, sync::Arc};
+use std::net::SocketAddr;
 
 use anyhow::{Context, Result};
+use axum::Router;
 
-pub async fn run_api_server() -> Result<()> {
-    let state = Arc::new(state::AppState::new());
-    let app = router::create_app(state);
+use crate::env::ElevonEnv;
+
+pub async fn run_api_server(env: &ElevonEnv) -> Result<()> {
+    let state = state::AppState::new(env).await?;
+    let router = router::create_router(state);
+    let app = Router::new().nest("/api/v1", router);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await

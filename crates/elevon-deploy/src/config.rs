@@ -1,4 +1,5 @@
 pub mod app;
+pub mod elevon;
 mod env;
 pub mod registry;
 
@@ -12,6 +13,8 @@ use crate::config::app::AppConfig;
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub name: String,
+
+    pub elevon: elevon::ElevonConfig,
 
     pub registry: registry::RegistryConfig,
 
