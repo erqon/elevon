@@ -1,7 +1,7 @@
 use anyhow::Result;
 use serde::Deserialize;
 
-use crate::config::registry::RegistryConfig;
+use crate::config::{env::EnvConfig, registry::RegistryConfig};
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
@@ -15,7 +15,7 @@ pub struct AppConfig {
     pub routing: Option<RoutingConfig>,
 
     #[serde(default)]
-    pub env: crate::config::env::EnvConfig,
+    pub env: Option<EnvConfig>,
 }
 
 impl AppConfig {

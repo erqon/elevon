@@ -27,10 +27,9 @@ pub struct Config {
 
 impl Config {
     pub fn apps(&self) -> anyhow::Result<HashMap<String, &AppConfig>> {
-        let has_root = self
-            .app_config
-            .as_ref()
-            .is_some_and(|a| a.image.is_some() || a.build.is_some() || a.routing.is_some());
+        let has_root = self.app_config.as_ref().is_some_and(|a| {
+            a.image.is_some() || a.build.is_some() || a.routing.is_some() || a.env.is_some()
+        });
         let has_apps = !self.apps.is_empty();
 
         match (has_root, has_apps) {
