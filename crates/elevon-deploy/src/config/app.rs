@@ -13,6 +13,9 @@ pub struct AppConfig {
 
     #[serde(default)]
     pub routing: Option<RoutingConfig>,
+
+    #[serde(default)]
+    pub env: crate::config::env::EnvConfig,
 }
 
 impl AppConfig {

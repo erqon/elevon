@@ -47,8 +47,8 @@ async fn main() -> Result<()> {
         }
         Commands::Env { subcommand } => match subcommand {
             EnvCommands::Push => {
-                for (name, _) in selected {
-                    let vars = config.env.resolved_credentials()?;
+                for (name, app) in selected {
+                    let vars = app.env.resolved_credentials()?;
                     agent_client.push_env(&name, &vars).await?;
                 }
             }

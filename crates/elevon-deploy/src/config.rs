@@ -1,6 +1,6 @@
 pub mod app;
 pub mod elevon;
-mod env;
+pub mod env;
 pub mod registry;
 
 use std::collections::HashMap;
@@ -17,9 +17,6 @@ pub struct Config {
     pub elevon: elevon::ElevonConfig,
 
     pub registry: registry::RegistryConfig,
-
-    #[serde(default)]
-    pub env: env::EnvConfig,
 
     #[serde(default, flatten)]
     pub app_config: Option<AppConfig>,
