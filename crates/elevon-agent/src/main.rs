@@ -24,7 +24,7 @@ fn run() -> Result<()> {
                 .context("setup command failed")?;
         }
         Commands::Api => {
-            run_async(elevon_agent::api::run_api_server()).context("api command failed")?;
+            run_async(elevon_agent::api::run_api_server(&env)).context("api command failed")?;
         }
         Commands::Proxy => {
             elevon_agent::proxy::run_proxy();
