@@ -1,3 +1,5 @@
+pub mod env;
+
 use clap::{
     Args, Parser, Subcommand,
     builder::styling::{AnsiColor, Styles},
@@ -26,6 +28,9 @@ pub struct Cli {
     )]
     pub config: String,
 
+    #[arg(long = "app", help = "Limit the operation to the specified app(s)")]
+    pub apps: Vec<String>,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -33,26 +38,23 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     #[command(about = "Build container images from the deploy config")]
-    Build(BuildArgs),
+    Build,
 
     #[command(about = "Push configured images to the registry")]
     Push(PushArgs),
 
     #[command(about = "Checks for deployment needed assets")]
     Check,
-}
 
-#[derive(Args)]
-pub struct BuildArgs {
-    #[arg(long = "app", help = "Limit the operation to the specified app(s)")]
-    pub apps: Vec<String>,
+    #[command(about = "Env specific commands")]
+    Env {
+        #[command(subcommand)]
+        subcommand: env::EnvCommands,
+    },
 }
 
 #[derive(Args)]
 pub struct PushArgs {
-    #[arg(long = "app", help = "Limit the operation to the specified app(s)")]
-    pub apps: Vec<String>,
-
     #[arg(long, short, help = "Build the image before pushing it")]
     pub build: bool,
 }
