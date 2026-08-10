@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use anyhow::Result;
 use clap::Parser;
 use elevon_config::{ElevonConfig, ResolveEnvCredentials};
+use elevon_deploy::agent::AgentClient;
+use elevon_deploy::cli::env::EnvCommands;
 use elevon_deploy::cli::{Cli, Commands};
 use elevon_deploy::config::Config;
 use elevon_deploy::config::app::AppConfig;
@@ -14,20 +16,20 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     let config = Config::from_file(&cli.config)?;
 
-    match cli.command {
-        Commands::Build(args) => {
-            let apps = config.apps()?;
-            let selected = select_apps(&apps, &args.apps)?;
+    let agent_credentials = config.elevon.agent.resolved_credentials()?;
+    let agent_client = AgentClient::new(&agent_credentials.url, &agent_credentials.key)?;
+    let apps = config.apps()?;
+    let selected = select_apps(&apps, &cli.apps)?;
 
+    match cli.command {
+        Commands::Build => {
             for (name, app) in selected {
                 app.run_build(name, &config.registry.server, &cli.config)
                     .await?;
             }
         }
         Commands::Push(args) => {
-            let apps = config.apps()?;
             let registry_credentials = config.registry.resolved_credentials()?;
-            let selected = select_apps(&apps, &args.apps)?;
 
             for (name, app) in selected {
                 app.run_push(
@@ -43,6 +45,14 @@ async fn main() -> Result<()> {
         Commands::Check => {
             tracing::info!("Successfully passed config file check {}", &cli.config);
         }
+        Commands::Env { subcommand } => match subcommand {
+            EnvCommands::Push => {
+                for (name, _) in selected {
+                    let vars = config.env.resolved_credentials()?;
+                    agent_client.push_env(&name, &vars).await?;
+                }
+            }
+        },
     }
 
     Ok(())
