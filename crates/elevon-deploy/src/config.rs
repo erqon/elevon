@@ -34,7 +34,7 @@ impl Config {
 
         match (has_root, has_apps) {
             (true, true) => {
-                anyhow::bail!("use either a root app (image/build/...) or `apps:`, not both")
+                anyhow::bail!("use either a root app (image/build/env/...) or apps:, not both")
             }
             (false, false) => anyhow::bail!("no app config found"),
             (true, false) => {

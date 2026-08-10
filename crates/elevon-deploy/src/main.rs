@@ -51,9 +51,9 @@ async fn main() -> Result<()> {
                     let vars = app
                         .env
                         .as_ref()
-                        .ok_or_else(|| anyhow::anyhow!("app `{name}` has no env config"))?
+                        .ok_or_else(|| anyhow::anyhow!("app `{name}` is missing `env`"))?
                         .resolved_credentials()?;
-                    agent_client.push_env(&name, &vars).await?;
+                    agent_client.push_env(name, &vars).await?;
                 }
             }
         },
