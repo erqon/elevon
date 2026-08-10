@@ -1,6 +1,6 @@
 pub mod app;
 pub mod elevon;
-mod env;
+pub mod env;
 pub mod registry;
 
 use std::collections::HashMap;
@@ -18,9 +18,6 @@ pub struct Config {
 
     pub registry: registry::RegistryConfig,
 
-    #[serde(default)]
-    pub env: env::EnvConfig,
-
     #[serde(default, flatten)]
     pub app_config: Option<AppConfig>,
 
@@ -30,15 +27,14 @@ pub struct Config {
 
 impl Config {
     pub fn apps(&self) -> anyhow::Result<HashMap<String, &AppConfig>> {
-        let has_root = self
-            .app_config
-            .as_ref()
-            .is_some_and(|a| a.image.is_some() || a.build.is_some() || a.routing.is_some());
+        let has_root = self.app_config.as_ref().is_some_and(|a| {
+            a.image.is_some() || a.build.is_some() || a.routing.is_some() || a.env.is_some()
+        });
         let has_apps = !self.apps.is_empty();
 
         match (has_root, has_apps) {
             (true, true) => {
-                anyhow::bail!("use either a root app (image/build/...) or `apps:`, not both")
+                anyhow::bail!("use either a root app (image/build/env/...) or apps:, not both")
             }
             (false, false) => anyhow::bail!("no app config found"),
             (true, false) => {

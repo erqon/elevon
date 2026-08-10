@@ -47,9 +47,13 @@ async fn main() -> Result<()> {
         }
         Commands::Env { subcommand } => match subcommand {
             EnvCommands::Push => {
-                for (name, _) in selected {
-                    let vars = config.env.resolved_credentials()?;
-                    agent_client.push_env(&name, &vars).await?;
+                for (name, app) in selected {
+                    let vars = app
+                        .env
+                        .as_ref()
+                        .ok_or_else(|| anyhow::anyhow!("app `{name}` is missing `env`"))?
+                        .resolved_credentials()?;
+                    agent_client.push_env(name, &vars).await?;
                 }
             }
         },
@@ -68,9 +72,9 @@ fn select_apps<'a>(
         names
             .iter()
             .map(|name| {
-                apps.get(name)
+                apps.get_key_value(name)
                     .ok_or_else(|| anyhow::anyhow!("unknown app `{name}`"))
-                    .map(|app| (name, *app))
+                    .map(|(k, v)| (k, *v))
             })
             .collect()
     }
