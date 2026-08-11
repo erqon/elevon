@@ -1,7 +1,10 @@
 use anyhow::Result;
 use serde::Deserialize;
 
-use crate::config::{env::EnvConfig, registry::RegistryConfig};
+use crate::{
+    agent::AgentClient,
+    config::{env::EnvConfig, registry::RegistryConfig},
+};
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
@@ -29,6 +32,8 @@ impl AppConfig {
 
     pub async fn run_push(
         &self,
+        agent_client: &AgentClient,
+        app_config: &AppConfig,
         name: &str,
         creds: RegistryConfig,
         build_before: bool,
@@ -41,6 +46,9 @@ impl AppConfig {
 
         let image = self.image(name)?.to_owned();
         crate::image::push_image(&image, creds).await?;
+
+        agent_client.push_deploy(name, app_config).await?;
+
         Ok(())
     }
 

@@ -1,4 +1,4 @@
-mod dto;
+pub mod dto;
 mod routes;
 pub mod state;
 

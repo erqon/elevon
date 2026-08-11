@@ -6,6 +6,8 @@ use reqwest::{
     header::{AUTHORIZATION, HeaderMap},
 };
 
+use crate::config::app::AppConfig;
+
 pub struct AgentClient {
     client: Client,
     base_url: Url,
@@ -44,11 +46,7 @@ impl AgentClient {
         headers
     }
 
-    pub async fn push_env<'a>(
-        &self,
-        app_name: &'a str,
-        vars: &'a HashMap<String, String>,
-    ) -> Result<()> {
+    pub async fn push_env(&self, app_name: &str, vars: &HashMap<String, String>) -> Result<()> {
         let url = self.absolute_url("/env");
         let headers = self.headers();
 
@@ -59,15 +57,39 @@ impl AgentClient {
             }]
         });
 
-        let response = self
-            .client
+        self.client
             .put(url)
             .headers(headers)
             .json(&payload)
             .send()
             .await?;
 
-        println!("response: {:?}", response);
+        Ok(())
+    }
+
+    pub async fn push_deploy(&self, app_name: &str, app_config: &AppConfig) -> Result<()> {
+        let url = self.absolute_url("/deploy");
+        let headers = self.headers();
+
+        let routing = app_config.routing.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("App `{}` is missing routing configuration", app_name)
+        })?;
+
+        let payload = serde_json::json!({
+            "apps": [{
+                "name": app_name,
+                "image_url": app_config.image.clone().unwrap_or_default(),
+                "domain": routing.domain,
+                "port": routing.port,
+            }]
+        });
+
+        self.client
+            .post(url)
+            .headers(headers)
+            .json(&payload)
+            .send()
+            .await?;
 
         Ok(())
     }

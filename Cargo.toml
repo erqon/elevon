@@ -6,7 +6,7 @@ members = [
   "crates/elevon-config",
   "crates/elevon-deploy",
   "crates/elevon-fs",
-  "crates/elevon-http",
+  "crates/elevon-http", 
   "crates/elevon-proxy",
   "crates/elevon-server",
 ]
@@ -15,8 +15,10 @@ members = [
 async-trait = "0.1.91"
 anyhow = "1"
 axum = "0.8.9"
+bollard = "0.21.0"
 clap = { version = "4.6.6", features = ["color", "derive"] }
 dotenvy = "0.15.7"
+futures-util = "0.3.33"
 jiff = { version = "0.2.35", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.151"

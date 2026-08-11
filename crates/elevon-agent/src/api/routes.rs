@@ -1,4 +1,5 @@
-pub mod env;
+mod deploy;
+mod env;
 
 use std::sync::Arc;
 
@@ -13,7 +14,8 @@ pub fn create_router(state: AppState) -> Router {
 
     Router::new()
         .route("/health", get(health))
-        .nest("/env", crate::api::routes::env::router())
+        .nest("/env", env::router())
+        .nest("/deploy", deploy::router())
         .with_state(state)
         .layer(from_fn(elevon_http::error::log_app_errors))
         .layer(
