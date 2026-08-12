@@ -11,6 +11,7 @@ use crate::proxy::types::AgentEvent;
 #[derive(Clone)]
 pub struct AppState {
     pub db: toasty::Db,
+    pub env: ElevonEnv,
     pub socket_client: SocketClient,
 }
 
@@ -19,6 +20,7 @@ impl AppState {
         let db = crate::db::init_db(env.turso_remote_url.as_deref()).await?;
         Ok(Self {
             db,
+            env: env.clone(),
             socket_client: SocketClient::new(),
         })
     }

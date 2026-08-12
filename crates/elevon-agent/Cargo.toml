@@ -11,6 +11,7 @@ futures = "0.3.33"
 async-trait.workspace = true
 anyhow.workspace = true
 axum.workspace = true
+bollard.workspace = true
 clap.workspace = true
 jiff.workspace = true
 serde.workspace = true

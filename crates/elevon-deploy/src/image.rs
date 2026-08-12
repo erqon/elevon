@@ -11,7 +11,10 @@ use bollard::{
 };
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
-use crate::config::{app::BuildConfig, registry::RegistryConfig};
+use crate::{
+    config::{app::BuildConfig, registry::RegistryConfig},
+    util::COMMIT_SHA,
+};
 
 use self::progress::{ProgressMode, drain_progress_stream, print_success};
 
@@ -29,7 +32,7 @@ pub async fn build_image(
     let (context, dockerfile) = util::get_build_context(config_path, build_config);
     let docker = Docker::connect_with_local_defaults()?;
 
-    let full_image_name = util::full_image_name(registry_server, image_name, "latest");
+    let full_image_name = util::full_image_name(registry_server, image_name, COMMIT_SHA);
 
     let status_msg = format!("building {full_image_name}");
     tracing::Span::current().pb_set_message(&status_msg);
@@ -57,10 +60,9 @@ pub async fn build_image(
 pub async fn push_image(image_name: &str, creds: RegistryConfig) -> anyhow::Result<()> {
     let docker = Docker::connect_with_local_defaults()?;
 
-    let tag = "latest";
-    let full_image_name = util::full_image_name(&creds.server, image_name, tag);
+    let full_image_name = util::full_image_name(&creds.server, image_name, COMMIT_SHA);
 
-    let options = PushImageOptionsBuilder::default().tag(tag).build();
+    let options = PushImageOptionsBuilder::default().tag(COMMIT_SHA).build();
     let credentials = DockerCredentials {
         username: Some(creds.username),
         password: Some(creds.password),

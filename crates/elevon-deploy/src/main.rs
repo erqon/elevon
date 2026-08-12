@@ -4,7 +4,6 @@ use anyhow::Result;
 use clap::Parser;
 use elevon_config::{ElevonConfig, ResolveEnvCredentials};
 use elevon_deploy::agent::AgentClient;
-use elevon_deploy::cli::env::EnvCommands;
 use elevon_deploy::cli::{Cli, Commands};
 use elevon_deploy::config::Config;
 use elevon_deploy::config::app::AppConfig;
@@ -33,6 +32,7 @@ async fn main() -> Result<()> {
 
             for (name, app) in selected {
                 app.run_push(
+                    &agent_client,
                     name,
                     registry_credentials.clone(),
                     args.build,
@@ -45,18 +45,12 @@ async fn main() -> Result<()> {
         Commands::Check => {
             tracing::info!("Successfully passed config file check {}", &cli.config);
         }
-        Commands::Env { subcommand } => match subcommand {
-            EnvCommands::Push => {
-                for (name, app) in selected {
-                    let vars = app
-                        .env
-                        .as_ref()
-                        .ok_or_else(|| anyhow::anyhow!("app `{name}` is missing `env`"))?
-                        .resolved_credentials()?;
-                    agent_client.push_env(name, &vars).await?;
-                }
-            }
-        },
+        Commands::Env { subcommand } => {
+            let registry_credentials = config.registry.resolved_credentials()?;
+            subcommand
+                .run(&agent_client, &registry_credentials, &selected)
+                .await?;
+        }
     }
 
     Ok(())
