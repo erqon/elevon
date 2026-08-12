@@ -10,10 +10,17 @@ use futures::StreamExt;
 
 use crate::{api::dto::AppDeployData, env::ElevonEnv};
 
-pub async fn pull_image(elevon_env: &ElevonEnv, image_url: &str) -> Result<()> {
+fn get_image_url(elevon_env: &ElevonEnv, app_config: &AppDeployData) -> String {
+    format!(
+        "{}/{}:{}",
+        elevon_env.registry_server, app_config.image_url, app_config.commit_sha
+    )
+}
+
+pub async fn pull_image(elevon_env: &ElevonEnv, app_config: &AppDeployData) -> Result<()> {
     let docker = Docker::connect_with_local_defaults()?;
 
-    let full_image_url = format!("{}/{}", &elevon_env.registry_server, image_url);
+    let full_image_url = get_image_url(elevon_env, app_config);
 
     let options = CreateImageOptionsBuilder::new()
         .from_image(&full_image_url)
@@ -32,6 +39,7 @@ pub async fn pull_image(elevon_env: &ElevonEnv, image_url: &str) -> Result<()> {
 
     let mut stream = docker.create_image(Some(options), None, credentials);
     while let Some(result) = stream.next().await {
+        // TODO: Add a way of streaming the progress back to deploy
         result?;
     }
 
@@ -41,7 +49,7 @@ pub async fn pull_image(elevon_env: &ElevonEnv, image_url: &str) -> Result<()> {
 pub async fn run_image(elevon_env: &ElevonEnv, app_config: &AppDeployData) -> Result<()> {
     let docker = Docker::connect_with_local_defaults()?;
 
-    let full_image_url = format!("{}/{}", &elevon_env.registry_server, &app_config.image_url);
+    let full_image_url = get_image_url(elevon_env, app_config);
 
     let options = CreateContainerOptionsBuilder::new()
         .name(&app_config.name)

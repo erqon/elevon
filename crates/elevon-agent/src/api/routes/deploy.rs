@@ -28,7 +28,7 @@ async fn deploy(
     let mut success_count: Vec<String> = Vec::with_capacity(payload.apps.len());
 
     for app in payload.apps {
-        pull_image(&state.env, &app.image_url).await?;
+        pull_image(&state.env, &app).await?;
         run_image(&state.env, &app).await?;
 
         success_count.push(app.name);

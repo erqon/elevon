@@ -6,7 +6,7 @@ use reqwest::{
     header::{AUTHORIZATION, HeaderMap},
 };
 
-use crate::config::app::AppConfig;
+use crate::{config::app::AppConfig, util::COMMIT_SHA};
 
 pub struct AgentClient {
     client: Client,
@@ -82,6 +82,7 @@ impl AgentClient {
 
         let payload = serde_json::json!({
             "apps": [{
+                "commit_sha": COMMIT_SHA,
                 "name": app_name,
                 "image_url": image_url,
                 "domain": &routing.domain,
