@@ -88,4 +88,16 @@ impl ElevonEnvKey {
     fn read_from(&self, vars: &HashMap<String, String>) -> Option<String> {
         vars.get(&self.bare_name().to_string()).cloned()
     }
+
+    pub fn from_bare_name(s: &str) -> Option<Self> {
+        Self::all().into_iter().find(|k| k.bare_name() == s)
+    }
+}
+
+impl std::str::FromStr for ElevonEnvKey {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::from_bare_name(s).ok_or_else(|| anyhow::anyhow!("unknown env key: {s}"))
+    }
 }

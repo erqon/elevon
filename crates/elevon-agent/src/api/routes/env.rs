@@ -1,11 +1,11 @@
 use std::{collections::HashMap, sync::Arc};
 
-use axum::{Json, Router, http::StatusCode, routing::put};
+use axum::{Json, Router, extract::State, http::StatusCode, routing::put};
 use elevon_fs::agent::add_app_env;
 use elevon_http::error::AppError;
 use serde::Deserialize;
 
-use crate::{api::state::AppState, db::models::AuthKey};
+use crate::{api::state::AppState, db::models::AuthKey, env::ElevonEnvKey};
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new().route("/", put(set))
@@ -22,10 +22,19 @@ struct SetEnvDto {
     pub updates: Vec<AppEnvUpdate>,
 }
 
-async fn set(_: AuthKey, Json(payload): Json<SetEnvDto>) -> Result<StatusCode, AppError> {
+async fn set(
+    _: AuthKey,
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<SetEnvDto>,
+) -> Result<StatusCode, AppError> {
     for update in payload.updates {
         for (key, value) in update.vars {
-            add_app_env(&update.app_name, None, key, value)?;
+            if let Ok(env_key) = key.parse::<ElevonEnvKey>() {
+                let mut env = state.env.write().await;
+                env.update_value(env_key, value)?;
+            } else {
+                add_app_env(&update.app_name, None, key.clone(), value.clone())?;
+            }
         }
     }
 

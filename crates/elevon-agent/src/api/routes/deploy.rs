@@ -15,7 +15,7 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new().route("/", post(deploy))
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct DeployDto {
     pub apps: Vec<AppDeployData>,
 }
@@ -32,10 +32,14 @@ async fn deploy(
     Json(payload): Json<DeployDto>,
 ) -> Result<StatusCode, AppError> {
     let mut success_count: Vec<String> = Vec::with_capacity(payload.apps.len());
+    let env_snapshot = {
+        let guard = state.env.read().await;
+        guard.clone()
+    };
 
     for app in payload.apps {
-        pull_image(&state.env, &app).await?;
-        run_image(&state.env, &app).await?;
+        pull_image(&env_snapshot, &app).await?;
+        run_image(&env_snapshot, &app).await?;
 
         success_count.push(app.name);
     }
