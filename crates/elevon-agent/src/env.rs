@@ -89,3 +89,17 @@ impl ElevonEnvKey {
         vars.get(&self.bare_name().to_string()).cloned()
     }
 }
+
+impl std::str::FromStr for ElevonEnvKey {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "TURSO_REMOTE_URL" => Ok(Self::TursoRemoteUrl),
+            "REGISTRY_SERVER" => Ok(Self::RegistryServer),
+            "REGISTRY_USERNAME" => Ok(Self::RegistryUsername),
+            "REGISTRY_PASSWORD" => Ok(Self::RegistryPassword),
+            _ => anyhow::bail!("unknown env key: {s}"),
+        }
+    }
+}

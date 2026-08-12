@@ -4,23 +4,24 @@ use anyhow::Result;
 use elevon_fs::agent::get_socket_path;
 use tokio::io::AsyncWriteExt;
 use tokio::net::UnixStream;
+use tokio::sync::RwLock;
 
 use crate::env::ElevonEnv;
 use crate::proxy::types::AgentEvent;
 
-#[derive(Clone)]
 pub struct AppState {
     pub db: toasty::Db,
-    pub env: ElevonEnv,
+    pub env: RwLock<ElevonEnv>,
     pub socket_client: SocketClient,
 }
 
 impl AppState {
     pub async fn new(env: &ElevonEnv) -> Result<Self> {
         let db = crate::db::init_db(env.turso_remote_url.as_deref()).await?;
+        let env = RwLock::new(env.clone());
         Ok(Self {
             db,
-            env: env.clone(),
+            env,
             socket_client: SocketClient::new(),
         })
     }
