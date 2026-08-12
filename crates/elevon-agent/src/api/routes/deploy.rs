@@ -20,6 +20,12 @@ struct DeployDto {
     pub apps: Vec<AppDeployData>,
 }
 
+// During deployments data should be saved in db about the apps, then IDs should be
+// generated so each app would have a unique id, each app should have the port in the
+// [port:port+1] range, so each deployment deploys on empty port. There should also be
+// some info about the backups that will be kept on the agent's machine, in deploy's config
+// so each deployment would just delete previous images.
+
 async fn deploy(
     _: AuthKey,
     State(state): State<Arc<AppState>>,
