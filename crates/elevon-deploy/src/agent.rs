@@ -75,12 +75,17 @@ impl AgentClient {
             anyhow::anyhow!("App `{}` is missing routing configuration", app_name)
         })?;
 
+        let image_url = app_config
+            .image
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("App `{}` is missing image configuration", app_name))?;
+
         let payload = serde_json::json!({
             "apps": [{
                 "name": app_name,
-                "image_url": app_config.image.clone().unwrap_or_default(),
-                "domain": routing.domain,
-                "port": routing.port,
+                "image_url": image_url,
+                "domain": &routing.domain,
+                "port": &routing.port,
             }]
         });
 
