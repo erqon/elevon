@@ -33,7 +33,6 @@ async fn main() -> Result<()> {
             for (name, app) in selected {
                 app.run_push(
                     &agent_client,
-                    app,
                     name,
                     registry_credentials.clone(),
                     args.build,

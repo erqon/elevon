@@ -15,13 +15,13 @@ impl EnvCommands {
     pub async fn run(
         &self,
         agent_client: &AgentClient,
-        registry_credengials: &RegistryConfig,
+        registry_credentials: &RegistryConfig,
         selected: &Vec<(&String, &AppConfig)>,
     ) -> anyhow::Result<()> {
         match self {
             EnvCommands::Push => {
                 agent_client
-                    .push_env("default", &registry_credengials.vars())
+                    .push_env("default", &registry_credentials.vars())
                     .await?;
 
                 for (name, app) in selected {
