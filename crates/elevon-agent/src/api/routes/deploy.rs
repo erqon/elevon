@@ -6,8 +6,7 @@ use elevon_http::error::AppError;
 use serde::Deserialize;
 
 use crate::{
-    api::{dto::AppDeployData, state::AppState},
-    db::models::AuthKey,
+    api::{db::models::AuthKey, dto::AppDeployData, state::AppState},
     image::{pull_image, run_image},
 };
 

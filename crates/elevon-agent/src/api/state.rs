@@ -17,7 +17,7 @@ pub struct AppState {
 
 impl AppState {
     pub async fn new(env: &ElevonEnv) -> Result<Self> {
-        let db = crate::db::init_db(env.turso_remote_url.as_deref()).await?;
+        let db = crate::api::db::init_db(env.turso_remote_url.as_deref()).await?;
         let env = RwLock::new(env.clone());
         Ok(Self {
             db,

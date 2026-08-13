@@ -5,7 +5,10 @@ use elevon_fs::agent::add_app_env;
 use elevon_http::error::AppError;
 use serde::Deserialize;
 
-use crate::{api::state::AppState, db::models::AuthKey, env::ElevonEnvKey};
+use crate::{
+    api::{db::models::AuthKey, state::AppState},
+    env::ElevonEnvKey,
+};
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new().route("/", put(set))
