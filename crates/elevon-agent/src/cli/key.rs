@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 use jiff::Timestamp;
 
-use crate::{db::models::AuthKey, env::ElevonEnv};
+use crate::{api::db::models::AuthKey, env::ElevonEnv};
 
 #[derive(Subcommand)]
 pub enum KeyCommands {
@@ -36,7 +36,7 @@ pub struct KeyCreateArgs {
 
 pub async fn create(name: impl Into<String>, remote_url: Option<String>) -> Result<()> {
     tracing::info!("Creating an auth key...");
-    let mut db = crate::db::init_db(remote_url.as_deref()).await?;
+    let mut db = crate::api::db::init_db(remote_url.as_deref()).await?;
 
     let api_key = elevon_http::token::opaque();
     let hashed_api_key = elevon_http::token::hash(&api_key);
@@ -59,7 +59,7 @@ pub async fn create(name: impl Into<String>, remote_url: Option<String>) -> Resu
 }
 
 async fn list() -> Result<()> {
-    let mut db = crate::db::init_db(None).await?;
+    let mut db = crate::api::db::init_db(None).await?;
 
     let auth_keys = AuthKey::all().exec(&mut db).await?;
 
