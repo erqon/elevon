@@ -35,7 +35,7 @@ pub struct SocketClient {
 impl SocketClient {
     pub fn new() -> Self {
         Self {
-            socket_path: get_socket_path(),
+            socket_path: get_socket_path(false),
         }
     }
 

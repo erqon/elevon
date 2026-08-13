@@ -1,3 +1,5 @@
+use std::{collections::HashSet, net::TcpListener, sync::LazyLock};
+
 use anyhow::Result;
 use bollard::{
     Docker,
@@ -7,8 +9,15 @@ use bollard::{
 };
 use elevon_fs::agent::load_app_env;
 use futures::StreamExt;
+use tokio::sync::RwLock;
 
-use crate::{api::dto::AppDeployData, env::ElevonEnv};
+use crate::{
+    api::{db::models::App, dto::AppDeployData},
+    env::ElevonEnv,
+};
+
+static ALLOCATED_PORTS: LazyLock<RwLock<HashSet<u16>>> =
+    LazyLock::new(|| RwLock::new(HashSet::new()));
 
 fn get_image_url(elevon_env: &ElevonEnv, app_config: &AppDeployData) -> String {
     format!(
@@ -46,44 +55,84 @@ pub async fn pull_image(elevon_env: &ElevonEnv, app_config: &AppDeployData) -> R
     Ok(())
 }
 
-pub async fn run_image(elevon_env: &ElevonEnv, app_config: &AppDeployData) -> Result<()> {
+pub async fn run_image(
+    elevon_env: &ElevonEnv,
+    app_config: &AppDeployData,
+    db: &mut toasty::Db,
+) -> Result<(App, u16)> {
     let docker = Docker::connect_with_local_defaults()?;
-
-    let full_image_url = get_image_url(elevon_env, app_config);
-
-    let options = CreateContainerOptionsBuilder::new()
-        .name(&app_config.name)
-        .build();
-
-    let app_env: Vec<String> = load_app_env(&app_config.name, None)?
-        .iter()
-        .map(|(key, val)| format!("{}={}", key, val))
-        .collect();
-
-    let mut port_bindings = PortMap::new();
-    port_bindings.insert(
-        format!("{}/tcp", &app_config.port),
-        Some(vec![PortBinding {
-            host_ip: Some("0.0.0.0".to_string()),
-            host_port: Some(app_config.port.to_string()),
-        }]),
-    );
-
-    let host_config = Some(HostConfig {
-        port_bindings: Some(port_bindings),
-        ..Default::default()
-    });
-
-    let config = ContainerCreateBody {
-        image: Some(full_image_url),
-        env: Some(app_env),
-        host_config,
-        ..Default::default()
+    let port = {
+        let mut ports = ALLOCATED_PORTS.write().await;
+        let port = find_free_port().ok_or_else(|| anyhow::anyhow!("No free port found"))?;
+        ports.insert(port);
+        port
     };
 
-    let container = docker.create_container(Some(options), config).await?;
+    let mut app = App::get_or_create(db, &app_config).await?;
 
-    docker.start_container(&container.id, None).await?;
+    let start_result = async {
+        let full_image_url = get_image_url(elevon_env, app_config);
 
-    Ok(())
+        let options = CreateContainerOptionsBuilder::new()
+            .name(&app_config.name)
+            .build();
+
+        let app_env: Vec<String> = load_app_env(&app_config.name, None)?
+            .iter()
+            .map(|(key, val)| format!("{}={}", key, val))
+            .collect();
+
+        let mut port_bindings = PortMap::new();
+        port_bindings.insert(
+            format!("{}/tcp", &app_config.port),
+            Some(vec![PortBinding {
+                host_ip: Some("0.0.0.0".to_string()),
+                host_port: Some(port.to_string()),
+            }]),
+        );
+
+        let host_config = Some(HostConfig {
+            port_bindings: Some(port_bindings),
+            ..Default::default()
+        });
+
+        let config = ContainerCreateBody {
+            image: Some(full_image_url),
+            env: Some(app_env),
+            host_config,
+            ..Default::default()
+        };
+
+        let container = docker.create_container(Some(options), config).await?;
+
+        docker.start_container(&container.id, None).await?;
+
+        Ok::<(), anyhow::Error>(())
+    }
+    .await;
+
+    if let Err(err) = start_result {
+        let mut ports = ALLOCATED_PORTS.write().await;
+        ports.remove(&port);
+
+        return Err(err);
+    } else {
+        toasty::update!(app {
+            current_port: Some(port)
+        })
+        .exec(db)
+        .await?;
+    }
+
+    Ok((app, port))
+}
+
+fn find_free_port() -> Option<u16> {
+    for port in 3334..=9998 {
+        match TcpListener::bind(("0.0.0.0", port)) {
+            Ok(_) => return Some(port),
+            Err(_) => continue,
+        }
+    }
+    None
 }

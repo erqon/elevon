@@ -22,7 +22,7 @@ impl BackgroundService for SocketControl {
 }
 
 async fn run_socket_listener(state: Arc<ProxyState>) -> Result<(), Box<dyn Error>> {
-    let socket = elevon_fs::agent::get_socket_path();
+    let socket = elevon_fs::agent::get_socket_path(true);
 
     let listener = UnixListener::bind(&socket)?;
     tracing::info!(path = %socket.display(), "socket listener ready");
@@ -48,8 +48,8 @@ async fn run_socket_listener(state: Arc<ProxyState>) -> Result<(), Box<dyn Error
 
             match message {
                 AgentEvent::UpsertRoute(route) => {
-                    let id = route.config.id.clone();
-                    state.upsert_route(route.domain, route.config);
+                    let id = route.id.clone();
+                    state.upsert_route(route);
                     tracing::info!("route {} upserted", &id);
                 }
                 AgentEvent::DeleteRoute(_route) => {}
