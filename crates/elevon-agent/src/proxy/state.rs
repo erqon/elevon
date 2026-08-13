@@ -11,8 +11,8 @@ pub struct ProxyState {
 }
 
 impl ProxyState {
-    pub fn upsert_route(&self, name: impl Into<String>, config: RouteConfig) {
-        let name = name.into();
+    pub fn upsert_route(&self, config: RouteConfig) {
+        let name = config.domain.clone();
         self.routes.rcu(|current| {
             let mut next = (**current).clone();
             let backends = next.entry(name.clone()).or_default();
@@ -28,7 +28,7 @@ impl ProxyState {
 
         let routes = self.routes.load();
         let backends = routes.get(&name).cloned().unwrap_or_default();
-        let addrs = backends.iter().map(|b| format!("{}:{}", b.host, b.port));
+        let addrs = backends.iter().map(|b| format!("0.0.0.0:{}", b.port));
 
         let mut lb = LoadBalancer::<RoundRobin>::try_from_iter(addrs).expect("valid backends");
         lb.set_health_check(TcpHealthCheck::new());

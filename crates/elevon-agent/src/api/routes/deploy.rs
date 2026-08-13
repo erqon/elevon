@@ -8,6 +8,7 @@ use serde::Deserialize;
 use crate::{
     api::{db::models::AuthKey, dto::AppDeployData, state::AppState},
     image::{pull_image, run_image},
+    proxy::types::{AgentEvent, RouteConfig},
 };
 
 pub fn router() -> Router<Arc<AppState>> {
@@ -19,17 +20,13 @@ struct DeployDto {
     pub apps: Vec<AppDeployData>,
 }
 
-// During deployments data should be saved in db about the apps, then IDs should be
-// generated so each app would have a unique id, each app should have the port in the
-// [port:port+1] range, so each deployment deploys on empty port. There should also be
-// some info about the backups that will be kept on the agent's machine, in deploy's config
-// so each deployment would just delete previous images.
-
 async fn deploy(
     _: AuthKey,
     State(state): State<Arc<AppState>>,
     Json(payload): Json<DeployDto>,
 ) -> Result<StatusCode, AppError> {
+    let mut db = state.db.clone();
+
     let mut success_count: Vec<String> = Vec::with_capacity(payload.apps.len());
     let env_snapshot = {
         let guard = state.env.read().await;
@@ -38,7 +35,20 @@ async fn deploy(
 
     for app in payload.apps {
         pull_image(&env_snapshot, &app).await?;
-        run_image(&env_snapshot, &app).await?;
+        let (deployment_id, port) = run_image(&env_snapshot, &app, &mut db).await?;
+
+        let stream = state.socket_client.connect().await?;
+
+        let route_config = RouteConfig {
+            id: deployment_id,
+            domain: app.domain.to_string(),
+            port: port,
+        };
+
+        state
+            .socket_client
+            .send(stream, AgentEvent::UpsertRoute(route_config))
+            .await?;
 
         success_count.push(app.name);
     }

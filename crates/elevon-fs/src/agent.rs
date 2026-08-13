@@ -82,11 +82,11 @@ pub fn add_app_env(
     Ok(())
 }
 
-pub fn get_socket_path() -> PathBuf {
+pub fn get_socket_path(delete: bool) -> PathBuf {
     let path = AgentPath::Socket
         .ensure()
         .unwrap_or_else(|_| PathBuf::from("/run/elevon-agent.sock"));
-    if path.exists() {
+    if delete && path.exists() {
         let _ = std::fs::remove_file(&path);
     }
     path
