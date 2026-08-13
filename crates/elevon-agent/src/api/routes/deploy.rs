@@ -35,12 +35,12 @@ async fn deploy(
 
     for app in payload.apps {
         pull_image(&env_snapshot, &app).await?;
-        let (app, port) = run_image(&env_snapshot, &app, &mut db).await?;
+        let (deployment_id, port) = run_image(&env_snapshot, &app, &mut db).await?;
 
         let stream = state.socket_client.connect().await?;
 
         let route_config = RouteConfig {
-            id: app.id.to_string(),
+            id: deployment_id,
             domain: app.domain.to_string(),
             port: port,
         };

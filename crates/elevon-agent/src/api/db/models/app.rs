@@ -14,6 +14,9 @@ pub struct App {
     #[unique]
     pub current_port: Option<u16>,
 
+    #[has_many]
+    pub deployments: toasty::Deferred<Vec<Deployment>>,
+
     #[auto]
     pub created_at: jiff::Timestamp,
 
@@ -45,4 +48,34 @@ impl App {
 
         Ok(app)
     }
+}
+
+#[derive(Debug, toasty::Embed)]
+pub enum DeploymentStatus {
+    Pending,
+    Active,
+    Failed,
+}
+
+#[derive(Debug, toasty::Model)]
+pub struct Deployment {
+    #[key]
+    #[auto]
+    pub id: uuid::Uuid,
+
+    #[index]
+    pub app_id: uuid::Uuid,
+
+    pub port: u16,
+
+    pub status: DeploymentStatus,
+
+    #[belongs_to(key = app_id, references = id)]
+    pub app: toasty::Deferred<App>,
+
+    #[auto]
+    pub created_at: jiff::Timestamp,
+
+    #[auto]
+    pub updated_at: jiff::Timestamp,
 }

@@ -12,7 +12,10 @@ use futures::StreamExt;
 use tokio::sync::RwLock;
 
 use crate::{
-    api::{db::models::App, dto::AppDeployData},
+    api::{
+        db::models::{App, Deployment, DeploymentStatus},
+        dto::AppDeployData,
+    },
     env::ElevonEnv,
 };
 
@@ -59,7 +62,7 @@ pub async fn run_image(
     elevon_env: &ElevonEnv,
     app_config: &AppDeployData,
     db: &mut toasty::Db,
-) -> Result<(App, u16)> {
+) -> Result<(String, u16)> {
     let docker = Docker::connect_with_local_defaults()?;
     let port = {
         let mut ports = ALLOCATED_PORTS.write().await;
@@ -69,12 +72,20 @@ pub async fn run_image(
     };
 
     let mut app = App::get_or_create(db, &app_config).await?;
+    let mut deployment = toasty::create!(Deployment {
+        app_id: app.id,
+        status: DeploymentStatus::Pending,
+        port,
+    })
+    .exec(db)
+    .await?;
 
     let start_result = async {
         let full_image_url = get_image_url(elevon_env, app_config);
 
+        let container_name = format!("{}-{}", &app_config.name, &deployment.id);
         let options = CreateContainerOptionsBuilder::new()
-            .name(&app_config.name)
+            .name(&container_name)
             .build();
 
         let app_env: Vec<String> = load_app_env(&app_config.name, None)?
@@ -115,6 +126,12 @@ pub async fn run_image(
         let mut ports = ALLOCATED_PORTS.write().await;
         ports.remove(&port);
 
+        toasty::update!(deployment {
+            status: DeploymentStatus::Failed
+        })
+        .exec(db)
+        .await?;
+
         return Err(err);
     } else {
         toasty::update!(app {
@@ -122,9 +139,15 @@ pub async fn run_image(
         })
         .exec(db)
         .await?;
+
+        toasty::update!(deployment {
+            status: DeploymentStatus::Active
+        })
+        .exec(db)
+        .await?;
     }
 
-    Ok((app, port))
+    Ok((deployment.id.to_string(), port))
 }
 
 fn find_free_port() -> Option<u16> {
