@@ -7,35 +7,24 @@ use bollard::{
     plugin::{ContainerCreateBody, HostConfig, PortBinding, PortMap},
     query_parameters::{CreateContainerOptionsBuilder, CreateImageOptionsBuilder},
 };
+use elevon_contracts::deploy::AppPayload;
 use elevon_fs::agent::load_app_env;
 use futures::StreamExt;
 use tokio::sync::RwLock;
 
 use crate::{
-    api::{
-        db::models::{App, Deployment, DeploymentStatus},
-        dto::AppDeployData,
-    },
+    api::db::models::{App, Deployment, DeploymentStatus},
     env::ElevonEnv,
 };
 
 static ALLOCATED_PORTS: LazyLock<RwLock<HashSet<u16>>> =
     LazyLock::new(|| RwLock::new(HashSet::new()));
 
-fn get_image_url(elevon_env: &ElevonEnv, app_config: &AppDeployData) -> String {
-    format!(
-        "{}/{}:{}",
-        elevon_env.registry_server, app_config.image_url, app_config.commit_sha
-    )
-}
-
-pub async fn pull_image(elevon_env: &ElevonEnv, app_config: &AppDeployData) -> Result<()> {
+pub async fn pull_image(elevon_env: &ElevonEnv, app_config: &AppPayload) -> Result<()> {
     let docker = Docker::connect_with_local_defaults()?;
 
-    let full_image_url = get_image_url(elevon_env, app_config);
-
     let options = CreateImageOptionsBuilder::new()
-        .from_image(&full_image_url)
+        .from_image(&app_config.image)
         .build();
 
     let credentials = if !elevon_env.registry_server.is_empty() {
@@ -58,11 +47,7 @@ pub async fn pull_image(elevon_env: &ElevonEnv, app_config: &AppDeployData) -> R
     Ok(())
 }
 
-pub async fn run_image(
-    elevon_env: &ElevonEnv,
-    app_config: &AppDeployData,
-    db: &mut toasty::Db,
-) -> Result<(String, u16)> {
+pub async fn run_image(app_config: &AppPayload, db: &mut toasty::Db) -> Result<(String, u16)> {
     let docker = Docker::connect_with_local_defaults()?;
     let port = {
         let mut ports = ALLOCATED_PORTS.write().await;
@@ -81,8 +66,6 @@ pub async fn run_image(
     .await?;
 
     let start_result = async {
-        let full_image_url = get_image_url(elevon_env, app_config);
-
         let container_name = format!("{}-{}", &app_config.name, &deployment.id);
         let options = CreateContainerOptionsBuilder::new()
             .name(&container_name)
@@ -94,13 +77,16 @@ pub async fn run_image(
             .collect();
 
         let mut port_bindings = PortMap::new();
-        port_bindings.insert(
-            format!("{}/tcp", &app_config.port),
-            Some(vec![PortBinding {
-                host_ip: Some("0.0.0.0".to_string()),
-                host_port: Some(port.to_string()),
-            }]),
-        );
+
+        if let Some(web_app) = &app_config.web_app {
+            port_bindings.insert(
+                format!("{}/tcp", &web_app.port),
+                Some(vec![PortBinding {
+                    host_ip: Some("0.0.0.0".to_string()),
+                    host_port: Some(port.to_string()),
+                }]),
+            );
+        }
 
         let host_config = Some(HostConfig {
             port_bindings: Some(port_bindings),
@@ -108,7 +94,7 @@ pub async fn run_image(
         });
 
         let config = ContainerCreateBody {
-            image: Some(full_image_url),
+            image: Some(app_config.image.clone()),
             env: Some(app_env),
             host_config,
             ..Default::default()

@@ -17,6 +17,10 @@ routing:
   domain: app.example.com
   port: 3000
 
+build:
+  path: ./dev
+  dockerfile: ./Dockerfile.dev
+
 env:
   vars:
     PORT: 3000
@@ -29,16 +33,7 @@ apps:
   worker:
     include: ./custom/worker.yml   # custom path
   web:
-    image: project/web             # fully inline, no file
-
-    build:
-      path: ./dev
-      dockerfile: ./Dockerfile.dev
-
-    routing:
-      domain: app.example.com
-      port: 3000
-
+    role: web
     runtime:
       restart: unless-stopped
       memory_limit: 512mb
@@ -49,10 +44,3 @@ apps:
         interval: 5s
         timeout: 2s
         retries: 3
-
-servers:
-  - host: 10.0.0.5
-    role: web
-
-  - host: 10.0.0.6
-    role: web

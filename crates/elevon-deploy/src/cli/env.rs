@@ -3,7 +3,7 @@ use elevon_config::ResolveEnvCredentials;
 
 use crate::{
     agent::AgentClient,
-    config::{app::AppConfig, registry::RegistryConfig},
+    config::{AppConfig, registry::RegistryConfig},
 };
 
 #[derive(Subcommand)]
@@ -16,7 +16,7 @@ impl EnvCommands {
         &self,
         agent_client: &AgentClient,
         registry_credentials: &RegistryConfig,
-        selected: &Vec<(&String, &AppConfig)>,
+        selected: Vec<(&String, &AppConfig)>,
     ) -> anyhow::Result<()> {
         match self {
             EnvCommands::Push => {

@@ -21,4 +21,5 @@ tracing-indicatif.workspace = true
 tracing-subscriber.workspace = true
 
 elevon-config.workspace = true
+elevon-contracts.workspace = true
 elevon-http.workspace = true

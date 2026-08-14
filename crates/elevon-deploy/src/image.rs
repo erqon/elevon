@@ -1,5 +1,5 @@
 mod progress;
-mod util;
+pub mod util;
 
 use std::path::Path;
 
@@ -12,7 +12,7 @@ use bollard::{
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::{
-    config::{app::BuildConfig, registry::RegistryConfig},
+    config::{BuildConfig, registry::RegistryConfig},
     util::COMMIT_SHA,
 };
 

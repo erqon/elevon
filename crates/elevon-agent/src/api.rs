@@ -1,5 +1,4 @@
 pub mod db;
-pub mod dto;
 mod routes;
 pub mod state;
 

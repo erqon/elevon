@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::config::app::{BuildConfig, BuildOptions};
+use crate::config::{BuildConfig, BuildOptions};
 
 pub fn full_image_name(registry_server: &str, image_name: &str, tag: &str) -> String {
     format!(

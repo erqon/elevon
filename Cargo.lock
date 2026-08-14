@@ -1361,6 +1361,7 @@ dependencies = [
  "axum",
  "bollard",
  "clap",
+ "elevon-contracts",
  "elevon-fs",
  "elevon-http",
  "futures",
@@ -1396,6 +1397,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "elevon-contracts"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "elevon-deploy"
 version = "0.1.0"
 dependencies = [
@@ -1403,6 +1411,7 @@ dependencies = [
  "bollard",
  "clap",
  "elevon-config",
+ "elevon-contracts",
  "elevon-http",
  "futures-util",
  "git-version",
