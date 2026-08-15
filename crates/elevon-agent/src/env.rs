@@ -6,9 +6,6 @@ use elevon_fs::agent::{add_app_env, load_app_env};
 #[derive(Debug, Clone, Default)]
 pub struct ElevonEnv {
     pub turso_remote_url: Option<String>,
-    pub registry_server: String,
-    pub registry_username: String,
-    pub registry_password: String,
 }
 
 impl ElevonEnv {
@@ -37,15 +34,6 @@ impl ElevonEnv {
             ElevonEnvKey::TursoRemoteUrl => {
                 self.turso_remote_url = Some(value);
             }
-            ElevonEnvKey::RegistryServer => {
-                self.registry_server = value;
-            }
-            ElevonEnvKey::RegistryUsername => {
-                self.registry_username = value;
-            }
-            ElevonEnvKey::RegistryPassword => {
-                self.registry_password = value;
-            }
         }
 
         add_app_env(
@@ -61,27 +49,16 @@ impl ElevonEnv {
 #[derive(Debug, Copy, Clone)]
 pub enum ElevonEnvKey {
     TursoRemoteUrl,
-    RegistryServer,
-    RegistryUsername,
-    RegistryPassword,
 }
 
 impl ElevonEnvKey {
-    pub fn all() -> [Self; 4] {
-        [
-            Self::TursoRemoteUrl,
-            Self::RegistryServer,
-            Self::RegistryUsername,
-            Self::RegistryPassword,
-        ]
+    pub fn all() -> [Self; 1] {
+        [Self::TursoRemoteUrl]
     }
 
     pub fn bare_name(&self) -> &'static str {
         match self {
             Self::TursoRemoteUrl => "TURSO_REMOTE_URL",
-            Self::RegistryServer => "REGISTRY_SERVER",
-            Self::RegistryUsername => "REGISTRY_USERNAME",
-            Self::RegistryPassword => "REGISTRY_PASSWORD",
         }
     }
 

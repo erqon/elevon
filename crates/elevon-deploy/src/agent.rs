@@ -1,7 +1,11 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use elevon_contracts::deploy::{AppPayload, AppReleasePayload, AppRole, WebApp};
+use elevon_config::ResolveEnvCredentials;
+use elevon_contracts::deploy::{
+    AppEnvPayload, AppEnvSetPayload, AppPayload, AppReleasePayload, AppRole, WebApp,
+    format_app_env_name,
+};
 use reqwest::{
     Client, Url,
     header::{AUTHORIZATION, HeaderMap},
@@ -50,16 +54,56 @@ impl AgentClient {
         headers
     }
 
-    pub async fn push_env(&self, app_name: &str, vars: &HashMap<String, String>) -> Result<()> {
+    pub async fn push_env(&self, app_name: String, vars: &HashMap<String, String>) -> Result<()> {
         let url = self.absolute_url("/env");
         let headers = self.headers();
 
-        let payload = serde_json::json!({
-            "updates": [{
-                "app_name": app_name,
-                "vars": vars
-            }]
+        let apps_payload = AppEnvPayload {
+            name: app_name,
+            vars: vars.clone(),
+        };
+
+        let payload = serde_json::json!(AppEnvSetPayload {
+            apps: vec![apps_payload]
         });
+
+        self.client
+            .put(url)
+            .headers(headers)
+            .json(&payload)
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn push_envs(
+        &self,
+        project_name: &str,
+        apps: Vec<(String, AppConfig)>,
+    ) -> Result<()> {
+        let url = self.absolute_url("/env");
+        let headers = self.headers();
+
+        let apps_payload: Vec<AppEnvPayload> = apps
+            .iter()
+            .map(|(name, config)| -> Result<Option<AppEnvPayload>> {
+                let Some(env_cfg) = config.env.as_ref() else {
+                    return Ok(None);
+                };
+
+                let vars = env_cfg.resolved_credentials()?;
+                Ok(Some(AppEnvPayload {
+                    name: format_app_env_name(project_name, name),
+                    vars,
+                }))
+            })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect();
+
+        let payload = serde_json::json!(AppEnvSetPayload { apps: apps_payload });
 
         self.client
             .put(url)
@@ -91,12 +135,13 @@ impl AgentClient {
                 };
 
                 AppPayload {
-                    name: name.to_string(),
+                    project: config.name.clone(),
                     image: crate::image::util::full_image_name(
                         &config.registry.server,
                         &config.image,
                         COMMIT_SHA,
                     ),
+                    name: name.to_string(),
                     role: cfg.role.clone(),
                     web_app,
                 }

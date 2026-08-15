@@ -22,13 +22,8 @@ async fn release(
 ) -> Result<StatusCode, AppError> {
     let mut db = state.db.clone();
 
-    let env_snapshot = {
-        let guard = state.env.read().await;
-        guard.clone()
-    };
-
     for app in payload.apps {
-        pull_image(&env_snapshot, &app).await?;
+        pull_image(&app).await?;
         let (deployment_id, port) = run_image(&app, &mut db).await?;
 
         match (&app.role, &app.web_app) {

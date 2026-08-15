@@ -65,6 +65,13 @@ pub fn load_app_env(
     Ok(env)
 }
 
+pub fn load_app_string_env(app_name: &str) -> Result<Vec<String>> {
+    Ok(load_app_env(app_name, None)?
+        .iter()
+        .map(|(key, val)| format!("{}={}", key, val))
+        .collect())
+}
+
 pub fn add_app_env(
     app_name: &str,
     bypass_default: Option<bool>,

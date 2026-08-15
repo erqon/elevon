@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use clap::Subcommand;
-use elevon_config::ResolveEnvCredentials;
 
 use crate::{
     agent::AgentClient,
@@ -16,7 +15,7 @@ pub enum EnvCommands {
 impl EnvCommands {
     pub async fn run(
         &self,
-        image_name: &str,
+        project_name: &str,
         agent_client: &AgentClient,
         registry_credentials: &RegistryConfig,
         root_vars: Option<HashMap<String, String>>,
@@ -25,28 +24,16 @@ impl EnvCommands {
         match self {
             EnvCommands::Push => {
                 agent_client
-                    .push_env("default", &registry_credentials.vars())
+                    .push_env(project_name.to_string(), &registry_credentials.vars())
                     .await?;
 
                 if let Some(root_vars) = root_vars {
-                    agent_client.push_env("default", &root_vars).await?;
+                    agent_client
+                        .push_env(project_name.to_string(), &root_vars)
+                        .await?;
                 }
 
-                for (name, app) in selected {
-                    let env_name = format!("{}.{}", &name, &image_name);
-
-                    let Some(env_cfg) = app.env.as_ref() else {
-                        continue;
-                    };
-
-                    let vars = env_cfg.resolved_credentials()?;
-                    agent_client.push_env(&env_name, &vars).await?;
-
-                    tracing::debug!(
-                        "pushing env for app `{name}`: {:?}",
-                        vars.keys().collect::<Vec<_>>()
-                    );
-                }
+                agent_client.push_envs(project_name, selected).await?;
 
                 tracing::info!("Environment variables were pushed successfully!");
             }

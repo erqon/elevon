@@ -11,7 +11,6 @@ pub struct App {
 
     pub domain: Option<String>,
 
-    #[unique]
     pub current_port: Option<u16>,
 
     #[has_many]
