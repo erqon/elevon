@@ -74,7 +74,7 @@ impl AgentClient {
     pub async fn push_release(
         &self,
         config: &Config,
-        apps: Vec<(&String, &AppConfig)>,
+        apps: Vec<(String, AppConfig)>,
     ) -> Result<()> {
         let url = self.absolute_url("/deploy");
         let headers = self.headers();

@@ -4,7 +4,7 @@ use elevon_config::{
 use serde::Deserialize;
 use std::collections::HashMap;
 
-#[derive(Debug, Default, Deserialize, Clone)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct EnvConfig {
     #[serde(default, deserialize_with = "deserialize_string_map")]
     pub vars: HashMap<String, String>,

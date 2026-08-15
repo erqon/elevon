@@ -51,14 +51,23 @@ impl Config {
         Ok(())
     }
 
-    pub fn get_selected_apps(&self, names: &[String]) -> Result<Vec<(&String, &AppConfig)>> {
-        names
+    pub fn get_selected_apps(&self, arg_apps: &[String]) -> Result<Vec<(String, AppConfig)>> {
+        if arg_apps.is_empty() {
+            return Ok(self
+                .apps
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect());
+        }
+
+        arg_apps
             .iter()
             .map(|name| {
                 self.apps
-                    .get_key_value(name)
+                    .get(name)
+                    .cloned()
+                    .map(|cfg| (name.clone(), cfg))
                     .ok_or_else(|| anyhow::anyhow!("unknown app `{name}`"))
-                    .map(|(k, v)| (k, v))
             })
             .collect()
     }
