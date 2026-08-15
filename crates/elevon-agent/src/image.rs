@@ -7,36 +7,40 @@ use bollard::{
     plugin::{ContainerCreateBody, HostConfig, PortBinding, PortMap},
     query_parameters::{CreateContainerOptionsBuilder, CreateImageOptionsBuilder},
 };
-use elevon_contracts::deploy::AppPayload;
-use elevon_fs::agent::load_app_env;
+use elevon_contracts::deploy::{AppPayload, format_app_env_name};
+use elevon_fs::agent::{load_app_env, load_app_string_env};
 use futures::StreamExt;
 use tokio::sync::RwLock;
 
-use crate::{
-    api::db::models::{App, Deployment, DeploymentStatus},
-    env::ElevonEnv,
-};
+use crate::api::db::models::{App, Deployment, DeploymentStatus};
 
 static ALLOCATED_PORTS: LazyLock<RwLock<HashSet<u16>>> =
     LazyLock::new(|| RwLock::new(HashSet::new()));
 
-pub async fn pull_image(elevon_env: &ElevonEnv, app_config: &AppPayload) -> Result<()> {
+pub async fn pull_image(app_config: &AppPayload) -> Result<()> {
     let docker = Docker::connect_with_local_defaults()?;
+
+    let project_env = load_app_env(&app_config.project, None)?;
+
+    let (registry_server, registry_username, registry_password) = match (
+        project_env.get("REGISTRY_SERVER"),
+        project_env.get("REGISTRY_USERNAME"),
+        project_env.get("REGISTRY_PASSWORD"),
+    ) {
+        (Some(s), Some(u), Some(p)) => (Some(s.clone()), Some(u.clone()), Some(p.clone())),
+        _ => (None, None, None),
+    };
 
     let options = CreateImageOptionsBuilder::new()
         .from_image(&app_config.image)
         .build();
 
-    let credentials = if !elevon_env.registry_server.is_empty() {
-        Some(DockerCredentials {
-            username: Some(elevon_env.registry_username.clone()),
-            password: Some(elevon_env.registry_password.clone()),
-            serveraddress: Some(elevon_env.registry_server.clone()),
-            ..Default::default()
-        })
-    } else {
-        None
-    };
+    let credentials = Some(DockerCredentials {
+        username: registry_username,
+        password: registry_password,
+        serveraddress: registry_server,
+        ..Default::default()
+    });
 
     let mut stream = docker.create_image(Some(options), None, credentials);
     while let Some(result) = stream.next().await {
@@ -71,10 +75,10 @@ pub async fn run_image(app_config: &AppPayload, db: &mut toasty::Db) -> Result<(
             .name(&container_name)
             .build();
 
-        let app_env: Vec<String> = load_app_env(&app_config.name, None)?
-            .iter()
-            .map(|(key, val)| format!("{}={}", key, val))
-            .collect();
+        let project_env = load_app_string_env(&app_config.project)?;
+        let mut app_env =
+            load_app_string_env(&format_app_env_name(&app_config.project, &app_config.name))?;
+        app_env.extend(project_env);
 
         let mut port_bindings = PortMap::new();
 
