@@ -1,4 +1,4 @@
-use crate::api::dto::AppDeployData;
+use elevon_contracts::deploy::AppPayload;
 
 #[derive(Debug, toasty::Model)]
 pub struct App {
@@ -9,7 +9,7 @@ pub struct App {
     #[column(type = varchar(32))]
     pub name: String,
 
-    pub domain: String,
+    pub domain: Option<String>,
 
     #[unique]
     pub current_port: Option<u16>,
@@ -25,11 +25,8 @@ pub struct App {
 }
 
 impl App {
-    pub async fn get_or_create(
-        db: &mut toasty::Db,
-        config: &AppDeployData,
-    ) -> anyhow::Result<Self> {
-        let app = Self::filter(Self::fields().name().eq(&config.name))
+    pub async fn get_or_create(db: &mut toasty::Db, payload: &AppPayload) -> anyhow::Result<Self> {
+        let app = Self::filter(Self::fields().name().eq(&payload.name))
             .order_by(Self::fields().updated_at().asc())
             .first()
             .exec(db)
@@ -39,9 +36,14 @@ impl App {
             return Ok(app);
         }
 
+        let domain: Option<String> = match &payload.web_app {
+            Some(web_app) => Some(web_app.domain.clone()),
+            None => None,
+        };
+
         let app = toasty::create!(App {
-            name: config.name.to_string(),
-            domain: config.domain.to_string(),
+            name: payload.name.to_string(),
+            domain
         })
         .exec(db)
         .await?;

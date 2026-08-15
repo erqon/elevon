@@ -1,12 +1,16 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
+use elevon_contracts::deploy::{AppPayload, AppReleasePayload, AppRole, WebApp};
 use reqwest::{
     Client, Url,
     header::{AUTHORIZATION, HeaderMap},
 };
 
-use crate::{config::app::AppConfig, util::COMMIT_SHA};
+use crate::{
+    config::{AppConfig, Config},
+    util::COMMIT_SHA,
+};
 
 pub struct AgentClient {
     client: Client,
@@ -67,28 +71,39 @@ impl AgentClient {
         Ok(())
     }
 
-    pub async fn push_deploy(&self, app_name: &str, app_config: &AppConfig) -> Result<()> {
+    pub async fn push_release(
+        &self,
+        config: &Config,
+        apps: Vec<(String, AppConfig)>,
+    ) -> Result<()> {
         let url = self.absolute_url("/deploy");
         let headers = self.headers();
 
-        let routing = app_config.routing.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("App `{}` is missing routing configuration", app_name)
-        })?;
+        let apps_payload: Vec<AppPayload> = apps
+            .iter()
+            .map(|(name, cfg)| {
+                let web_app: Option<WebApp> = match &cfg.role {
+                    AppRole::Web => Some(WebApp {
+                        domain: config.routing.domain.clone(),
+                        port: config.routing.port,
+                    }),
+                    AppRole::Worker => None,
+                };
 
-        let image_url = app_config
-            .image
-            .as_deref()
-            .ok_or_else(|| anyhow::anyhow!("App `{}` is missing image configuration", app_name))?;
+                AppPayload {
+                    name: name.to_string(),
+                    image: crate::image::util::full_image_name(
+                        &config.registry.server,
+                        &config.image,
+                        COMMIT_SHA,
+                    ),
+                    role: cfg.role.clone(),
+                    web_app,
+                }
+            })
+            .collect();
 
-        let payload = serde_json::json!({
-            "apps": [{
-                "commit_sha": COMMIT_SHA,
-                "name": app_name,
-                "image_url": image_url,
-                "domain": &routing.domain,
-                "port": &routing.port,
-            }]
-        });
+        let payload = serde_json::json!(AppReleasePayload { apps: apps_payload });
 
         self.client
             .post(url)

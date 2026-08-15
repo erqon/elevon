@@ -1,9 +1,11 @@
+use std::collections::HashMap;
+
 use clap::Subcommand;
 use elevon_config::ResolveEnvCredentials;
 
 use crate::{
     agent::AgentClient,
-    config::{app::AppConfig, registry::RegistryConfig},
+    config::{AppConfig, registry::RegistryConfig},
 };
 
 #[derive(Subcommand)]
@@ -14,9 +16,11 @@ pub enum EnvCommands {
 impl EnvCommands {
     pub async fn run(
         &self,
+        image_name: &str,
         agent_client: &AgentClient,
         registry_credentials: &RegistryConfig,
-        selected: &Vec<(&String, &AppConfig)>,
+        root_vars: Option<HashMap<String, String>>,
+        selected: Vec<(String, AppConfig)>,
     ) -> anyhow::Result<()> {
         match self {
             EnvCommands::Push => {
@@ -24,14 +28,20 @@ impl EnvCommands {
                     .push_env("default", &registry_credentials.vars())
                     .await?;
 
-                for (name, app) in selected {
-                    let vars = app
-                        .env
-                        .as_ref()
-                        .ok_or_else(|| anyhow::anyhow!("app `{name}` is missing `env`"))?
-                        .resolved_credentials()?;
+                if let Some(root_vars) = root_vars {
+                    agent_client.push_env("default", &root_vars).await?;
+                }
 
-                    agent_client.push_env(name, &vars).await?;
+                for (name, app) in selected {
+                    let env_name = format!("{}.{}", &name, &image_name);
+
+                    let Some(env_cfg) = app.env.as_ref() else {
+                        continue;
+                    };
+
+                    let vars = env_cfg.resolved_credentials()?;
+                    agent_client.push_env(&env_name, &vars).await?;
+
                     tracing::debug!(
                         "pushing env for app `{name}`: {:?}",
                         vars.keys().collect::<Vec<_>>()

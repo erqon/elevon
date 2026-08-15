@@ -28,9 +28,6 @@ pub struct Cli {
     )]
     pub config: String,
 
-    #[arg(long = "app", help = "Limit the operation to the specified app(s)")]
-    pub apps: Vec<String>,
-
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -38,23 +35,35 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     #[command(about = "Build container images from the deploy config")]
-    Build,
+    Build(BuildArgs),
 
     #[command(about = "Push configured images to the registry")]
-    Push(PushArgs),
+    Push,
 
-    #[command(about = "Checks for deployment needed assets")]
-    Check,
+    #[command(about = "Deploy applications")]
+    Release(AppArgs),
 
     #[command(about = "Env specific commands")]
     Env {
+        #[command(flatten)]
+        args: AppArgs,
+
         #[command(subcommand)]
         subcommand: env::EnvCommands,
     },
+
+    #[command(about = "Checks for deployment needed assets")]
+    Check,
 }
 
 #[derive(Args)]
-pub struct PushArgs {
-    #[arg(long, short, help = "Build the image before pushing it")]
-    pub build: bool,
+pub struct BuildArgs {
+    #[arg(long, short, help = "Push the image to the registry")]
+    pub push: bool,
+}
+
+#[derive(Args)]
+pub struct AppArgs {
+    #[arg(long = "app", help = "Limit the operation to the specified app(s)")]
+    pub apps: Vec<String>,
 }

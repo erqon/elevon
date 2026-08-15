@@ -4,14 +4,20 @@ members = [
   "crates/elevon-agent",
   "crates/elevon-cli",
   "crates/elevon-config",
+  "crates/elevon-contracts",
   "crates/elevon-deploy",
   "crates/elevon-fs",
-  "crates/elevon-http", 
+  "crates/elevon-http",
   "crates/elevon-proxy",
   "crates/elevon-server",
 ]
 
 [workspace.dependencies]
+elevon-config = { path = "./crates/elevon-config" }
+elevon-contracts = { path = "./crates/elevon-contracts" }
+elevon-fs = { path = "./crates/elevon-fs" }
+elevon-http = { path = "./crates/elevon-http" }
+
 async-trait = "0.1.91"
 anyhow = "1"
 axum = "0.8.9"
@@ -33,10 +39,7 @@ toasty-driver-turso = "0.9.0"
 tower-http = { version = "0.7.0", features = ["trace"] }
 tracing = "0.1.44"
 tracing-indicatif = "0.3.14"
-tracing-subscriber = { version = "0.3.23", features = ["env-filter"]}
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 thiserror = "2.0.19"
 uuid = { version = "1.24.0", features = ["v7"] }
 
-elevon-config = { path = "./crates/elevon-config" }
-elevon-fs = { path = "./crates/elevon-fs" }
-elevon-http = { path = "./crates/elevon-http" }

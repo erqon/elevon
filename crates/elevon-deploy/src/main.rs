@@ -6,7 +6,6 @@ use elevon_config::{ElevonConfig, ResolveEnvCredentials};
 use elevon_deploy::agent::AgentClient;
 use elevon_deploy::cli::{Cli, Commands};
 use elevon_deploy::config::Config;
-use elevon_deploy::config::app::AppConfig;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -17,59 +16,40 @@ async fn main() -> Result<()> {
 
     let agent_credentials = config.elevon.agent.resolved_credentials()?;
     let agent_client = AgentClient::new(&agent_credentials.url, &agent_credentials.key)?;
-    let apps = config.apps()?;
-    let selected = select_apps(&apps, &cli.apps)?;
 
     match cli.command {
-        Commands::Build => {
-            for (name, app) in selected {
-                app.run_build(name, &config.registry.server, &cli.config)
-                    .await?;
-            }
+        Commands::Build(args) => {
+            config.run_build(&cli.config, args.push).await?;
         }
-        Commands::Push(args) => {
+        Commands::Push => {
+            config.run_push().await?;
+        }
+        Commands::Release(args) => {
+            config.run_release(&agent_client, &args.apps).await?;
+        }
+        Commands::Env { args, subcommand } => {
             let registry_credentials = config.registry.resolved_credentials()?;
+            let root_vars: Option<HashMap<String, String>> = match &config.env {
+                Some(env_vars) => Some(env_vars.resolved_credentials()?),
+                None => None,
+            };
 
-            for (name, app) in selected {
-                app.run_push(
+            let selected = config.get_selected_apps(&args.apps)?;
+
+            subcommand
+                .run(
+                    &config.name,
                     &agent_client,
-                    name,
-                    registry_credentials.clone(),
-                    args.build,
-                    &config.registry.server,
-                    &cli.config,
+                    &registry_credentials,
+                    root_vars,
+                    selected,
                 )
                 .await?;
-            }
         }
         Commands::Check => {
             tracing::info!("Successfully passed config file check {}", &cli.config);
         }
-        Commands::Env { subcommand } => {
-            let registry_credentials = config.registry.resolved_credentials()?;
-            subcommand
-                .run(&agent_client, &registry_credentials, &selected)
-                .await?;
-        }
     }
 
     Ok(())
-}
-
-fn select_apps<'a>(
-    apps: &'a HashMap<String, &'a AppConfig>,
-    names: &'a [String],
-) -> Result<Vec<(&'a String, &'a AppConfig)>> {
-    if names.is_empty() {
-        Ok(apps.iter().map(|(n, a)| (n, *a)).collect())
-    } else {
-        names
-            .iter()
-            .map(|name| {
-                apps.get_key_value(name)
-                    .ok_or_else(|| anyhow::anyhow!("unknown app `{name}`"))
-                    .map(|(k, v)| (k, *v))
-            })
-            .collect()
-    }
 }
