@@ -33,10 +33,6 @@ async fn main() -> Result<()> {
                 Some(env_vars) => Some(env_vars.resolved_credentials()?),
                 None => None,
             };
-            let tls_vars = match config.routing.tls {
-                Some(tls_vars) => Some(tls_vars.resolved_credentials()?),
-                None => None,
-            };
 
             subcommand
                 .run(
@@ -45,7 +41,6 @@ async fn main() -> Result<()> {
                     selected,
                     &registry_credentials,
                     root_vars,
-                    tls_vars,
                 )
                 .await?;
         }
