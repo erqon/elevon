@@ -8,5 +8,8 @@ default = ["agent"]
 agent = []
 
 [dependencies]
+elevon-contracts.workspace = true
+
 anyhow.workspace = true
 dotenvy.workspace = true
+whoami = "2.1.3"

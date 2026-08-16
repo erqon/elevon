@@ -5,7 +5,7 @@ pub mod registry;
 use std::collections::HashMap;
 
 use anyhow::Result;
-use elevon_config::{ElevonConfig, ResolveEnvCredentials};
+use elevon_config::{ElevonConfig, ResolveEnvCredentials, resolve_env_or_literal};
 use elevon_contracts::deploy::AppRole;
 use serde::Deserialize;
 
@@ -53,11 +53,21 @@ impl Config {
 
     pub fn get_selected_apps(&self, arg_apps: &[String]) -> Result<Vec<(String, AppConfig)>> {
         if arg_apps.is_empty() {
-            return Ok(self
-                .apps
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect());
+            if self.apps.len() > 0 {
+                return Ok(self
+                    .apps
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect());
+            } else {
+                return Ok(vec![(
+                    "web".to_string(),
+                    AppConfig {
+                        role: AppRole::Web,
+                        env: None,
+                    },
+                )]);
+            }
         }
 
         arg_apps
@@ -87,6 +97,26 @@ impl Config {
 pub struct RoutingConfig {
     pub domain: String,
     pub port: u16,
+    pub tls: Option<RoutingTlsConfig>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct RoutingTlsConfig {
+    pub cert: String,
+    pub key: String,
+}
+
+impl ResolveEnvCredentials for RoutingTlsConfig {
+    type Output = HashMap<String, String>;
+
+    fn resolved_credentials(&self) -> Result<Self::Output, elevon_config::ConfigError> {
+        let mut resolved = HashMap::new();
+
+        resolved.insert("TLS_CERT".to_string(), resolve_env_or_literal(&self.cert)?);
+        resolved.insert("TLS_KEY".to_string(), resolve_env_or_literal(&self.key)?);
+
+        Ok(resolved)
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]

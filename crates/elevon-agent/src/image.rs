@@ -20,6 +20,7 @@ static ALLOCATED_PORTS: LazyLock<RwLock<HashSet<u16>>> =
 pub async fn pull_image(app_config: &AppPayload) -> Result<()> {
     let docker = Docker::connect_with_local_defaults()?;
 
+    // FIX: This still creates empty env file in case the project has a single app with no apps:
     let project_env = load_app_env(&app_config.project, None)?;
 
     let (registry_server, registry_username, registry_password) = match (
@@ -44,7 +45,7 @@ pub async fn pull_image(app_config: &AppPayload) -> Result<()> {
 
     let mut stream = docker.create_image(Some(options), None, credentials);
     while let Some(result) = stream.next().await {
-        // TODO: Add a way of streaming the progress back to deploy
+        // TODO: Stream progress back to deploy
         result?;
     }
 
