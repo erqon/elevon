@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AppEnvPayload {
+    pub project: String,
     pub name: String,
     pub vars: HashMap<String, String>,
 }
@@ -48,4 +49,10 @@ pub struct AppReleasePayload {
 
 pub fn format_app_env_name(project_name: &str, app_name: &str) -> String {
     format!("{}.{}", app_name, project_name)
+}
+
+#[derive(PartialEq, Eq)]
+pub enum TlsType {
+    Cert,
+    Key,
 }

@@ -16,6 +16,9 @@ registry:
 routing:
   domain: app.example.com
   port: 3000
+  tls:
+    cert: $TLS_CERT
+    key: $TLS_KEY
 
 build:
   path: ./dev

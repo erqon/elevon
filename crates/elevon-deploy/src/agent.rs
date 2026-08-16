@@ -59,6 +59,7 @@ impl AgentClient {
         let headers = self.headers();
 
         let apps_payload = AppEnvPayload {
+            project: app_name.clone(),
             name: app_name,
             vars: vars.clone(),
         };
@@ -94,6 +95,7 @@ impl AgentClient {
 
                 let vars = env_cfg.resolved_credentials()?;
                 Ok(Some(AppEnvPayload {
+                    project: project_name.to_string(),
                     name: format_app_env_name(project_name, name),
                     vars,
                 }))

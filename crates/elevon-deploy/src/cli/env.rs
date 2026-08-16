@@ -17,15 +17,22 @@ impl EnvCommands {
         &self,
         project_name: &str,
         agent_client: &AgentClient,
+        selected: Vec<(String, AppConfig)>,
         registry_credentials: &RegistryConfig,
         root_vars: Option<HashMap<String, String>>,
-        selected: Vec<(String, AppConfig)>,
+        tls_vars: Option<HashMap<String, String>>,
     ) -> anyhow::Result<()> {
         match self {
             EnvCommands::Push => {
                 agent_client
                     .push_env(project_name.to_string(), &registry_credentials.vars())
                     .await?;
+
+                if let Some(tls_vars) = tls_vars {
+                    agent_client
+                        .push_env(project_name.to_string(), &tls_vars)
+                        .await?;
+                }
 
                 if let Some(root_vars) = root_vars {
                     agent_client

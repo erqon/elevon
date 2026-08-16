@@ -5,7 +5,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Ok, Result};
+use elevon_contracts::deploy::TlsType;
 
 pub fn get_elevon_data_path() -> Result<PathBuf> {
     let path = AgentPath::Data.ensure()?;
@@ -99,6 +100,23 @@ pub fn get_socket_path(delete: bool) -> PathBuf {
     path
 }
 
+pub fn get_tls_file(project_name: &str, t: TlsType) -> Result<PathBuf> {
+    let file_name = match t {
+        TlsType::Cert => "cert.pem",
+        TlsType::Key => "key.pem",
+    };
+
+    let path = AgentPath::ProjectTlsDir(format!("{project_name}/{file_name}")).ensure()?;
+
+    Ok(path)
+}
+
+pub fn write_tls_file(project_name: &str, content: &str, t: TlsType) -> Result<()> {
+    let path = get_tls_file(project_name, t)?;
+    std::fs::write(path, content)?;
+    Ok(())
+}
+
 pub fn get_proxy_systemd_content(exec: &str) -> String {
     format!(
         "
@@ -119,6 +137,9 @@ pub fn get_proxy_systemd_content(exec: &str) -> String {
 }
 
 pub fn get_api_systemd_content(exec: &str) -> String {
+    let home = std::env::var("HOME").expect("HOME not set");
+    let user = whoami::username().expect("User not found");
+
     format!(
         "
         [Unit]
@@ -126,7 +147,9 @@ pub fn get_api_systemd_content(exec: &str) -> String {
         After=network.target
         
         [Service]
-        ExecStart={exec} server
+        User={user}
+        Environment=HOME={home}
+        ExecStart={exec} api
         Restart=on-failure
         
         [Install]
@@ -184,6 +207,7 @@ pub enum AgentPath {
     Database,
     EnvDir,
     AppEnv(String, bool),
+    ProjectTlsDir(String),
     Socket,
     SystemdUnit(String),
 }
@@ -216,13 +240,7 @@ impl AgentPath {
                 data.join("elevon.db")
             }
 
-            AgentPath::EnvDir => {
-                if dev_root().is_some() {
-                    base.join("etc").join("elevon").join("env")
-                } else {
-                    PathBuf::from("/etc").join("elevon").join("env")
-                }
-            }
+            AgentPath::EnvDir => base.join("etc").join("elevon").join("env"),
 
             AgentPath::AppEnv(app, bypass_default) => {
                 if app == "default" && !*bypass_default && dev_root().is_none() {
@@ -231,35 +249,66 @@ impl AgentPath {
                 AgentPath::EnvDir.resolve()?.join(format!("{app}.env"))
             }
 
-            AgentPath::Socket => {
-                if dev_root().is_some() {
-                    base.join("run").join("elevon-agent.sock")
-                } else {
-                    PathBuf::from("/run").join("elevon-agent.sock")
-                }
+            AgentPath::ProjectTlsDir(project) => {
+                base.join("etc").join("elevon").join("tls").join(project)
             }
 
+            AgentPath::Socket => base.join("run").join("elevon-agent.sock"),
+
             AgentPath::SystemdUnit(name) => {
-                if dev_root().is_some() {
-                    base.join("etc").join("systemd").join("system").join(name)
-                } else {
-                    PathBuf::from("/etc")
-                        .join("systemd")
-                        .join("system")
-                        .join(name)
-                }
+                base.join("etc").join("systemd").join("system").join(name)
             }
         };
 
         Ok(p)
     }
 
-    /// Ensure parent dirs exist and optionally set perms.
+    /// Ensure parent dirs exist.
     pub fn ensure(&self) -> Result<PathBuf> {
         let p = self.resolve()?;
         if let Some(parent) = p.parent() {
             create_dir_all(parent)?;
         }
         Ok(p)
+    }
+
+    pub fn ensure_dir(&self) -> Result<PathBuf> {
+        let p = self.resolve()?;
+        create_dir_all(p.clone())?;
+        Ok(p)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    fn resolve_base_path(is_prod: bool) -> PathBuf {
+        match is_prod {
+            true => PathBuf::from("/"),
+            false => PathBuf::from("./devroot"),
+        }
+    }
+
+    fn get_systemd_unit_path(base: PathBuf, name: String) -> PathBuf {
+        base.join("etc").join("systemd").join("system").join(name)
+    }
+
+    #[test]
+    fn test_base_path() {
+        let dev_base = resolve_base_path(false);
+        let prod_base = resolve_base_path(true);
+
+        let dev_systemd_unit_path = get_systemd_unit_path(dev_base, "test".to_string());
+        let prod_systemd_unit_path = get_systemd_unit_path(prod_base, "test".to_string());
+
+        assert_eq!(
+            dev_systemd_unit_path,
+            PathBuf::from("./devroot/etc/systemd/system/test")
+        );
+        assert_eq!(
+            prod_systemd_unit_path,
+            PathBuf::from("/etc/systemd/system/test")
+        );
     }
 }

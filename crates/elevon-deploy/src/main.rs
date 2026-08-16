@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use anyhow::Result;
 use clap::Parser;
 use elevon_config::{ElevonConfig, ResolveEnvCredentials};
@@ -28,21 +26,26 @@ async fn main() -> Result<()> {
             config.run_release(&agent_client, &args.apps).await?;
         }
         Commands::Env { args, subcommand } => {
+            let selected = config.get_selected_apps(&args.apps)?;
+
             let registry_credentials = config.registry.resolved_credentials()?;
-            let root_vars: Option<HashMap<String, String>> = match &config.env {
+            let root_vars = match &config.env {
                 Some(env_vars) => Some(env_vars.resolved_credentials()?),
                 None => None,
             };
-
-            let selected = config.get_selected_apps(&args.apps)?;
+            let tls_vars = match config.routing.tls {
+                Some(tls_vars) => Some(tls_vars.resolved_credentials()?),
+                None => None,
+            };
 
             subcommand
                 .run(
                     &config.name,
                     &agent_client,
+                    selected,
                     &registry_credentials,
                     root_vars,
-                    selected,
+                    tls_vars,
                 )
                 .await?;
         }

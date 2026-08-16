@@ -79,9 +79,17 @@ fn run_systemctl(args: &[&str]) -> Result<()> {
 }
 
 fn ensure_systemd_writable() -> Result<()> {
-    std::fs::OpenOptions::new()
-        .write(true)
-        .open("/etc/systemd/system")
-        .context("permission denied writing to /etc/systemd/system (try sudo)")?;
+    let dir = "/etc/systemd/system";
+    let metadata =
+        std::fs::metadata(dir).with_context(|| format!("systemd dir not found: {dir}"))?;
+
+    if !metadata.is_dir() {
+        bail!("{dir} is not a directory");
+    }
+
+    let probe = std::path::Path::new(dir).join(".elevon-write-test");
+    std::fs::write(&probe, b"").with_context(|| format!("permission denied writing to {dir}"))?;
+    std::fs::remove_file(&probe)?;
+
     Ok(())
 }
