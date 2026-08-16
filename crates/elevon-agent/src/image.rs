@@ -52,7 +52,10 @@ pub async fn pull_image(app_config: &AppPayload) -> Result<()> {
     Ok(())
 }
 
-pub async fn run_image(app_config: &AppPayload, db: &mut toasty::Db) -> Result<(String, u16)> {
+pub async fn run_image(
+    app_config: &AppPayload,
+    db: &mut toasty::Db,
+) -> Result<(String, String, u16)> {
     let docker = Docker::connect_with_local_defaults()?;
     let port = {
         let mut ports = ALLOCATED_PORTS.write().await;
@@ -70,7 +73,7 @@ pub async fn run_image(app_config: &AppPayload, db: &mut toasty::Db) -> Result<(
     .exec(db)
     .await?;
 
-    let start_result = async {
+    let container_id = async {
         let container_name = format!("{}-{}", &app_config.name, &deployment.id);
         let options = CreateContainerOptionsBuilder::new()
             .name(&container_name)
@@ -109,36 +112,39 @@ pub async fn run_image(app_config: &AppPayload, db: &mut toasty::Db) -> Result<(
 
         docker.start_container(&container.id, None).await?;
 
-        Ok::<(), anyhow::Error>(())
+        Ok::<String, anyhow::Error>(container.id)
     }
     .await;
 
-    if let Err(err) = start_result {
-        let mut ports = ALLOCATED_PORTS.write().await;
-        ports.remove(&port);
+    match container_id {
+        Err(err) => {
+            let mut ports = ALLOCATED_PORTS.write().await;
+            ports.remove(&port);
 
-        toasty::update!(deployment {
-            status: DeploymentStatus::Failed
-        })
-        .exec(db)
-        .await?;
+            toasty::update!(deployment {
+                status: DeploymentStatus::Failed
+            })
+            .exec(db)
+            .await?;
 
-        return Err(err);
-    } else {
-        toasty::update!(app {
-            current_port: Some(port)
-        })
-        .exec(db)
-        .await?;
+            Err(err)
+        }
+        Ok(container_id) => {
+            toasty::update!(app {
+                current_port: Some(port)
+            })
+            .exec(db)
+            .await?;
 
-        toasty::update!(deployment {
-            status: DeploymentStatus::Active
-        })
-        .exec(db)
-        .await?;
+            toasty::update!(deployment {
+                status: DeploymentStatus::Active
+            })
+            .exec(db)
+            .await?;
+
+            Ok((deployment.id.to_string(), container_id, port))
+        }
     }
-
-    Ok((deployment.id.to_string(), port))
 }
 
 fn find_free_port() -> Option<u16> {

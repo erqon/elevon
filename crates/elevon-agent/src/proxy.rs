@@ -6,6 +6,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use arc_swap::ArcSwap;
 use async_trait::async_trait;
+use dashmap::DashMap;
 use futures::stream::{self, StreamExt};
 use pingora::{
     Error, ErrorType, Result,
@@ -17,16 +18,26 @@ use pingora::{
 
 use crate::proxy::{socket::SocketControl, state::ProxyState};
 
+pub struct RequestCtx {
+    pub container_id: Option<String>,
+}
+
 pub struct Proxy {
     pub state: Arc<ProxyState>,
 }
 
 #[async_trait]
 impl ProxyHttp for Proxy {
-    type CTX = ();
-    fn new_ctx(&self) -> Self::CTX {}
+    type CTX = RequestCtx;
+    fn new_ctx(&self) -> Self::CTX {
+        RequestCtx { container_id: None }
+    }
 
-    async fn upstream_peer(&self, session: &mut Session, _ctx: &mut ()) -> Result<Box<HttpPeer>> {
+    async fn upstream_peer(
+        &self,
+        session: &mut Session,
+        _ctx: &mut Self::CTX,
+    ) -> Result<Box<HttpPeer>> {
         let host = session
             .get_header("host")
             .and_then(|v| v.to_str().ok())
@@ -76,6 +87,7 @@ pub fn run_proxy() {
     let proxy_state = Arc::new(ProxyState {
         routes: ArcSwap::from_pointee(HashMap::new()),
         lbs: ArcSwap::from_pointee(HashMap::new()),
+        runtime: DashMap::new(),
     });
 
     let mut server = Server::new(None).unwrap();
