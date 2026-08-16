@@ -5,7 +5,7 @@ pub mod registry;
 use std::collections::HashMap;
 
 use anyhow::Result;
-use elevon_config::{ElevonConfig, ResolveEnvCredentials, resolve_env_or_literal};
+use elevon_config::{ElevonConfig, ResolveEnvCredentials};
 use elevon_contracts::deploy::AppRole;
 use serde::Deserialize;
 
@@ -97,26 +97,6 @@ impl Config {
 pub struct RoutingConfig {
     pub domain: String,
     pub port: u16,
-    pub tls: Option<RoutingTlsConfig>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct RoutingTlsConfig {
-    pub cert: String,
-    pub key: String,
-}
-
-impl ResolveEnvCredentials for RoutingTlsConfig {
-    type Output = HashMap<String, String>;
-
-    fn resolved_credentials(&self) -> Result<Self::Output, elevon_config::ConfigError> {
-        let mut resolved = HashMap::new();
-
-        resolved.insert("TLS_CERT".to_string(), resolve_env_or_literal(&self.cert)?);
-        resolved.insert("TLS_KEY".to_string(), resolve_env_or_literal(&self.key)?);
-
-        Ok(resolved)
-    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
