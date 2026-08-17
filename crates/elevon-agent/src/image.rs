@@ -67,6 +67,7 @@ pub async fn run_image(
     let mut app = App::get_or_create(db, &app_config).await?;
     let mut deployment = toasty::create!(Deployment {
         app_id: app.id,
+        container_id: None,
         status: DeploymentStatus::Pending,
         port,
     })
@@ -137,6 +138,7 @@ pub async fn run_image(
             .await?;
 
             toasty::update!(deployment {
+                container_id: container_id.clone(),
                 status: DeploymentStatus::Active
             })
             .exec(db)

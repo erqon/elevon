@@ -2,11 +2,9 @@ mod socket;
 mod state;
 pub mod types;
 
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
-use arc_swap::ArcSwap;
 use async_trait::async_trait;
-use dashmap::DashMap;
 use futures::stream::{self, StreamExt};
 use pingora::{
     Error, ErrorType, Result,
@@ -21,11 +19,7 @@ use pingora::{
 use crate::proxy::{socket::SocketControl, state::ProxyState};
 
 pub fn run_proxy() {
-    let proxy_state = Arc::new(ProxyState {
-        routes: ArcSwap::from_pointee(HashMap::new()),
-        lbs: ArcSwap::from_pointee(HashMap::new()),
-        runtime: DashMap::new(),
-    });
+    let proxy_state = Arc::new(ProxyState::new());
 
     let mut server = Server::new(None).unwrap();
     server.bootstrap();
@@ -56,7 +50,6 @@ pub fn run_proxy() {
         "drain janitor",
         DrainJanitor {
             state: proxy_state.clone(),
-            docker: bollard::Docker::connect_with_local_defaults().unwrap(),
         },
     );
 
@@ -166,7 +159,6 @@ impl BackgroundService for LbHealthCheck {
 
 pub struct DrainJanitor {
     pub state: Arc<ProxyState>,
-    pub docker: bollard::Docker,
 }
 
 #[async_trait]
@@ -179,7 +171,7 @@ impl BackgroundService for DrainJanitor {
                 _ = tick.tick() => {
                     let grace = Duration::from_secs(30);
                     for (container_id, _port) in self.state.ready_to_terminate(grace) {
-                        if let Err(err) = self.docker
+                        if let Err(err) = self.state.docker
                             .stop_container(&container_id, None)
                             .await
                         {
@@ -187,7 +179,7 @@ impl BackgroundService for DrainJanitor {
                             continue;
                         }
 
-                        let _ = self.docker
+                        let _ = self.state.docker
                             .remove_container(&container_id, None)
                             .await;
 

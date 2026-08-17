@@ -67,6 +67,8 @@ pub struct Deployment {
     #[index]
     pub app_id: uuid::Uuid,
 
+    pub container_id: Option<String>,
+
     pub port: u16,
 
     pub status: DeploymentStatus,

@@ -11,12 +11,22 @@ use pingora::lb::{LoadBalancer, health_check::TcpHealthCheck, selection::RoundRo
 use crate::proxy::types::{BackendRuntime, RouteConfig, RouteState};
 
 pub struct ProxyState {
+    pub docker: bollard::Docker,
     pub routes: ArcSwap<HashMap<String, Vec<RouteConfig>>>,
     pub lbs: ArcSwap<HashMap<String, Arc<LoadBalancer<RoundRobin>>>>,
     pub runtime: DashMap<String, Arc<BackendRuntime>>,
 }
 
 impl ProxyState {
+    pub fn new() -> Self {
+        Self {
+            docker: bollard::Docker::connect_with_defaults().unwrap(),
+            routes: ArcSwap::from_pointee(HashMap::new()),
+            lbs: ArcSwap::from_pointee(HashMap::new()),
+            runtime: DashMap::new(),
+        }
+    }
+
     pub fn upsert_route(&self, config: RouteConfig) {
         let name = config.domain.clone();
 
