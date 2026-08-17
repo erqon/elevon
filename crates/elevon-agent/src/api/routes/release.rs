@@ -8,7 +8,7 @@ use elevon_http::error::AppError;
 use crate::{
     api::{db::models::AuthKey, state::AppState},
     image::{pull_image, run_image},
-    proxy::types::{AgentEvent, RouteConfig},
+    proxy::types::{AgentEvent, RouteConfig, RouteState},
 };
 
 pub fn router() -> Router<Arc<AppState>> {
@@ -24,7 +24,7 @@ async fn release(
 
     for app in payload.apps {
         pull_image(&app).await?;
-        let (deployment_id, port) = run_image(&app, &mut db).await?;
+        let (deployment_id, container_id, port) = run_image(&app, &mut db).await?;
 
         match (&app.role, &app.web_app) {
             (AppRole::Web, Some(web_app)) => {
@@ -32,8 +32,11 @@ async fn release(
 
                 let route_config = RouteConfig {
                     id: deployment_id,
+                    name: app.name,
                     domain: web_app.domain.clone(),
                     port,
+                    state: RouteState::Active,
+                    container_id,
                 };
 
                 state

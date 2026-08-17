@@ -28,3 +28,4 @@ uuid.workspace = true
 elevon-contracts.workspace = true
 elevon-fs = { workspace = true, features = ["agent"] }
 elevon-http.workspace = true
+dashmap = "6.2.1"
