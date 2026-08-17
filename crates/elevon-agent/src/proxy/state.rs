@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     sync::{Arc, atomic::AtomicUsize},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use arc_swap::ArcSwap;
@@ -13,7 +13,7 @@ use crate::proxy::types::{BackendRuntime, RouteConfig, RouteState};
 pub struct ProxyState {
     pub routes: ArcSwap<HashMap<String, Vec<RouteConfig>>>,
     pub lbs: ArcSwap<HashMap<String, Arc<LoadBalancer<RoundRobin>>>>,
-    pub runtime: DashMap<String, BackendRuntime>,
+    pub runtime: DashMap<String, Arc<BackendRuntime>>,
 }
 
 impl ProxyState {
@@ -42,24 +42,33 @@ impl ProxyState {
                 RouteState::Active => {
                     self.runtime
                         .entry(backend.container_id.clone())
-                        .or_insert_with(BackendRuntime::default);
+                        .or_insert_with(|| {
+                            BackendRuntime::new(backend.container_id.clone(), backend.port)
+                        });
                 }
                 RouteState::Draining => {
-                    if let Some(mut runtime) = self.runtime.get_mut(&backend.container_id) {
-                        runtime.state = RouteState::Draining;
-                        if runtime.drain_started_at.is_none() {
-                            runtime.drain_started_at = Some(Instant::now());
-                        }
-                    } else {
-                        self.runtime.insert(
-                            backend.container_id.clone(),
-                            BackendRuntime {
-                                state: RouteState::Draining,
-                                inflight: AtomicUsize::new(0),
-                                drain_started_at: Some(Instant::now()),
-                            },
-                        );
-                    }
+                    let inflight = self
+                        .runtime
+                        .get(&backend.container_id)
+                        .map(|r| r.inflight.load(std::sync::atomic::Ordering::Relaxed))
+                        .unwrap_or(0);
+
+                    let drain_started_at = self
+                        .runtime
+                        .get(&backend.container_id)
+                        .and_then(|r| r.drain_started_at)
+                        .or(Some(Instant::now()));
+
+                    self.runtime.insert(
+                        backend.container_id.clone(),
+                        Arc::new(BackendRuntime {
+                            container_id: backend.container_id.clone(),
+                            state: RouteState::Draining,
+                            port: backend.port,
+                            inflight: AtomicUsize::new(inflight),
+                            drain_started_at,
+                        }),
+                    );
                 }
             }
         }
@@ -82,5 +91,59 @@ impl ProxyState {
         });
 
         tracing::info!("Routes changed, current state: {:?}", self.routes.load());
+    }
+
+    pub fn get_backend_by_port(&self, port: u16) -> Option<Arc<BackendRuntime>> {
+        self.runtime
+            .iter()
+            .find(|r| r.value().port == port)
+            .map(|r| r.value().clone())
+    }
+
+    pub fn increase_inflight_count(&self, container_id: &str) {
+        if let Some(runtime) = self.runtime.get(container_id) {
+            runtime
+                .inflight
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    pub fn decrease_inflight_count(&self, container_id: &str) {
+        if let Some(runtime) = self.runtime.get(container_id) {
+            runtime
+                .inflight
+                .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    pub fn ready_to_terminate(&self, grace_period: Duration) -> Vec<(String, u16)> {
+        self.runtime
+            .iter()
+            .filter(|r| {
+                let runtime = r.value();
+                if runtime.state != RouteState::Draining {
+                    return false;
+                }
+                let inflight = runtime.inflight.load(std::sync::atomic::Ordering::Relaxed);
+                let past_grace = runtime
+                    .drain_started_at
+                    .is_some_and(|t| t.elapsed() >= grace_period);
+
+                inflight == 0 || past_grace
+            })
+            .map(|r| (r.key().clone(), r.value().port))
+            .collect()
+    }
+
+    pub fn remove_backend(&self, container_id: &str) {
+        self.runtime.remove(container_id);
+
+        self.routes.rcu(|current| {
+            let mut next = current.as_ref().clone();
+            for backends in next.values_mut() {
+                backends.retain(|b| b.container_id != container_id);
+            }
+            next
+        });
     }
 }

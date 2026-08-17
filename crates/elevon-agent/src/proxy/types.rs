@@ -1,4 +1,7 @@
-use std::{sync::atomic::AtomicUsize, time::Instant};
+use std::{
+    sync::{Arc, atomic::AtomicUsize},
+    time::Instant,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -33,17 +36,21 @@ pub struct DeleteRoute {
 
 #[derive(Debug)]
 pub struct BackendRuntime {
+    pub container_id: String,
     pub state: RouteState,
+    pub port: u16,
     pub inflight: AtomicUsize,
     pub drain_started_at: Option<Instant>,
 }
 
-impl std::default::Default for BackendRuntime {
-    fn default() -> Self {
-        BackendRuntime {
+impl BackendRuntime {
+    pub fn new(container_id: String, port: u16) -> Arc<Self> {
+        Arc::new(BackendRuntime {
+            container_id,
             state: RouteState::Active,
+            port,
             inflight: AtomicUsize::new(0),
             drain_started_at: None,
-        }
+        })
     }
 }
