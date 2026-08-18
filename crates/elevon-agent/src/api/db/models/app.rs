@@ -83,20 +83,26 @@ pub struct Deployment {
 }
 
 impl Deployment {
-    pub async fn get_current_deployment(
+    pub async fn get_previous_deployment(
         db: &mut toasty::Db,
         app_id: &uuid::Uuid,
+        current_deployment_id: &str,
     ) -> anyhow::Result<Option<Deployment>> {
-        let current_deployment = Deployment::filter(
+        let previous_deployment = Deployment::filter(
             Deployment::fields()
                 .app_id()
                 .eq(app_id)
+                .and(
+                    Deployment::fields()
+                        .container_id()
+                        .ne(Some(current_deployment_id.to_string())),
+                )
                 .and(Deployment::fields().status().eq(DeploymentStatus::Active)),
         )
         .first()
         .exec(db)
         .await?;
 
-        Ok(current_deployment)
+        Ok(previous_deployment)
     }
 }
