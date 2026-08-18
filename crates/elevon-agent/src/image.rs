@@ -2,7 +2,6 @@ use std::{collections::HashSet, net::TcpListener, sync::LazyLock};
 
 use anyhow::Result;
 use bollard::{
-    Docker,
     auth::DockerCredentials,
     plugin::{ContainerCreateBody, HostConfig, PortBinding, PortMap},
     query_parameters::{CreateContainerOptionsBuilder, CreateImageOptionsBuilder},
@@ -17,9 +16,7 @@ use crate::api::db::models::{App, Deployment, DeploymentStatus};
 static ALLOCATED_PORTS: LazyLock<RwLock<HashSet<u16>>> =
     LazyLock::new(|| RwLock::new(HashSet::new()));
 
-pub async fn pull_image(app_config: &AppPayload) -> Result<()> {
-    let docker = Docker::connect_with_local_defaults()?;
-
+pub async fn pull_image(docker: &bollard::Docker, app_config: &AppPayload) -> Result<()> {
     // FIX: This still creates empty env file in case the project has a single app with no apps:
     let project_env = load_app_env(&app_config.project, None)?;
 
@@ -53,10 +50,11 @@ pub async fn pull_image(app_config: &AppPayload) -> Result<()> {
 }
 
 pub async fn run_image(
+    docker: &bollard::Docker,
+    app: &App,
     app_config: &AppPayload,
     db: &mut toasty::Db,
 ) -> Result<(String, String, u16)> {
-    let docker = Docker::connect_with_local_defaults()?;
     let port = {
         let mut ports = ALLOCATED_PORTS.write().await;
         let port = find_free_port().ok_or_else(|| anyhow::anyhow!("No free port found"))?;
@@ -64,9 +62,9 @@ pub async fn run_image(
         port
     };
 
-    let mut app = App::get_or_create(db, &app_config).await?;
     let mut deployment = toasty::create!(Deployment {
         app_id: app.id,
+        container_id: None,
         status: DeploymentStatus::Pending,
         port,
     })
@@ -130,13 +128,8 @@ pub async fn run_image(
             Err(err)
         }
         Ok(container_id) => {
-            toasty::update!(app {
-                current_port: Some(port)
-            })
-            .exec(db)
-            .await?;
-
             toasty::update!(deployment {
+                container_id: container_id.clone(),
                 status: DeploymentStatus::Active
             })
             .exec(db)

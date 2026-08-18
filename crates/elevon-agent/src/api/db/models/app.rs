@@ -11,8 +11,6 @@ pub struct App {
 
     pub domain: Option<String>,
 
-    pub current_port: Option<u16>,
-
     #[has_many]
     pub deployments: toasty::Deferred<Vec<Deployment>>,
 
@@ -55,6 +53,7 @@ impl App {
 pub enum DeploymentStatus {
     Pending,
     Active,
+    Drained,
     Failed,
 }
 
@@ -66,6 +65,8 @@ pub struct Deployment {
 
     #[index]
     pub app_id: uuid::Uuid,
+
+    pub container_id: Option<String>,
 
     pub port: u16,
 
@@ -79,4 +80,23 @@ pub struct Deployment {
 
     #[auto]
     pub updated_at: jiff::Timestamp,
+}
+
+impl Deployment {
+    pub async fn get_current_deployment(
+        db: &mut toasty::Db,
+        app_id: &uuid::Uuid,
+    ) -> anyhow::Result<Option<Deployment>> {
+        let current_deployment = Deployment::filter(
+            Deployment::fields()
+                .app_id()
+                .eq(app_id)
+                .and(Deployment::fields().status().eq(DeploymentStatus::Active)),
+        )
+        .first()
+        .exec(db)
+        .await?;
+
+        Ok(current_deployment)
+    }
 }

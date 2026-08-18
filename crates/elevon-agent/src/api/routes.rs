@@ -1,4 +1,5 @@
 mod env;
+mod proxy;
 mod release;
 
 use std::sync::Arc;
@@ -9,13 +10,12 @@ use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 
 use crate::api::state::AppState;
 
-pub fn create_router(state: AppState) -> Router {
-    let state = Arc::new(state);
-
+pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/health", get(health))
         .nest("/env", env::router())
         .nest("/deploy", release::router())
+        .nest("/proxy", proxy::router())
         .with_state(state)
         .layer(from_fn(elevon_http::error::log_app_errors))
         .layer(

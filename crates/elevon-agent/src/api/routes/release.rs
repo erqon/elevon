@@ -6,7 +6,10 @@ use elevon_contracts::deploy::{AppReleasePayload, AppRole};
 use elevon_http::error::AppError;
 
 use crate::{
-    api::{db::models::AuthKey, state::AppState},
+    api::{
+        db::models::{App, AuthKey, Deployment, DeploymentStatus},
+        state::AppState,
+    },
     image::{pull_image, run_image},
     proxy::types::{AgentEvent, RouteConfig, RouteState},
 };
@@ -20,15 +23,46 @@ async fn release(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<AppReleasePayload>,
 ) -> Result<StatusCode, AppError> {
-    let mut db = state.db.clone();
+    let mut db = state.agent_db.db.clone();
 
     for app in payload.apps {
-        pull_image(&app).await?;
-        let (deployment_id, container_id, port) = run_image(&app, &mut db).await?;
+        let db_app = App::get_or_create(&mut db, &app).await?;
+
+        pull_image(&state.docker, &app).await?;
+        let (deployment_id, container_id, port) =
+            run_image(&state.docker, &db_app, &app, &mut db).await?;
 
         match (&app.role, &app.web_app) {
             (AppRole::Web, Some(web_app)) => {
-                let stream = state.socket_client.connect().await?;
+                if let Some(mut current_deployment) =
+                    Deployment::get_current_deployment(&mut db, &db_app.id).await?
+                {
+                    if let Some(container_id) = current_deployment.container_id.clone() {
+                        toasty::update!(current_deployment {
+                            status: DeploymentStatus::Drained
+                        })
+                        .exec(&mut db)
+                        .await?;
+
+                        let route_config = RouteConfig {
+                            id: deployment_id.clone(),
+                            name: app.name.clone(),
+                            domain: web_app.domain.clone(),
+                            port,
+                            state: RouteState::Draining,
+                            container_id,
+                        };
+
+                        let drain_stream = state.socket_client.connect().await?;
+                        state
+                            .socket_client
+                            .send(
+                                drain_stream,
+                                AgentEvent::DrainRoute(route_config),
+                            )
+                            .await?;
+                    }
+                }
 
                 let route_config = RouteConfig {
                     id: deployment_id,
@@ -39,9 +73,10 @@ async fn release(
                     container_id,
                 };
 
+                let upsert_stream = state.socket_client.connect().await?;
                 state
                     .socket_client
-                    .send(stream, AgentEvent::UpsertRoute(route_config))
+                    .send(upsert_stream, AgentEvent::UpsertRoute(route_config))
                     .await?;
             }
             _ => {}

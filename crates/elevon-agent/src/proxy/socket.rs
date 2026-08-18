@@ -52,7 +52,9 @@ async fn run_socket_listener(state: Arc<ProxyState>) -> Result<(), Box<dyn Error
                     state.upsert_route(route);
                     tracing::info!("route {} upserted", &id);
                 }
-                AgentEvent::DeleteRoute(_route) => {}
+                AgentEvent::DrainRoute(route) => {
+                    state.drain_route(route);
+                }
             }
         });
     }

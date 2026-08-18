@@ -27,6 +27,7 @@ dotenvy = "0.15.7"
 futures-util = "0.3.33"
 git-version = "0.3.9"
 jiff = { version = "0.2.35", features = ["serde"] }
+reqwest = { version = "0.13.4", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.151"
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros"] }

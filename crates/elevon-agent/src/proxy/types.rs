@@ -9,13 +9,7 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "event", content = "data")]
 pub enum AgentEvent {
     UpsertRoute(RouteConfig),
-    DeleteRoute(DeleteRoute),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum RouteState {
-    Active,
-    Draining,
+    DrainRoute(RouteConfig),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,12 +20,6 @@ pub struct RouteConfig {
     pub port: u16,
     pub state: RouteState,
     pub container_id: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeleteRoute {
-    pub id: String,
-    pub domain: String,
 }
 
 #[derive(Debug)]
@@ -53,4 +41,10 @@ impl BackendRuntime {
             drain_started_at: None,
         })
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum RouteState {
+    Active,
+    Draining,
 }
