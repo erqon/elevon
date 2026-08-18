@@ -5,6 +5,7 @@ pub mod types;
 use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
+use elevon_http::runtime::run_async;
 use futures::stream::{self, StreamExt};
 use pingora::{
     Error, ErrorType, Result,
@@ -52,6 +53,15 @@ pub fn run_proxy() {
             state: proxy_state.clone(),
         },
     );
+
+    let cloned_state = proxy_state.clone();
+    std::thread::spawn(move || {
+        run_async(async move {
+            if let Err(err) = cloned_state.load_conainters().await {
+                tracing::warn!("initial container load failed: {err}");
+            }
+        })
+    });
 
     server.add_service(lb);
     server.add_service(control);

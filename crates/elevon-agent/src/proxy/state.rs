@@ -4,26 +4,31 @@ use std::{
     time::{Duration, Instant},
 };
 
+use anyhow::Result;
 use arc_swap::ArcSwap;
 use dashmap::DashMap;
 use pingora::lb::{LoadBalancer, health_check::TcpHealthCheck, selection::RoundRobin};
 
 use crate::proxy::types::{BackendRuntime, RouteConfig, RouteState};
 
+const API_BASE_URL: &'static str = "http://localhost:3000";
+
 pub struct ProxyState {
-    pub docker: bollard::Docker,
+    pub docker: Arc<bollard::Docker>,
     pub routes: ArcSwap<HashMap<String, Vec<RouteConfig>>>,
     pub lbs: ArcSwap<HashMap<String, Arc<LoadBalancer<RoundRobin>>>>,
     pub runtime: DashMap<String, Arc<BackendRuntime>>,
+    api_client: reqwest::Client,
 }
 
 impl ProxyState {
     pub fn new() -> Arc<Self> {
         Arc::new(ProxyState {
-            docker: bollard::Docker::connect_with_defaults().unwrap(),
+            docker: Arc::new(bollard::Docker::connect_with_defaults().unwrap()),
             routes: ArcSwap::from_pointee(HashMap::new()),
             lbs: ArcSwap::from_pointee(HashMap::new()),
             runtime: DashMap::new(),
+            api_client: reqwest::Client::new(),
         })
     }
 
@@ -33,55 +38,12 @@ impl ProxyState {
         self.routes.rcu(|current| {
             let mut next = current.as_ref().clone();
             let backends = next.entry(name.clone()).or_default();
-
-            for backend in backends.iter_mut() {
-                if backend.name == config.name && backend.id != config.id {
-                    backend.state = RouteState::Draining;
-                }
-            }
-
             backends.push(config.clone());
             next
         });
 
         let routes = self.routes.load();
         let backends = routes.get(&name).cloned().unwrap_or_default();
-
-        for backend in &backends {
-            match backend.state {
-                RouteState::Active => {
-                    self.runtime
-                        .entry(backend.container_id.clone())
-                        .or_insert_with(|| {
-                            BackendRuntime::new(backend.container_id.clone(), backend.port)
-                        });
-                }
-                RouteState::Draining => {
-                    let inflight = self
-                        .runtime
-                        .get(&backend.container_id)
-                        .map(|r| r.inflight.load(std::sync::atomic::Ordering::Relaxed))
-                        .unwrap_or(0);
-
-                    let drain_started_at = self
-                        .runtime
-                        .get(&backend.container_id)
-                        .and_then(|r| r.drain_started_at)
-                        .or(Some(Instant::now()));
-
-                    self.runtime.insert(
-                        backend.container_id.clone(),
-                        Arc::new(BackendRuntime {
-                            container_id: backend.container_id.clone(),
-                            state: RouteState::Draining,
-                            port: backend.port,
-                            inflight: AtomicUsize::new(inflight),
-                            drain_started_at,
-                        }),
-                    );
-                }
-            }
-        }
 
         let addrs: Vec<String> = backends
             .iter()
@@ -101,6 +63,46 @@ impl ProxyState {
         });
 
         tracing::info!("Routes changed, current state: {:?}", self.routes.load());
+    }
+
+    pub fn drain_route(&self, route: RouteConfig) {
+        self.routes.rcu(|current| {
+            let mut next = current.as_ref().clone();
+            let backends = next.entry(route.domain.clone()).or_default();
+
+            for backend in backends.iter_mut() {
+                if backend.container_id == route.container_id {
+                    backend.state = RouteState::Draining;
+                }
+            }
+
+            next
+        });
+
+        let inflight = self
+            .runtime
+            .get(&route.container_id)
+            .map(|r| r.inflight.load(std::sync::atomic::Ordering::Relaxed))
+            .unwrap_or(0);
+
+        let drain_started_at = self
+            .runtime
+            .get(&route.container_id)
+            .and_then(|r| r.drain_started_at)
+            .or(Some(Instant::now()));
+
+        self.runtime.insert(
+            route.container_id.clone(),
+            Arc::new(BackendRuntime {
+                container_id: route.container_id.clone(),
+                state: RouteState::Draining,
+                port: route.port,
+                inflight: AtomicUsize::new(inflight),
+                drain_started_at,
+            }),
+        );
+
+        tracing::info!(%route.container_id, "route marked as draining");
     }
 
     pub fn get_backend_by_port(&self, port: u16) -> Option<Arc<BackendRuntime>> {
@@ -157,14 +159,45 @@ impl ProxyState {
         });
     }
 
-    pub async fn load_conainters(
-        &self,
-        running_containers: Vec<RouteConfig>,
-    ) -> anyhow::Result<()> {
-        for container in running_containers {
-            self.upsert_route(container);
+    pub async fn load_conainters(&self) -> Result<()> {
+        for _ in 0..20 {
+            let response = self
+                .api_client
+                .get(format!("{API_BASE_URL}/api/proxy/containers"))
+                .send()
+                .await;
+
+            match response {
+                Ok(resp) if resp.status().is_success() => {
+                    let containers: Vec<RouteConfig> = resp.json().await?;
+                    if containers.is_empty() {
+                        return Ok(());
+                    }
+
+                    tracing::info!(
+                        "Found {} running containers, upserting them...",
+                        containers.len()
+                    );
+
+                    for container in containers {
+                        self.upsert_route(container);
+                    }
+
+                    return Ok(());
+                }
+                Ok(resp) => {
+                    let status = resp.status();
+                    let body = resp.text().await.unwrap_or_default();
+                    tracing::warn!(status = %status, body, "proxy containers request failed, retrying");
+                }
+                Err(err) => {
+                    tracing::warn!(%err, "proxy containers request error, retrying");
+                }
+            }
+
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
         }
 
-        Ok(())
+        anyhow::bail!("failed to load initial containers from API");
     }
 }

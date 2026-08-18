@@ -51,6 +51,7 @@ pub async fn pull_image(docker: &bollard::Docker, app_config: &AppPayload) -> Re
 
 pub async fn run_image(
     docker: &bollard::Docker,
+    app: &App,
     app_config: &AppPayload,
     db: &mut toasty::Db,
 ) -> Result<(String, String, u16)> {
@@ -61,7 +62,6 @@ pub async fn run_image(
         port
     };
 
-    let app = App::get_or_create(db, &app_config).await?;
     let mut deployment = toasty::create!(Deployment {
         app_id: app.id,
         container_id: None,

@@ -4,6 +4,7 @@ use elevon_agent::{
     cli::{Cli, Commands, key::KeyCommands},
     env::ElevonEnv,
 };
+use elevon_http::runtime::run_async;
 
 fn main() {
     elevon_http::init_cli_logging();
@@ -39,12 +40,4 @@ fn run() -> Result<()> {
     }
 
     Ok(())
-}
-
-fn run_async<T>(future: impl Future<Output = T>) -> T {
-    tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(future)
 }
