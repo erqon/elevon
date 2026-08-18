@@ -34,11 +34,11 @@ async fn release(
 
         match (&app.role, &app.web_app) {
             (AppRole::Web, Some(web_app)) => {
-                if let Some(mut current_deployment) =
-                    Deployment::get_current_deployment(&mut db, &db_app.id).await?
+                if let Some(mut previous_deployment) =
+                    Deployment::get_previous_deployment(&mut db, &db_app.id, &container_id).await?
                 {
-                    if let Some(container_id) = current_deployment.container_id.clone() {
-                        toasty::update!(current_deployment {
+                    if let Some(container_id) = previous_deployment.container_id.clone() {
+                        toasty::update!(previous_deployment {
                             status: DeploymentStatus::Drained
                         })
                         .exec(&mut db)
@@ -56,10 +56,7 @@ async fn release(
                         let drain_stream = state.socket_client.connect().await?;
                         state
                             .socket_client
-                            .send(
-                                drain_stream,
-                                AgentEvent::DrainRoute(route_config),
-                            )
+                            .send(drain_stream, AgentEvent::DrainRoute(route_config))
                             .await?;
                     }
                 }
