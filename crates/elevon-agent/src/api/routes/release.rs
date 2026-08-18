@@ -20,11 +20,11 @@ async fn release(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<AppReleasePayload>,
 ) -> Result<StatusCode, AppError> {
-    let mut db = state.db.clone();
+    let mut db = state.agent_db.db.clone();
 
     for app in payload.apps {
-        pull_image(&app).await?;
-        let (deployment_id, container_id, port) = run_image(&app, &mut db).await?;
+        pull_image(&state.docker, &app).await?;
+        let (deployment_id, container_id, port) = run_image(&state.docker, &app, &mut db).await?;
 
         match (&app.role, &app.web_app) {
             (AppRole::Web, Some(web_app)) => {

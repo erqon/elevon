@@ -47,6 +47,11 @@ async fn run_socket_listener(state: Arc<ProxyState>) -> Result<(), Box<dyn Error
             };
 
             match message {
+                AgentEvent::GetRunningContainers(running_containers) => {
+                    if let Err(err) = state.load_conainters(running_containers).await {
+                        tracing::error!(%err, "failed to load containers");
+                    }
+                }
                 AgentEvent::UpsertRoute(route) => {
                     let id = route.id.clone();
                     state.upsert_route(route);

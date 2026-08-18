@@ -18,13 +18,13 @@ pub struct ProxyState {
 }
 
 impl ProxyState {
-    pub fn new() -> Self {
-        Self {
+    pub fn new() -> Arc<Self> {
+        Arc::new(ProxyState {
             docker: bollard::Docker::connect_with_defaults().unwrap(),
             routes: ArcSwap::from_pointee(HashMap::new()),
             lbs: ArcSwap::from_pointee(HashMap::new()),
             runtime: DashMap::new(),
-        }
+        })
     }
 
     pub fn upsert_route(&self, config: RouteConfig) {
@@ -155,5 +155,16 @@ impl ProxyState {
             }
             next
         });
+    }
+
+    pub async fn load_conainters(
+        &self,
+        running_containers: Vec<RouteConfig>,
+    ) -> anyhow::Result<()> {
+        for container in running_containers {
+            self.upsert_route(container);
+        }
+
+        Ok(())
     }
 }

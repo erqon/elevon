@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use elevon_fs::agent::{install_api_unit, install_proxy_unit};
 
 use crate::{
-    api::db::models::AuthKey,
+    api::db::{AgentDb, models::AuthKey},
     env::{ElevonEnv, ElevonEnvKey},
 };
 
@@ -18,11 +18,11 @@ pub async fn setup(turso_remote_url: Option<String>) -> Result<()> {
             .context("failed to persist the Turso remote URL")?;
     }
 
-    let mut db = crate::api::db::init_db(env.turso_remote_url.as_deref())
+    let mut agent_db = AgentDb::new(env.turso_remote_url.as_deref())
         .await
         .context("failed to initialize the agent database")?;
 
-    let auth_keys = AuthKey::all().exec(&mut db).await?;
+    let auth_keys = AuthKey::all().exec(&mut agent_db.db).await?;
 
     if auth_keys.len() > 0 {
         tracing::info!("Auth key already exist, run 'agent key list' to view the keys");

@@ -8,14 +8,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "event", content = "data")]
 pub enum AgentEvent {
+    GetRunningContainers(Vec<RouteConfig>),
     UpsertRoute(RouteConfig),
     DeleteRoute(DeleteRoute),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum RouteState {
-    Active,
-    Draining,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,4 +48,10 @@ impl BackendRuntime {
             drain_started_at: None,
         })
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum RouteState {
+    Active,
+    Draining,
 }

@@ -51,7 +51,7 @@ impl FromRequestParts<Arc<AppState>> for AuthKey {
     ) -> Result<Self, Self::Rejection> {
         let token = get_auth_token(&parts.headers)?;
 
-        let db = state.db.clone();
+        let db = state.agent_db.db.clone();
         let auth_key = check_auth_key(db, token).await?;
 
         Ok(auth_key)

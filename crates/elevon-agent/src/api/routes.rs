@@ -9,9 +9,7 @@ use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 
 use crate::api::state::AppState;
 
-pub fn create_router(state: AppState) -> Router {
-    let state = Arc::new(state);
-
+pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/health", get(health))
         .nest("/env", env::router())

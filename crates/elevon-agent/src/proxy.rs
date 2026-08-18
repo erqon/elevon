@@ -19,7 +19,7 @@ use pingora::{
 use crate::proxy::{socket::SocketControl, state::ProxyState};
 
 pub fn run_proxy() {
-    let proxy_state = Arc::new(ProxyState::new());
+    let proxy_state = ProxyState::new();
 
     let mut server = Server::new(None).unwrap();
     server.bootstrap();
