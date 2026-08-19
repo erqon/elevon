@@ -2,6 +2,7 @@ pub mod db;
 pub mod middleware;
 mod routes;
 pub mod state;
+pub mod stream;
 
 use std::{net::SocketAddr, sync::Arc};
 

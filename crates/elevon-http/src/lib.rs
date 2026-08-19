@@ -43,7 +43,9 @@ pub fn init_cli_logging() {
     // spinner for instrumented spans; docker steps are plain prints
     tracing_subscriber::registry()
         .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-            EnvFilter::new("warn,elevon_agent=info,turso_sync_engine=warn,toasty=warn")
+            EnvFilter::new(
+                "warn,elevon_agent=info,elevon_deploy=info,elevon_contracts=info,turso_sync_engine=warn,toasty=warn",
+            )
         }))
         .with(
             tracing_subscriber::fmt::layer()

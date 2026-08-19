@@ -1,17 +1,15 @@
 use std::sync::Arc;
 
-use anyhow::Result;
-use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
-use elevon_contracts::deploy::{AppReleasePayload, AppRole};
-use elevon_http::error::AppError;
+use axum::{Json, Router, extract::State, routing::post};
+use elevon_contracts::deploy::{AppReleasePayload, StreamEvent};
 
 use crate::{
     api::{
-        db::models::{App, AuthKey, Deployment, DeploymentStatus},
+        db::models::AuthKey,
         state::AppState,
+        stream::{StreamResponse, create_stream_channel, emit, stream_response},
     },
-    image::{pull_image, run_image},
-    proxy::types::{AgentEvent, RouteConfig, RouteState},
+    image::deploy_apps,
 };
 
 pub fn router() -> Router<Arc<AppState>> {
@@ -22,63 +20,25 @@ async fn release(
     _: AuthKey,
     State(state): State<Arc<AppState>>,
     Json(payload): Json<AppReleasePayload>,
-) -> Result<StatusCode, AppError> {
-    let mut db = state.agent_db.db.clone();
+) -> StreamResponse {
+    let (tx, rx) = create_stream_channel();
 
-    for app in payload.apps {
-        let db_app = App::get_or_create(&mut db, &app).await?;
+    let tx_for_task = tx.clone();
+    let payload_for_task = payload;
 
-        pull_image(&state.docker, &app).await?;
-        let (deployment_id, container_id, port) =
-            run_image(&state.docker, &db_app, &app, &mut db).await?;
-
-        match (&app.role, &app.web_app) {
-            (AppRole::Web, Some(web_app)) => {
-                if let Some(mut previous_deployment) =
-                    Deployment::get_previous_deployment(&mut db, &db_app.id, &container_id).await?
-                {
-                    if let Some(container_id) = previous_deployment.container_id.clone() {
-                        toasty::update!(previous_deployment {
-                            status: DeploymentStatus::Drained
-                        })
-                        .exec(&mut db)
-                        .await?;
-
-                        let route_config = RouteConfig {
-                            id: deployment_id.clone(),
-                            name: app.name.clone(),
-                            domain: web_app.domain.clone(),
-                            port,
-                            state: RouteState::Draining,
-                            container_id,
-                        };
-
-                        let drain_stream = state.socket_client.connect().await?;
-                        state
-                            .socket_client
-                            .send(drain_stream, AgentEvent::DrainRoute(route_config))
-                            .await?;
-                    }
-                }
-
-                let route_config = RouteConfig {
-                    id: deployment_id,
-                    name: app.name,
-                    domain: web_app.domain.clone(),
-                    port,
-                    state: RouteState::Active,
-                    container_id,
-                };
-
-                let upsert_stream = state.socket_client.connect().await?;
-                state
-                    .socket_client
-                    .send(upsert_stream, AgentEvent::UpsertRoute(route_config))
-                    .await?;
-            }
-            _ => {}
+    tokio::spawn(async move {
+        if let Err(err) = deploy_apps(&tx, state, payload_for_task.apps).await {
+            emit(
+                &tx_for_task,
+                StreamEvent::Error {
+                    message: err.to_string(),
+                },
+            )
+            .await;
         }
-    }
 
-    Ok(StatusCode::OK)
+        emit(&tx_for_task, StreamEvent::Done).await;
+    });
+
+    stream_response(rx)
 }
