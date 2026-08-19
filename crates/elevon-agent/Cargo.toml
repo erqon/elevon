@@ -6,12 +6,15 @@ default-run = "elevon-agent"
 
 [dependencies]
 arc-swap = "1.9.2"
+dashmap = "6.2.1"
+tokio-stream = "0.1.19"
 futures = "0.3.33"
 
 async-trait.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 bollard.workspace = true
+bytes.workspace = true
 clap.workspace = true
 jiff.workspace = true
 reqwest.workspace = true
@@ -29,4 +32,3 @@ uuid.workspace = true
 elevon-contracts.workspace = true
 elevon-fs = { workspace = true, features = ["agent"] }
 elevon-http.workspace = true
-dashmap = "6.2.1"

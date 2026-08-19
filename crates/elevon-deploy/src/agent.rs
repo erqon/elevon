@@ -4,7 +4,7 @@ use anyhow::Result;
 use elevon_config::ResolveEnvCredentials;
 use elevon_contracts::deploy::{
     AppEnvPayload, AppEnvSetPayload, AppPayload, AppReleasePayload, AppRole, WebApp,
-    format_app_env_name,
+    format_app_env_name, log_stream_events,
 };
 use reqwest::{
     Client, Url,
@@ -125,6 +125,9 @@ impl AgentClient {
         let url = self.absolute_url("/deploy");
         let headers = self.headers();
 
+        let app_names: Vec<_> = apps.iter().map(|(key, _)| key).collect();
+        tracing::info!("Releasing apps: {:?}", app_names);
+
         let apps_payload: Vec<AppPayload> = apps
             .iter()
             .map(|(name, cfg)| {
@@ -152,12 +155,16 @@ impl AgentClient {
 
         let payload = serde_json::json!(AppReleasePayload { apps: apps_payload });
 
-        self.client
+        let event_stream = self
+            .client
             .post(url)
             .headers(headers)
             .json(&payload)
             .send()
-            .await?;
+            .await?
+            .bytes_stream();
+
+        log_stream_events(event_stream).await?;
 
         Ok(())
     }

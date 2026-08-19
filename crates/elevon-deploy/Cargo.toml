@@ -5,14 +5,14 @@ edition = "2024"
 
 [dependencies]
 walkdir = "2.5.0"
-futures-util = "0.3.33"
 tar = "0.4.46"
 
 anyhow.workspace = true
 bollard.workspace = true
 clap.workspace = true
+futures-util.workspace = true
 git-version.workspace = true
-reqwest.workspace = true
+reqwest = { workspace = true, features = ["stream"] }
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
