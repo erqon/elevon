@@ -8,7 +8,7 @@ default-run = "elevon-agent"
 arc-swap = "1.9.2"
 dashmap = "6.2.1"
 tokio-stream = "0.1.19"
-futures = "0.3.33"
+futures = "0.3.34"
 
 async-trait.workspace = true
 anyhow.workspace = true

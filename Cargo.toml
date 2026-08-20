@@ -18,14 +18,14 @@ elevon-contracts = { path = "./crates/elevon-contracts" }
 elevon-fs = { path = "./crates/elevon-fs" }
 elevon-http = { path = "./crates/elevon-http" }
 
-async-trait = "0.1.91"
+async-trait = "0.1.92"
 anyhow = "1"
 axum = "0.8.9"
-bollard = "0.21.0"
+bollard = "0.21.1"
 bytes = "1.12.1"
 clap = { version = "4.6.6", features = ["color", "derive"] }
 dotenvy = "0.15.7"
-futures-util = "0.3.33"
+futures-util = "0.3.34"
 git-version = "0.3.9"
 jiff = { version = "0.2.35", features = ["serde"] }
 reqwest = { version = "0.13.4", features = ["json"] }
@@ -42,6 +42,6 @@ tower-http = { version = "0.7.0", features = ["trace"] }
 tracing = "0.1.44"
 tracing-indicatif = "0.3.14"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
-thiserror = "2.0.19"
-uuid = { version = "1.24.0", features = ["v7"] }
+thiserror = "2.0.20"
+uuid = { version = "1.24.1", features = ["v7"] }
 

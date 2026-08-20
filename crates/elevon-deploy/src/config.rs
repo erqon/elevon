@@ -53,7 +53,7 @@ impl Config {
 
     pub fn get_selected_apps(&self, arg_apps: &[String]) -> Result<Vec<(String, AppConfig)>> {
         if arg_apps.is_empty() {
-            if self.apps.len() > 0 {
+            if !self.apps.is_empty() {
                 return Ok(self
                     .apps
                     .iter()
@@ -85,7 +85,7 @@ impl Config {
     pub async fn run_release(
         &self,
         agent_client: &AgentClient,
-        app_names: &Vec<String>,
+        app_names: &[String],
     ) -> Result<()> {
         let selected = self.get_selected_apps(app_names)?;
         agent_client.push_release(self, selected).await?;

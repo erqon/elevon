@@ -8,9 +8,7 @@ pub struct LB(Arc<LoadBalancer<RoundRobin>>);
 impl ProxyHttp for LB {
     /// For this small example, we don't need context storage
     type CTX = ();
-    fn new_ctx(&self) -> () {
-        ()
-    }
+    fn new_ctx(&self) {}
 
     async fn upstream_peer(&self, session: &mut Session, _ctx: &mut ()) -> Result<Box<HttpPeer>> {
         let upstream = self

@@ -87,7 +87,7 @@ async fn check_user_session(
             session_id: session.id,
         })
     } else {
-        return Err(AppError::Unauthorized);
+        Err(AppError::Unauthorized)
     }
 }
 
