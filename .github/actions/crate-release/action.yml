@@ -1,0 +1,70 @@
+name: Release
+description: Composite action for releasing builds
+
+inputs:
+  name:
+    description: Crate name
+    required: true
+  version:
+    description: Version number without the v prefix
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Check its main branch
+      shell: bash
+      run: |
+        git fetch origin main
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          test "${{ github.ref }}" = "refs/heads/main"
+        else
+          git merge-base --is-ancestor "${{ github.sha }}" origin/main
+        fi
+
+    - name: Resolve tag
+      id: meta
+      shell: bash
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          [ -n "${{ inputs.version }}" ] || { echo "missing version"; exit 1; }
+          echo "tag=${{ inputs.name }}-v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Build
+      shell: bash
+      run: cargo build -p "${{ inputs.name }}" --release
+
+    - name: Package
+      id: package
+      shell: bash
+      run: |
+        CRATE="${{ inputs.name }}"
+        TAG="${{ steps.meta.outputs.tag }}"
+        VERSION="${{ inputs.version }}"
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          ARCHIVE="${CRATE}-v${VERSION}-linux-x86_64.tar.gz"
+          BIN="${CRATE}-v${VERSION}-linux-x86_64"
+        else
+          ARCHIVE="${TAG}-linux-x86_64.tar.gz"
+          BIN="${TAG}-linux-x86_64"
+        fi
+
+        cp "target/release/${CRATE}" "$BIN"
+        tar -czf "$ARCHIVE" "$BIN"
+
+        echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
+
+    - uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.meta.outputs.tag }}
+        name: ${{ steps.meta.outputs.tag }}
+        generate_release_notes: true
+        files: ${{ steps.package.outputs.archive }}

@@ -1,8 +1,8 @@
-name: Release Agent
+name: Release Deploy
 
 on:
   push:
-    tags: ["elevon-agent-v*"]
+    tags: ["elevon-deploy-v*"]
   workflow_dispatch:
     inputs:
       version:
@@ -19,5 +19,5 @@ jobs:
     steps:
       - uses: ./.github/actions/crate-release
         with:
-          name: elevon-agent
+          name: elevon-deploy
           version: ${{ inputs.version }}
