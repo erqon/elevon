@@ -209,7 +209,7 @@ pub async fn run_image(
     .await?;
 
     let container_id = async {
-        let container_name = format!("{}-{}", &app_config.name, &deployment.id);
+        let container_name = format!("{}-{}", app_config.name, deployment.id);
         let options = CreateContainerOptionsBuilder::new()
             .name(&container_name)
             .build();
@@ -223,7 +223,7 @@ pub async fn run_image(
 
         if let Some(web_app) = &app_config.web_app {
             port_bindings.insert(
-                format!("{}/tcp", &web_app.port),
+                format!("{}/tcp", web_app.port),
                 Some(vec![PortBinding {
                     host_ip: Some("0.0.0.0".to_string()),
                     host_port: Some(port.to_string()),
