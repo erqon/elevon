@@ -24,7 +24,7 @@ pub async fn setup(turso_remote_url: Option<String>) -> Result<()> {
 
     let auth_keys = AuthKey::all().exec(&mut agent_db.db).await?;
 
-    if auth_keys.len() > 0 {
+    if !auth_keys.is_empty() {
         tracing::info!("Auth key already exist, run 'agent key list' to view the keys");
     } else {
         crate::cli::key::create("Default", env.turso_remote_url).await?;

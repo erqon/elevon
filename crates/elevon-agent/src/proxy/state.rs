@@ -11,7 +11,7 @@ use pingora::lb::{LoadBalancer, health_check::TcpHealthCheck, selection::RoundRo
 
 use crate::proxy::types::{BackendRuntime, RouteConfig, RouteState};
 
-const API_BASE_URL: &'static str = "http://localhost:3000";
+const API_BASE_URL: &str = "http://localhost:3000";
 
 pub struct ProxyState {
     pub docker: Arc<bollard::Docker>,

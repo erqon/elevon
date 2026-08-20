@@ -75,7 +75,7 @@ impl AppState {
                 id: deployment.id.to_string(),
                 container_id,
                 name: app.name.clone(),
-                domain: domain,
+                domain,
                 port: deployment.port,
                 state,
             };
@@ -107,5 +107,11 @@ impl SocketClient {
         let payload = serde_json::to_vec(&serde_json::json!(event))?;
         stream.write_all(&payload).await?;
         Ok(())
+    }
+}
+
+impl Default for SocketClient {
+    fn default() -> Self {
+        Self::new()
     }
 }

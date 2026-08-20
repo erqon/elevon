@@ -16,17 +16,12 @@ pub struct AppEnvSetPayload {
     pub apps: Vec<AppEnvPayload>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum AppRole {
+    #[default]
     Web,
     Worker,
-}
-
-impl std::default::Default for AppRole {
-    fn default() -> Self {
-        AppRole::Web
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -33,10 +33,10 @@ impl App {
             return Ok(app);
         }
 
-        let domain: Option<String> = match &payload.web_app {
-            Some(web_app) => Some(web_app.domain.clone()),
-            None => None,
-        };
+        let domain: Option<String> = payload
+            .web_app
+            .as_ref()
+            .map(|web_app| web_app.domain.clone());
 
         let app = toasty::create!(App {
             name: payload.name.to_string(),
