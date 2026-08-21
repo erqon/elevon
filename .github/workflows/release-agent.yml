@@ -18,7 +18,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/crate-release
+
+      - uses: ./.github/actions/build-crate
+        id: build
         with:
           name: elevon-agent
           version: ${{ inputs.version }}
+
+      - uses: ./.github/actions/release-crate
+        with:
+          tag: ${{ steps.build.outputs.tag }}
+          name: ${{ steps.build.outputs.tag }}
+          files: ${{ steps.build.outputs.archive }}
