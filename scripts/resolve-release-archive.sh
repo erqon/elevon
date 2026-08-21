@@ -13,8 +13,8 @@ case "$os" in
 esac
 
 case "$arch" in
-    x86_64|amd64) arch="x86_64" ;;
-    arm64|aarch64) arch="aarch64" ;;
+    x86_64 | amd64) arch="x86_64" ;;
+    arm64 | aarch64) arch="aarch64" ;;
     *) echo "unsupported arch: $arch" >&2; exit 1 ;;
 esac
 

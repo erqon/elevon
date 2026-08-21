@@ -16,7 +16,7 @@ outputs:
     value: ${{ steps.meta.outputs.tag }}
   archive:
     description: Built archive filename
-    value: ${{ steps.package.outputs.archive }}
+    value: ${{ steps.resolve.outputs.archive }}
 
 runs:
   using: composite
@@ -46,6 +46,8 @@ runs:
           echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
         fi
 
+    - uses: Swatinem/rust-cache@v2
+
     - name: Build
       shell: bash
       run: cargo build -p "${{ inputs.name }}" --release
@@ -70,7 +72,6 @@ runs:
         echo "bin=$BIN" >> "$GITHUB_OUTPUT"
 
     - name: Package
-      id: package
       shell: bash
       run: |
         ARCHIVE="${{ steps.resolve.outputs.archive }}"
