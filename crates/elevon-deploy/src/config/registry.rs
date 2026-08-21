@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RegistryConfig {
+    #[serde(default = "RegistryConfig::default_server")]
     pub server: String,
     pub username: String,
     pub password: String,
@@ -17,6 +18,10 @@ impl RegistryConfig {
             ("REGISTRY_USERNAME".to_string(), self.username.clone()),
             ("REGISTRY_PASSWORD".to_string(), self.password.clone()),
         ])
+    }
+
+    fn default_server() -> String {
+        "ghcr.io".to_string()
     }
 }
 
