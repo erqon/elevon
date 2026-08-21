@@ -20,9 +20,12 @@ Markers for features before the release
 - [ ] Deployment history and audit trail
 - [ ] Multi-environment support (dev/stage/prod)
 - [ ] Hooks system (pre/post deploy scripts) **(N)**
+- [ ] Fix/add install script **(N/P)**
 
 ### Elevon Deploy
 
+- [ ] Init command **(M)**
+- [ ] Fix/add install script **(N/P)**
 - [ ] App runtime configuration **(M)**
 - [ ] Deploy rollback command **(M)**
 - [ ] Interactive rollback selector (choose previous release) **(N)**
