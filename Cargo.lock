@@ -1523,22 +1523,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "elevon-proxy"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "axum",
- "clap",
- "elevon-http",
- "pingora",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "elevon-server"
 version = "0.1.0"
 dependencies = [
