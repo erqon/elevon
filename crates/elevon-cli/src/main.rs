@@ -1,5 +1,5 @@
 use clap::Parser;
-use elevon_cli::{cli::Cli, commands::Commands};
+use elevon_cli::cli::Cli;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -7,10 +7,9 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
-    match cli.command {
-        Commands::Deploy { args, command } => {
-            elevon_deploy::run_deploy_cli(args, command).await?;
-        }
+    if let Some(command) = cli.deploy_command {
+        let args = cli.deploy_args.unwrap_or_default();
+        elevon_deploy::run_deploy_cli(args, command).await?;
     }
 
     Ok(())

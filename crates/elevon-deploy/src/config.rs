@@ -82,13 +82,9 @@ impl Config {
             .collect()
     }
 
-    pub async fn run_release(
-        &self,
-        agent_client: &AgentClient,
-        app_names: &[String],
-    ) -> Result<()> {
+    pub async fn run_deploy(&self, agent_client: &AgentClient, app_names: &[String]) -> Result<()> {
         let selected = self.get_selected_apps(app_names)?;
-        agent_client.push_release(self, selected).await?;
+        agent_client.push_deploy(self, selected).await?;
         Ok(())
     }
 }

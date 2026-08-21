@@ -7,7 +7,7 @@ use crate::{
     config::{AppConfig, registry::RegistryConfig},
 };
 
-#[derive(Subcommand)]
+#[derive(Debug, Subcommand)]
 pub enum EnvCommands {
     Push,
 }

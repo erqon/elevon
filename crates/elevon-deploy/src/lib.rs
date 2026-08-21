@@ -25,8 +25,8 @@ pub async fn run_deploy_cli(arg: DeployArgs, command: Commands) -> anyhow::Resul
         Commands::Push => {
             config.run_push().await?;
         }
-        Commands::Release(args) => {
-            config.run_release(&agent_client, &args.apps).await?;
+        Commands::Deploy(args) => {
+            config.run_deploy(&agent_client, &args.apps).await?;
         }
         Commands::Env { args, subcommand } => {
             let selected = config.get_selected_apps(&args.apps)?;

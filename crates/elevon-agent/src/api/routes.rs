@@ -1,6 +1,6 @@
+mod deploy;
 mod env;
 mod proxy;
-mod release;
 
 use std::sync::Arc;
 
@@ -14,7 +14,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/health", get(health))
         .nest("/env", env::router())
-        .nest("/deploy", release::router())
+        .nest("/deploy", deploy::router())
         .nest("/proxy", proxy::router())
         .with_state(state)
         .layer(from_fn(elevon_http::error::log_app_errors))

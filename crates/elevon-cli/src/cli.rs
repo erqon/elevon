@@ -3,8 +3,6 @@ use clap::{
     builder::styling::{AnsiColor, Styles},
 };
 
-use crate::commands::Commands;
-
 const STYLES: Styles = Styles::styled()
     .header(AnsiColor::Yellow.on_default())
     .usage(AnsiColor::Green.on_default())
@@ -17,9 +15,13 @@ const STYLES: Styles = Styles::styled()
     version,
     about,
     long_about = "Elevon is a zero-SSH, agent-driven tool for deploying and managing containers on remote VMs.",
-    styles = STYLES
+    styles = STYLES,
+    arg_required_else_help = true
 )]
 pub struct Cli {
+    #[command(flatten)]
+    pub deploy_args: Option<elevon_deploy::cli::DeployArgs>,
+
     #[command(subcommand)]
-    pub command: Commands,
+    pub deploy_command: Option<elevon_deploy::cli::Commands>,
 }

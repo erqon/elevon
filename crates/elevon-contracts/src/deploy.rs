@@ -40,7 +40,7 @@ pub struct AppPayload {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct AppReleasePayload {
+pub struct AppDeployPayload {
     pub apps: Vec<AppPayload>,
 }
 
