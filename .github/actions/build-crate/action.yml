@@ -51,6 +51,7 @@ runs:
       run: cargo build -p "${{ inputs.name }}" --release
 
     - name: Resolve build archive
+      id: resolve
       shell: bash
       run: |
         CRATE="${{ inputs.name }}"
@@ -72,5 +73,8 @@ runs:
       id: package
       shell: bash
       run: |
+        ARCHIVE="${{ steps.resolve.outputs.archive }}"
+        BIN="${{ steps.resolve.outputs.bin }}"
+
         cp "target/release/${{ inputs.name }}" "$BIN"
         tar -czf "$ARCHIVE" "$BIN"

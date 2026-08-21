@@ -8,8 +8,7 @@ os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 arch="$(uname -m)"
 
 case "$os" in
-    linux) os="linux" ;;
-    darwin) os="darwin" ;;
+    linux | darwin) ;;
     *) echo "unsupported os: $os" >&2; exit 1 ;;
 esac
 
