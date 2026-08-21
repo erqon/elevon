@@ -5,6 +5,10 @@ inputs:
   name:
     description: Crate name
     required: true
+  binary:
+    description: Binary name
+    required: false
+    default: ""
   version:
     description: Version number without the v prefix
     required: false
@@ -76,6 +80,7 @@ runs:
       run: |
         ARCHIVE="${{ steps.resolve.outputs.archive }}"
         BIN="${{ steps.resolve.outputs.bin }}"
+        BINARY_NAME="${{ inputs.binary != '' && inputs.binary || inputs.name }}"
 
-        cp "target/release/${{ inputs.name }}" "$BIN"
+        cp "target/release/${BINARY_NAME}" "$BIN"
         tar -czf "$ARCHIVE" "$BIN"

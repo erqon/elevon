@@ -12,6 +12,7 @@ on:
 
 env:
   CRATE_NAME: elevon-cli
+  BINARY_NAME: elevon
 
 permissions:
   contents: write
@@ -29,6 +30,7 @@ jobs:
         id: build
         with:
           name: ${{ env.CRATE_NAME }}
+          binary: ${{ env.BINARY_NAME }}
           version: ${{ inputs.version }}
 
       - name: Upload artifact
