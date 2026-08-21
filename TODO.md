@@ -24,7 +24,7 @@ Markers for features before the release
 
 ### Elevon Deploy
 
-- [ ] Init command **(M)**
+- [x] Init command **(M)**
 - [ ] Fix/add install script **(N/P)**
 - [ ] App runtime configuration **(M)**
 - [ ] Deploy rollback command **(M)**

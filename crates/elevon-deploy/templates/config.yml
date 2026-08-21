@@ -1,0 +1,51 @@
+name: project-name
+image: project/project-name
+
+# Config values below can be read from environment variables marked with $VALUE_NAME:
+# - agent.url
+# - agent.key
+# - registry.username
+# - registry.password
+
+elevon:
+  agent:
+    url: $AGENT_URL
+    key: $AGENT_KEY
+
+registry:
+  # server: registry-server-url  # Defaults to `ghcr.io`
+  username: $GHCR_USERNAME
+  password: $GHCR_PASSWORD
+
+routing:
+  domain: app.example.com
+  port: 3000
+
+# Directly uses the Dockerfile at specified destination.
+# If it's in a custom path, you can use following:
+# 
+# build:
+#   path: ./dev
+#   dockerfile: ./Dockerfile.dev
+# 
+build: ../
+
+# Environment variables that will be available to the container at runtime.
+# vars: Can be hard-coded values or values read from environment variables with a name change.
+# inherit: Will be inherited directly from environment variables and used with the same name.
+env:
+  vars:
+    PORT: 3000
+    API_URL: $BASE_API_URL
+  inherit:
+    - DATABASE_URL
+
+# (Optional) By default, a single app named "web" will be created and routed to the configured domain.
+# You can define multiple apps that share the same container image.
+# Use the `worker` role to bypass domain routing and run as a standard background container.
+# 
+# apps:
+#   api:
+#     role: web
+#   worker:
+#     role: worker

@@ -13,12 +13,16 @@ pub mod image;
 pub mod util;
 
 pub async fn run_deploy_cli(arg: DeployArgs, command: Commands) -> anyhow::Result<()> {
-    let config = Config::from_file(&arg.config)?;
+    if matches!(command, Commands::Init) {
+        return cli::init::run();
+    }
 
+    let config = Config::from_file(&arg.config)?;
     let agent_credentials = config.elevon.agent.resolved_credentials()?;
     let agent_client = AgentClient::new(&agent_credentials.url, &agent_credentials.key)?;
 
     match command {
+        Commands::Init => unreachable!(),
         Commands::Build(args) => {
             config.run_build(&arg.config, args.push).await?;
         }

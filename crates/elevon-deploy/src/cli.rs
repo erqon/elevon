@@ -1,4 +1,5 @@
 pub mod env;
+pub mod init;
 
 use clap::{
     Args, Parser, Subcommand,
@@ -48,6 +49,9 @@ impl Default for DeployArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
+    #[command(about = "Initialize a configuration file template")]
+    Init,
+
     #[command(about = "Build container images from the deploy config")]
     Build(BuildArgs),
 

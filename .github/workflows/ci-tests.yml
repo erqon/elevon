@@ -20,6 +20,7 @@ concurrency:
 
 jobs:
   rust-checks:
+    if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -39,11 +40,12 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --workspace --all-features
 
-      # TODO: Uncomment in the future when tests are added
+      # TODO: Uncomment when tests are added
       # - name: cargo test
       #   run: cargo test --workspace --all-targets --all-features
 
   deno-checks:
+    if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -60,5 +62,6 @@ jobs:
       - name: Lint
         run: deno lint
 
+    # TODO: Uncomment when tests are added
     #   - name: Test
     #     run: deno test
