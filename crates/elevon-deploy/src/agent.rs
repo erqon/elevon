@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use elevon_config::ResolveEnvCredentials;
 use elevon_contracts::deploy::{
-    AppEnvPayload, AppEnvSetPayload, AppPayload, AppReleasePayload, AppRole, WebApp,
+    AppDeployPayload, AppEnvPayload, AppEnvSetPayload, AppPayload, AppRole, WebApp,
     format_app_env_name, log_stream_events,
 };
 use reqwest::{
@@ -117,16 +117,12 @@ impl AgentClient {
         Ok(())
     }
 
-    pub async fn push_release(
-        &self,
-        config: &Config,
-        apps: Vec<(String, AppConfig)>,
-    ) -> Result<()> {
+    pub async fn push_deploy(&self, config: &Config, apps: Vec<(String, AppConfig)>) -> Result<()> {
         let url = self.absolute_url("/deploy");
         let headers = self.headers();
 
         let app_names: Vec<_> = apps.iter().map(|(key, _)| key).collect();
-        tracing::info!("Releasing apps: {:?}", app_names);
+        tracing::info!("Deploying apps: {:?}", app_names);
 
         let apps_payload: Vec<AppPayload> = apps
             .iter()
@@ -153,7 +149,7 @@ impl AgentClient {
             })
             .collect();
 
-        let payload = serde_json::json!(AppReleasePayload { apps: apps_payload });
+        let payload = serde_json::json!(AppDeployPayload { apps: apps_payload });
 
         let event_stream = self
             .client

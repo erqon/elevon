@@ -27,7 +27,7 @@ pub struct Cli {
     pub command: Commands,
 }
 
-#[derive(Args, Clone, Debug)]
+#[derive(Debug, Args, Clone)]
 pub struct DeployArgs {
     #[arg(
         short,
@@ -38,7 +38,15 @@ pub struct DeployArgs {
     pub config: String,
 }
 
-#[derive(Subcommand)]
+impl Default for DeployArgs {
+    fn default() -> Self {
+        Self {
+            config: ".elevon/deploy.yml".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Subcommand)]
 pub enum Commands {
     #[command(about = "Build container images from the deploy config")]
     Build(BuildArgs),
@@ -47,7 +55,7 @@ pub enum Commands {
     Push,
 
     #[command(about = "Deploy applications")]
-    Release(AppArgs),
+    Deploy(AppArgs),
 
     #[command(about = "Env specific commands")]
     Env {
@@ -62,13 +70,13 @@ pub enum Commands {
     Check,
 }
 
-#[derive(Args)]
+#[derive(Debug, Args)]
 pub struct BuildArgs {
     #[arg(long, short, help = "Push the image to the registry")]
     pub push: bool,
 }
 
-#[derive(Args)]
+#[derive(Debug, Args)]
 pub struct AppArgs {
     #[arg(long = "app", help = "Limit the operation to the specified app(s)")]
     pub apps: Vec<String>,

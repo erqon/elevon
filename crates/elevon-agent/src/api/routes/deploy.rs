@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::{Json, Router, extract::State, routing::post};
-use elevon_contracts::deploy::{AppReleasePayload, StreamEvent};
+use elevon_contracts::deploy::{AppDeployPayload, StreamEvent};
 
 use crate::{
     api::{
@@ -13,13 +13,13 @@ use crate::{
 };
 
 pub fn router() -> Router<Arc<AppState>> {
-    Router::new().route("/", post(release))
+    Router::new().route("/", post(deploy))
 }
 
-async fn release(
+async fn deploy(
     _: AuthKey,
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<AppReleasePayload>,
+    Json(payload): Json<AppDeployPayload>,
 ) -> StreamResponse {
     let (tx, rx) = create_stream_channel();
 
