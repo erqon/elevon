@@ -1,14 +1,17 @@
-name: Release Deploy
+name: Release Cli
 
 on:
   push:
-    tags: ["elevon-deploy-v*"]
+    tags: ["elevon-cli-v*"]
   workflow_dispatch:
     inputs:
       version:
         description: "Version (e.g. 0.1.0)"
         required: true
         type: string
+
+env:
+  CRATE_NAME: elevon-cli
 
 permissions:
   contents: write
@@ -25,13 +28,13 @@ jobs:
       - uses: ./.github/actions/build-crate
         id: build
         with:
-          name: elevon-deploy
+          name: ${{ env.CRATE_NAME }}
           version: ${{ inputs.version }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: elevon-deploy-linux
+          name: ${{ env.CRATE_NAME }}-linux
           path: ${{ steps.build.outputs.archive }}
 
   release:
@@ -42,7 +45,7 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          pattern: elevon-deploy-*
+          pattern: ${{ env.CRATE_NAME }}-*
           merge-multiple: true
           path: dist
 
