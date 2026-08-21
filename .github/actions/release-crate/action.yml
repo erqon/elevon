@@ -1,0 +1,25 @@
+name: Release
+description: Composite action for releasing builds
+
+inputs:
+  tag:
+    description: Tag name
+    required: true
+  name:
+    description: Release name
+    required: true
+  files:
+    description: Release files
+    required: true
+    type: string
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v7
+    - uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ inputs.name }}
+        name: ${{ inputs.name }}
+        generate_release_notes: true
+        files: ${{ inputs.files }}
