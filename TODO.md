@@ -23,6 +23,7 @@ Markers for features before the release
 
 ### Elevon Deploy
 
+- [ ] Init command **(M)**
 - [ ] App runtime configuration **(M)**
 - [ ] Deploy rollback command **(M)**
 - [ ] Interactive rollback selector (choose previous release) **(N)**
