@@ -39,7 +39,7 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --workspace --all-features
 
-      # TODO: Uncomment in the future when tests are added
+      # TODO: Uncomment when tests are added
       # - name: cargo test
       #   run: cargo test --workspace --all-targets --all-features
 
@@ -60,5 +60,6 @@ jobs:
       - name: Lint
         run: deno lint
 
+    # TODO: Uncomment when tests are added
     #   - name: Test
     #     run: deno test
