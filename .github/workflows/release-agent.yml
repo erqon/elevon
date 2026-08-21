@@ -28,5 +28,4 @@ jobs:
       - uses: ./.github/actions/release-crate
         with:
           tag: ${{ steps.build.outputs.tag }}
-          name: ${{ steps.build.outputs.tag }}
           files: ${{ steps.build.outputs.archive }}
