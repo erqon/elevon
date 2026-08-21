@@ -1445,7 +1445,10 @@ dependencies = [
 name = "elevon-cli"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap",
+ "elevon-deploy",
+ "elevon-http",
  "thiserror 2.0.20",
  "tokio",
 ]

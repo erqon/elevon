@@ -14,6 +14,7 @@ members = [
 [workspace.dependencies]
 elevon-config = { path = "./crates/elevon-config" }
 elevon-contracts = { path = "./crates/elevon-contracts" }
+elevon-deploy = { path = "./crates/elevon-deploy" }
 elevon-fs = { path = "./crates/elevon-fs" }
 elevon-http = { path = "./crates/elevon-http" }
 

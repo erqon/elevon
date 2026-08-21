@@ -8,6 +8,10 @@ name = "elevon"
 path = "src/main.rs"
 
 [dependencies]
+elevon-deploy.workspace = true
+elevon-http.workspace = true
+
+anyhow.workspace = true
 clap.workspace = true
 tokio.workspace = true
 thiserror.workspace = true

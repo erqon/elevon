@@ -1,9 +1,9 @@
 use clap::{
-    Parser, Subcommand,
+    Parser,
     builder::styling::{AnsiColor, Styles},
 };
 
-use crate::commands::{DashboardCommands, server::ServerCommands};
+use crate::commands::Commands;
 
 const STYLES: Styles = Styles::styled()
     .header(AnsiColor::Yellow.on_default())
@@ -16,27 +16,10 @@ const STYLES: Styles = Styles::styled()
     name = "elevon",
     version,
     about,
-    long_about = "elevon: A Pingora-powered edge proxy featuring a unified dashboard to monitor, manage, and load-balance server clusters with zero downtime, and a zero-SSH, agent-driven container orchestrator.",
+    long_about = "Elevon is a zero-SSH, agent-driven tool for deploying and managing containers on remote VMs.",
     styles = STYLES
 )]
 pub struct Cli {
-    #[arg(
-        short,
-        long,
-        default_value = "elevon.yml",
-        help = "Path to the config file"
-    )]
-    config: Option<String>,
-
     #[command(subcommand)]
-    command: Commands,
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    #[command(subcommand, version = "0.1.0")]
-    Dashboard(DashboardCommands),
-
-    #[command(subcommand, name = "serve", version = "0.1.0")]
-    Server(ServerCommands),
+    pub command: Commands,
 }

@@ -20,6 +20,15 @@ const STYLES: Styles = Styles::styled()
     styles = STYLES
 )]
 pub struct Cli {
+    #[command(flatten)]
+    pub args: DeployArgs,
+
+    #[command(subcommand)]
+    pub command: Commands,
+}
+
+#[derive(Args, Clone, Debug)]
+pub struct DeployArgs {
     #[arg(
         short,
         long,
@@ -27,9 +36,6 @@ pub struct Cli {
         help = "Path to the deploy configuration file"
     )]
     pub config: String,
-
-    #[command(subcommand)]
-    pub command: Commands,
 }
 
 #[derive(Subcommand)]
