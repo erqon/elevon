@@ -5,9 +5,6 @@ inputs:
   tag:
     description: Tag name
     required: true
-  name:
-    description: Release name
-    required: true
   files:
     description: Release files
     required: true
@@ -19,7 +16,7 @@ runs:
     - uses: actions/checkout@v7
     - uses: softprops/action-gh-release@v3
       with:
-        tag_name: ${{ inputs.name }}
-        name: ${{ inputs.name }}
+        tag_name: ${{ inputs.tag }}
+        name: ${{ inputs.tag }}
         generate_release_notes: true
         files: ${{ inputs.files }}

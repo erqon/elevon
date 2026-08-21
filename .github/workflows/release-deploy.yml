@@ -18,24 +18,33 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.build.outputs.tag }}
-      archive: ${{ steps.build.outputs.archive }}
 
     steps:
       - uses: actions/checkout@v7
+
       - uses: ./.github/actions/build-crate
         id: build
         with:
           name: elevon-deploy
           version: ${{ inputs.version }}
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: elevon-deploy-linux
+          path: ${{ steps.build.outputs.archive }}
 
   release:
     needs: [build-linux]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: elevon-deploy-*
+          merge-multiple: true
+          path: dist
+
       - uses: ./.github/actions/release-crate
         with:
           tag: ${{ needs.build-linux.outputs.tag }}
-          name: ${{ needs.build-linux.outputs.tag }}
-          files: |
-            ${{ needs.build-linux.outputs.archive }}
+          files: dist/*.tar.gz
