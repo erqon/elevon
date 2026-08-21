@@ -2,25 +2,33 @@
 
 Elevon features todo list
 
-## Elevon Agent
+Markers for features before the release
 
-- [ ] TLS termination with Let's Encrypt or user-provided certificates
-- [ ] Streaming application logs
-- [ ] Metrics pipeline (CPU, mem, req latency, error rate)
+- **M** - Must have
+- **N** - Nice-to-Have
+- **P** - Post / Defer
+
+## Beta release (est. 1st Sep 2026)
+
+### Elevon Agent
+
+- [ ] TLS termination with Let's Encrypt or user-provided certificates **(M) - (user provided at least)**
+- [ ] Streaming application logs **(M)**
+- [ ] Metrics pipeline (CPU, mem, req latency, error rate) **(M)**
 - [ ] Running infrastructure Docker services (Postgres, Redis, etc.)
 - [ ] Zero-downtime rollback
 - [ ] Deployment history and audit trail
 - [ ] Multi-environment support (dev/stage/prod)
-- [ ] Hooks system (pre/post deploy scripts)
+- [ ] Hooks system (pre/post deploy scripts) **(N)**
 
-## Elevon Deploy
+### Elevon Deploy
 
-- [ ] App runtime configuration
-- [ ] Deploy rollback command
-- [ ] Interactive rollback selector (choose previous release)
-- [ ] Release snapshot export/import (images + env + runtime config)
-- [ ] Dry-run mode (validate config and rollout plan without deploying)
-- [ ] Deploy lock (allow only one deployment per app at a time)
+- [ ] App runtime configuration **(M)**
+- [ ] Deploy rollback command **(M)**
+- [ ] Interactive rollback selector (choose previous release) **(N)**
+- [ ] Release snapshot export/import (images + env + runtime config) **(M)**
+- [ ] Dry-run mode (validate config and rollout plan without deploying) **(M)**
+- [ ] Deploy lock (allow only one deployment per app at a time) **(M)**
 - [ ] Multi-app support across multiple config files combined in a single config file
 - [ ] Deploy multiple replicas of the same app from one config (load balancing)
 - [ ] Health-check gated promotion (switch traffic only after new container is healthy)
