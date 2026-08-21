@@ -14,7 +14,7 @@ permissions:
   contents: write
 
 jobs:
-  build-ubuntu:
+  build-linux:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.build.outputs.tag }}
@@ -29,13 +29,13 @@ jobs:
           version: ${{ inputs.version }}
 
   release:
-    needs: [build-ubuntu]
+    needs: [build-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/release-crate
         with:
-          tag: ${{ needs.build-ubuntu.outputs.tag }}
-          name: ${{ needs.build-ubuntu.outputs.tag }}
+          tag: ${{ needs.build-linux.outputs.tag }}
+          name: ${{ needs.build-linux.outputs.tag }}
           files: |
-            ${{ needs.build-ubuntu.outputs.archive }}
+            ${{ needs.build-linux.outputs.archive }}
