@@ -53,7 +53,7 @@ jobs:
           echo "== dist tree =="
           find dist -maxdepth 3 -type f -o -type d | sort
 
-      - uses: ./.github/actions/releas1e-crate
+      - uses: ./.github/actions/release-crate
         with:
           tag: ${{ needs.build-linux.outputs.tag }}
           files: dist/*.tar.gz
