@@ -20,6 +20,7 @@ concurrency:
 
 jobs:
   rust-checks:
+    if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -44,6 +45,7 @@ jobs:
       #   run: cargo test --workspace --all-targets --all-features
 
   deno-checks:
+    if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
