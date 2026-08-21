@@ -25,15 +25,15 @@ runs:
       with:
         fetch-depth: 0
 
-    # - name: Check its main branch
-    #   shell: bash
-    #   run: |
-    #     git fetch origin main
-    #     if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-    #       test "${{ github.ref }}" = "refs/heads/main"
-    #     else
-    #       git merge-base --is-ancestor "${{ github.sha }}" origin/main
-    #     fi
+    - name: Check its main branch
+      shell: bash
+      run: |
+        git fetch origin main
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          test "${{ github.ref }}" = "refs/heads/main"
+        else
+          git merge-base --is-ancestor "${{ github.sha }}" origin/main
+        fi
 
     - name: Resolve tag
       id: meta

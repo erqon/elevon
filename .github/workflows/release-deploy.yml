@@ -27,7 +27,7 @@ jobs:
         with:
           name: elevon-deploy
           version: ${{ inputs.version }}
-      
+
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
@@ -45,13 +45,6 @@ jobs:
           pattern: elevon-deploy-*
           merge-multiple: true
           path: dist
-
-      - name: Debug downloaded artifacts
-        run: |
-          echo "== dist =="
-          ls -la
-          echo "== dist tree =="
-          find dist -maxdepth 3 -type f -o -type d | sort
 
       - uses: ./.github/actions/release-crate
         with:
