@@ -100,23 +100,6 @@ pub fn get_socket_path(delete: bool) -> PathBuf {
     path
 }
 
-pub fn get_tls_file(project_name: &str, t: TlsType) -> Result<PathBuf> {
-    let file_name = match t {
-        TlsType::Cert => "cert.pem",
-        TlsType::Key => "key.pem",
-    };
-
-    let path = AgentPath::ProjectTlsDir(format!("{project_name}/{file_name}")).ensure()?;
-
-    Ok(path)
-}
-
-pub fn write_tls_file(project_name: &str, content: &str, t: TlsType) -> Result<()> {
-    let path = get_tls_file(project_name, t)?;
-    std::fs::write(path, content)?;
-    Ok(())
-}
-
 pub fn get_proxy_systemd_content(exec: &str) -> String {
     format!(
         "
@@ -192,6 +175,33 @@ fn write_env_file(path: impl AsRef<Path>, env: &HashMap<String, String>) -> Resu
     }
 
     std::fs::write(path, contents)?;
+    Ok(())
+}
+
+pub fn get_tls_file(project_name: &str, t: TlsType, is_project: Option<bool>) -> Result<PathBuf> {
+    let file_dir_name = match is_project {
+        Some(_) => format!("projects/{project_name}"),
+        None => format!("{project_name}"),
+    };
+
+    let file_name = match t {
+        TlsType::Cert => "cert.pem",
+        TlsType::Key => "key.pem",
+    };
+
+    let path = AgentPath::ProjectTlsDir(format!("{file_dir_name}/{file_name}")).ensure()?;
+
+    Ok(path)
+}
+
+pub fn write_tls_file(
+    project_name: &str,
+    content: &[u8],
+    t: TlsType,
+    is_project: Option<bool>,
+) -> Result<()> {
+    let path = get_tls_file(project_name, t, is_project)?;
+    std::fs::write(path, content)?;
     Ok(())
 }
 

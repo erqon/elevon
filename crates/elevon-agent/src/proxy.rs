@@ -19,7 +19,10 @@ use pingora::{
     upstreams::peer::HttpPeer,
 };
 
-use crate::proxy::{socket::SocketControl, state::ProxyState};
+use crate::{
+    cli::ProxyArgs,
+    proxy::{socket::SocketControl, state::ProxyState, types::RouteKind},
+};
 
 pub struct RequestCtx {
     pub container_id: Option<String>,
@@ -48,6 +51,23 @@ impl ProxyHttp for Proxy {
             .split(':')
             .next()
             .unwrap_or("");
+
+        let routes = self.state.routes.load();
+
+        if let Some(route) = routes
+            .get(host)
+            .and_then(|routes| routes.iter().find(|route| route.kind == RouteKind::Agent))
+        {
+            let agent_addr = format!("127.0.0.1:{}", route.port)
+                .parse()
+                .expect("agent route must have a valid address");
+
+            return Ok(Box::new(HttpPeer::new(
+                SocketAddr::Inet(agent_addr),
+                false,
+                String::new(),
+            )));
+        }
 
         let lbs = self.state.lbs.load();
         let Some(lb) = lbs.get(host) else {
@@ -155,8 +175,8 @@ impl BackgroundService for DrainJanitor {
     }
 }
 
-pub fn run_proxy() {
-    let proxy_state = ProxyState::new();
+pub fn run_proxy(args: ProxyArgs) {
+    let proxy_state = ProxyState::new(&args);
 
     let mut server = Server::new(None).unwrap();
     server.bootstrap();

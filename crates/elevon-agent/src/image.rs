@@ -23,7 +23,7 @@ use crate::{
         state::AppState,
         stream::{StreamSender, emit},
     },
-    proxy::types::{AgentEvent, RouteConfig, RouteState},
+    proxy::types::{AgentEvent, RouteConfig, RouteKind, RouteState},
 };
 
 static ALLOCATED_PORTS: LazyLock<RwLock<HashSet<u16>>> =
@@ -43,7 +43,7 @@ pub async fn pull_image(
     )
     .await;
 
-    // FIX: This still creates empty env file in case the project has a single app with no apps:
+    // TODO: Fix - this still creates empty env file in case the project has a single app with no apps:
     let project_env = load_app_env(&app_config.project, None)?;
 
     let (registry_server, registry_username, registry_password) = match (
@@ -257,6 +257,7 @@ pub async fn deploy_apps(
                         port,
                         state: RouteState::Draining,
                         container_id,
+                        kind: RouteKind::App,
                     };
 
                     let drain_stream = state.socket_client.connect().await?;
@@ -283,6 +284,7 @@ pub async fn deploy_apps(
                 port,
                 state: RouteState::Active,
                 container_id,
+                kind: RouteKind::App,
             };
 
             let upsert_stream = state.socket_client.connect().await?;

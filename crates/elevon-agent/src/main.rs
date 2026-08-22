@@ -27,8 +27,8 @@ fn run() -> Result<()> {
         Commands::Api => {
             run_async(elevon_agent::api::run_api_server(&env)).context("api command failed")?;
         }
-        Commands::Proxy => {
-            elevon_agent::proxy::run_proxy();
+        Commands::Proxy(args) => {
+            elevon_agent::proxy::run_proxy(args);
         }
         Commands::InstallSystemd(args) => {
             elevon_agent::setup::install_systemd(args.enable)

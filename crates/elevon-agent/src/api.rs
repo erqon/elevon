@@ -14,7 +14,7 @@ use crate::env::ElevonEnv;
 pub async fn run_api_server(env: &ElevonEnv) -> Result<()> {
     let state = Arc::new(state::AppState::new(env).await?);
     let router = routes::create_router(state);
-    let app = Router::new().nest("/api", router);
+    let app = Router::new().nest("/", router);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await

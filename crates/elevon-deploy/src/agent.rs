@@ -39,7 +39,7 @@ impl AgentClient {
 
     fn absolute_url(&self, endpoint: &str) -> Url {
         self.base_url
-            .join(&format!("/api{}", endpoint))
+            .join(&format!("/{}", endpoint))
             .expect("Failed to append endpoint")
     }
 

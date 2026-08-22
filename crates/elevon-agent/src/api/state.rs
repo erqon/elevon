@@ -10,7 +10,7 @@ use tokio::sync::RwLock;
 use crate::api::db::AgentDb;
 use crate::api::db::models::{Deployment, DeploymentStatus};
 use crate::env::ElevonEnv;
-use crate::proxy::types::{AgentEvent, RouteConfig, RouteState};
+use crate::proxy::types::{AgentEvent, RouteConfig, RouteKind, RouteState};
 
 pub struct AppState {
     pub agent_db: AgentDb,
@@ -78,6 +78,7 @@ impl AppState {
                 domain,
                 port: deployment.port,
                 state,
+                kind: RouteKind::App,
             };
             routes.push(route_config);
         }

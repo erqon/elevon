@@ -9,14 +9,18 @@ use arc_swap::ArcSwap;
 use dashmap::DashMap;
 use pingora::lb::{LoadBalancer, health_check::TcpHealthCheck, selection::RoundRobin};
 
-use crate::proxy::{
-    tls::DynamicCert,
-    types::{BackendRuntime, RouteConfig, RouteState},
+use crate::{
+    cli::ProxyArgs,
+    proxy::{
+        tls::DynamicCert,
+        types::{BackendRuntime, RouteConfig, RouteKind, RouteState},
+    },
 };
 
 const API_BASE_URL: &str = "http://localhost:3000";
 
 pub struct ProxyState {
+    pub agent_domain: String,
     pub docker: Arc<bollard::Docker>,
     pub routes: ArcSwap<HashMap<String, Vec<RouteConfig>>>,
     pub lbs: ArcSwap<HashMap<String, Arc<LoadBalancer<RoundRobin>>>>,
@@ -26,33 +30,83 @@ pub struct ProxyState {
 }
 
 impl ProxyState {
-    pub fn new() -> Arc<Self> {
-        Arc::new(ProxyState {
+    pub fn new(args: &ProxyArgs) -> Arc<Self> {
+        let dynamic_cert = DynamicCert::new();
+
+        dynamic_cert
+            .setup_agent_certs(&args.agent_domain, &args.tls_cert_path, &args.tls_key_path)
+            .expect("failed to initialize agent TLS");
+
+        let agent_config = RouteConfig {
+            id: "agent".to_string(),
+            container_id: "agent".to_string(),
+            name: "agent".to_string(),
+            domain: args.agent_domain.clone(),
+            port: 3000,
+            state: RouteState::Active,
+            kind: RouteKind::Agent,
+        };
+
+        let proxy_state = ProxyState {
+            agent_domain: args.agent_domain.clone(),
             docker: Arc::new(bollard::Docker::connect_with_defaults().unwrap()),
             routes: ArcSwap::from_pointee(HashMap::new()),
             lbs: ArcSwap::from_pointee(HashMap::new()),
             runtime: DashMap::new(),
-            dynamic_cert: DynamicCert::new(),
+            dynamic_cert,
             api_client: reqwest::Client::new(),
-        })
+        };
+
+        proxy_state.upsert_route(agent_config);
+
+        Arc::new(proxy_state)
     }
 
     pub fn upsert_route(&self, config: RouteConfig) {
         let name = config.domain.clone();
+        let is_agent = config.kind == RouteKind::Agent;
+
+        if config.kind == RouteKind::App && config.domain == self.agent_domain {
+            tracing::warn!(
+                domain = %config.domain,
+                "refusing application route on reserved agent domain"
+            );
+            return;
+        }
+
+        if config.kind == RouteKind::App && config.state != RouteState::Active {
+            tracing::debug!(
+                domain = %config.domain,
+                state = ?config.state,
+                "skipping inactive application route"
+            );
+            return;
+        }
 
         self.routes.rcu(|current| {
             let mut next = current.as_ref().clone();
             let backends = next.entry(name.clone()).or_default();
-            backends.push(config.clone());
+
+            if let Some(existing) = backends.iter_mut().find(|route| route.id == config.id) {
+                *existing = config.clone();
+            } else {
+                backends.push(config.clone());
+            }
+
             next
         });
+
+        if is_agent {
+            tracing::info!(domain = %name, "Agent route registered");
+            return;
+        }
 
         let routes = self.routes.load();
         let backends = routes.get(&name).cloned().unwrap_or_default();
 
         let addrs: Vec<String> = backends
             .iter()
-            .filter(|b| b.state == RouteState::Active)
+            .filter(|b| b.kind == RouteKind::App && b.state == RouteState::Active)
             .map(|b| format!("127.0.0.1:{}", b.port))
             .collect();
 
@@ -70,7 +124,47 @@ impl ProxyState {
         tracing::info!("Routes changed, current state: {:?}", self.routes.load());
     }
 
+    fn rebuild_load_balancer(&self, domain: &str) {
+        let routes = self.routes.load();
+
+        let addrs: Vec<String> = routes
+            .get(domain)
+            .into_iter()
+            .flatten()
+            .filter(|route| route.kind == RouteKind::App && route.state == RouteState::Active)
+            .map(|route| format!("127.0.0.1:{}", route.port))
+            .collect();
+
+        if addrs.is_empty() {
+            self.lbs.rcu(|current| {
+                let mut next = (**current).clone();
+                next.remove(domain);
+                next
+            });
+            return;
+        }
+
+        let mut lb = LoadBalancer::<RoundRobin>::try_from_iter(addrs)
+            .expect("active application routes must have valid addresses");
+
+        lb.set_health_check(TcpHealthCheck::new());
+        lb.parallel_health_check = true;
+
+        let lb = Arc::new(lb);
+
+        self.lbs.rcu(|current| {
+            let mut next = (**current).clone();
+            next.insert(domain.to_string(), lb.clone());
+            next
+        });
+    }
+
     pub fn drain_route(&self, route: RouteConfig) {
+        if route.kind == RouteKind::Agent {
+            tracing::warn!(domain = %route.domain, "refusing to drain agent route");
+            return;
+        }
+
         self.routes.rcu(|current| {
             let mut next = current.as_ref().clone();
             let backends = next.entry(route.domain.clone()).or_default();
@@ -83,6 +177,8 @@ impl ProxyState {
 
             next
         });
+
+        self.rebuild_load_balancer(&route.domain);
 
         let inflight = self
             .runtime
@@ -155,20 +251,39 @@ impl ProxyState {
     pub fn remove_backend(&self, container_id: &str) {
         self.runtime.remove(container_id);
 
+        let domains: Vec<String> = self
+            .routes
+            .load()
+            .iter()
+            .filter(|(_, routes)| {
+                routes
+                    .iter()
+                    .any(|route| route.container_id == container_id)
+            })
+            .map(|(domain, _)| domain.clone())
+            .collect();
+
         self.routes.rcu(|current| {
             let mut next = current.as_ref().clone();
+
             for backends in next.values_mut() {
-                backends.retain(|b| b.container_id != container_id);
+                backends.retain(|backend| backend.container_id != container_id);
             }
+
+            next.retain(|_, backends| !backends.is_empty());
             next
         });
+
+        for domain in domains {
+            self.rebuild_load_balancer(&domain);
+        }
     }
 
     pub async fn load_conainters(&self) -> Result<()> {
         for _ in 0..20 {
             let response = self
                 .api_client
-                .get(format!("{API_BASE_URL}/api/proxy/containers"))
+                .get(format!("{API_BASE_URL}/proxy/containers"))
                 .send()
                 .await;
 
