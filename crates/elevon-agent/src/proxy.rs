@@ -1,5 +1,6 @@
 mod socket;
 mod state;
+mod tls;
 pub mod types;
 
 use std::{sync::Arc, time::Duration};
