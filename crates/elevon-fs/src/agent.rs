@@ -126,6 +126,7 @@ pub fn get_proxy_systemd_content(exec: &str) -> String {
         Wants=elevon-agent-api.service
         
         [Service]
+        User=root
         ExecStart={exec} proxy
         Restart=on-failure
         RuntimeDirectory=elevon-agent

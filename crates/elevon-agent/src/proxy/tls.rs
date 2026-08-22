@@ -9,18 +9,19 @@ use pingora::tls::pkey::{PKey, Private};
 use pingora::tls::ssl::NameType;
 use pingora::tls::x509::X509;
 
+#[derive(Clone)]
 pub struct DynamicCert {
-    pub certs: ArcSwap<HashMap<String, (X509, PKey<Private>)>>,
+    pub certs: Arc<ArcSwap<HashMap<String, (X509, PKey<Private>)>>>,
 }
 
 impl DynamicCert {
-    pub fn new() -> Arc<Self> {
-        Arc::new(Self {
-            certs: ArcSwap::new(Arc::new(HashMap::new())),
-        })
+    pub fn new() -> Self {
+        Self {
+            certs: Arc::new(ArcSwap::new(Arc::new(HashMap::new()))),
+        }
     }
 
-    pub fn add_cert(&mut self, domain: String, cert_path: &str, key_path: &str) -> Result<()> {
+    pub fn add_cert(&self, domain: String, cert_path: &str, key_path: &str) -> Result<()> {
         let cert_bytes = std::fs::read(cert_path)?;
         let cert = X509::from_pem(&cert_bytes)?;
 
@@ -35,6 +36,13 @@ impl DynamicCert {
 
         Ok(())
     }
+
+    fn find_certs_with_hostname(&self, hostname: &str) -> Option<(Arc<X509>, Arc<PKey<Private>>)> {
+        self.certs
+            .load()
+            .get(hostname)
+            .map(|(c, k)| (Arc::new(c.clone()), Arc::new(k.clone())))
+    }
 }
 
 #[async_trait]
@@ -43,11 +51,16 @@ impl pingora::listeners::TlsAccept for DynamicCert {
         use pingora::tls::ext;
 
         if self.certs.load().is_empty() {
-            panic!("No certificates are configured.");
+            tracing::warn!("No certificates are configured.");
+            return;
         }
 
         if let Some(server_name) = ssl.servername(NameType::HOST_NAME) {
-            
+            if let Some((cert, key)) = self.find_certs_with_hostname(server_name) {
+                ext::ssl_use_certificate(ssl, &cert).unwrap();
+                ext::ssl_use_private_key(ssl, &key).unwrap();
+                return;
+            }
         }
     }
 }

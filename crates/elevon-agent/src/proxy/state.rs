@@ -9,7 +9,10 @@ use arc_swap::ArcSwap;
 use dashmap::DashMap;
 use pingora::lb::{LoadBalancer, health_check::TcpHealthCheck, selection::RoundRobin};
 
-use crate::proxy::types::{BackendRuntime, RouteConfig, RouteState};
+use crate::proxy::{
+    tls::DynamicCert,
+    types::{BackendRuntime, RouteConfig, RouteState},
+};
 
 const API_BASE_URL: &str = "http://localhost:3000";
 
@@ -18,6 +21,7 @@ pub struct ProxyState {
     pub routes: ArcSwap<HashMap<String, Vec<RouteConfig>>>,
     pub lbs: ArcSwap<HashMap<String, Arc<LoadBalancer<RoundRobin>>>>,
     pub runtime: DashMap<String, Arc<BackendRuntime>>,
+    pub dynamic_cert: DynamicCert,
     api_client: reqwest::Client,
 }
 
@@ -28,6 +32,7 @@ impl ProxyState {
             routes: ArcSwap::from_pointee(HashMap::new()),
             lbs: ArcSwap::from_pointee(HashMap::new()),
             runtime: DashMap::new(),
+            dynamic_cert: DynamicCert::new(),
             api_client: reqwest::Client::new(),
         })
     }
