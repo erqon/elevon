@@ -21,7 +21,7 @@ use pingora::{
 
 use crate::{
     cli::ProxyArgs,
-    proxy::{socket::SocketControl, state::ProxyState, types::RouteKind},
+    proxy::{socket::SocketControl, state::ProxyState},
 };
 
 pub struct RequestCtx {
@@ -52,13 +52,8 @@ impl ProxyHttp for Proxy {
             .next()
             .unwrap_or("");
 
-        let routes = self.state.routes.load();
-
-        if let Some(route) = routes
-            .get(host)
-            .and_then(|routes| routes.iter().find(|route| route.kind == RouteKind::Agent))
-        {
-            let agent_addr = format!("127.0.0.1:{}", route.port)
+        if host == self.state.agent.domain {
+            let agent_addr = format!("127.0.0.1:{}", self.state.agent.port)
                 .parse()
                 .expect("agent route must have a valid address");
 

@@ -34,8 +34,6 @@ impl EnvCommands {
                 }
 
                 agent_client.push_envs(project_name, selected).await?;
-
-                tracing::info!("Environment variables were pushed successfully!");
             }
         }
 

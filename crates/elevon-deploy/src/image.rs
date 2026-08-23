@@ -1,4 +1,4 @@
-mod progress;
+pub(crate) mod progress;
 pub mod util;
 
 use std::path::Path;

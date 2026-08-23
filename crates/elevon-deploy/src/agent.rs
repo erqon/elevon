@@ -10,7 +10,9 @@ use reqwest::{
     Client, Url,
     header::{AUTHORIZATION, HeaderMap},
 };
+use tracing_indicatif::span_ext::IndicatifSpanExt;
 
+use crate::image::progress::{print_success, print_success_compact};
 use crate::{
     config::{AppConfig, Config},
     util::COMMIT_SHA,
@@ -39,7 +41,7 @@ impl AgentClient {
 
     fn absolute_url(&self, endpoint: &str) -> Url {
         self.base_url
-            .join(&format!("/{}", endpoint))
+            .join(&format!("{}", endpoint))
             .expect("Failed to append endpoint")
     }
 
@@ -78,6 +80,7 @@ impl AgentClient {
         Ok(())
     }
 
+    #[tracing::instrument(name = "push-envs", skip_all)]
     pub async fn push_envs(
         &self,
         project_name: &str,
@@ -85,6 +88,8 @@ impl AgentClient {
     ) -> Result<()> {
         let url = self.absolute_url("/env");
         let headers = self.headers();
+
+        tracing::Span::current().pb_set_message(&format!("pushing envs for {project_name}"));
 
         let apps_payload: Vec<AppEnvPayload> = apps
             .iter()
@@ -114,14 +119,18 @@ impl AgentClient {
             .send()
             .await?;
 
+        print_success_compact(&format!("Pushed app envs for {project_name}"));
+
         Ok(())
     }
 
+    #[tracing::instrument(name = "deploy", skip_all)]
     pub async fn push_deploy(&self, config: &Config, apps: Vec<(String, AppConfig)>) -> Result<()> {
         let url = self.absolute_url("/deploy");
         let headers = self.headers();
 
         let app_names: Vec<_> = apps.iter().map(|(key, _)| key).collect();
+        tracing::Span::current().pb_set_message(&format!("deploying {}", config.name));
         tracing::info!("Deploying apps: {:?}", app_names);
 
         let apps_payload: Vec<AppPayload> = apps
@@ -161,6 +170,8 @@ impl AgentClient {
             .bytes_stream();
 
         log_stream_events(event_stream).await?;
+
+        print_success(&format!("Deployed {}", config.name));
 
         Ok(())
     }

@@ -19,8 +19,13 @@ use crate::{
 
 const API_BASE_URL: &str = "http://localhost:3000";
 
+pub struct AgentState {
+    pub domain: String,
+    pub port: u16,
+}
+
 pub struct ProxyState {
-    pub agent_domain: String,
+    pub agent: AgentState,
     pub docker: Arc<bollard::Docker>,
     pub routes: ArcSwap<HashMap<String, Vec<RouteConfig>>>,
     pub lbs: ArcSwap<HashMap<String, Arc<LoadBalancer<RoundRobin>>>>,
@@ -33,40 +38,32 @@ impl ProxyState {
     pub fn new(args: &ProxyArgs) -> Arc<Self> {
         let dynamic_cert = DynamicCert::new();
 
-        dynamic_cert
-            .setup_agent_certs(&args.agent_domain, &args.tls_cert_path, &args.tls_key_path)
-            .expect("failed to initialize agent TLS");
+        if let (Some(cert), Some(key)) = (args.tls_cert_path.clone(), args.tls_key_path.clone()) {
+            dynamic_cert
+                .setup_agent_certs(&args.agent_domain, &cert, &key)
+                .expect("failed to initialize agent TLS");
+        }
 
-        let agent_config = RouteConfig {
-            id: "agent".to_string(),
-            container_id: "agent".to_string(),
-            name: "agent".to_string(),
+        let agent_state = AgentState {
             domain: args.agent_domain.clone(),
             port: 3000,
-            state: RouteState::Active,
-            kind: RouteKind::Agent,
         };
 
-        let proxy_state = ProxyState {
-            agent_domain: args.agent_domain.clone(),
+        Arc::new(ProxyState {
+            agent: agent_state,
             docker: Arc::new(bollard::Docker::connect_with_defaults().unwrap()),
             routes: ArcSwap::from_pointee(HashMap::new()),
             lbs: ArcSwap::from_pointee(HashMap::new()),
             runtime: DashMap::new(),
             dynamic_cert,
             api_client: reqwest::Client::new(),
-        };
-
-        proxy_state.upsert_route(agent_config);
-
-        Arc::new(proxy_state)
+        })
     }
 
     pub fn upsert_route(&self, config: RouteConfig) {
         let name = config.domain.clone();
-        let is_agent = config.kind == RouteKind::Agent;
 
-        if config.kind == RouteKind::App && config.domain == self.agent_domain {
+        if config.kind == RouteKind::App && config.domain == self.agent.domain {
             tracing::warn!(
                 domain = %config.domain,
                 "refusing application route on reserved agent domain"
@@ -95,11 +92,6 @@ impl ProxyState {
 
             next
         });
-
-        if is_agent {
-            tracing::info!(domain = %name, "Agent route registered");
-            return;
-        }
 
         let routes = self.routes.load();
         let backends = routes.get(&name).cloned().unwrap_or_default();

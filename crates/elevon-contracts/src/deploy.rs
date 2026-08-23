@@ -98,12 +98,10 @@ where
                     StreamEvent::Log { message, .. } => {
                         tracing::info!(message);
                     }
-                    StreamEvent::Done => {
-                        tracing::info!("Done");
-                    }
                     StreamEvent::Error { message } => {
                         tracing::error!(message);
                     }
+                    _ => {}
                 }
             }
         }
