@@ -1500,6 +1500,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bytes",
+ "elevon-config",
  "futures-util",
  "reqwest",
  "serde",

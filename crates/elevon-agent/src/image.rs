@@ -11,7 +11,7 @@ use bollard::{
     query_parameters::{CreateContainerOptionsBuilder, CreateImageOptionsBuilder},
 };
 use elevon_contracts::deploy::{
-    AppPayload, AppRole, StreamEvent, StreamLogLevel, format_app_env_name,
+    AppPayload, AppRole, StreamEvent, StreamLogLevel, resolve_app_env_name,
 };
 use elevon_fs::agent::{load_app_env, load_app_string_env};
 use futures::StreamExt;
@@ -23,7 +23,7 @@ use crate::{
         state::AppState,
         stream::{StreamSender, emit},
     },
-    proxy::types::{AgentEvent, RouteConfig, RouteKind, RouteState},
+    proxy::types::{AgentEvent, RouteConfig, RouteState},
 };
 
 static ALLOCATED_PORTS: LazyLock<RwLock<HashSet<u16>>> =
@@ -124,7 +124,8 @@ pub async fn run_image(
 
         let project_env = load_app_string_env(&app_config.project)?;
         let mut app_env =
-            load_app_string_env(&format_app_env_name(&app_config.project, &app_config.name))?;
+            load_app_string_env(&resolve_app_env_name(&app_config.project, &app_config.name))?;
+
         app_env.extend(project_env);
 
         let mut port_bindings = PortMap::new();
@@ -223,9 +224,15 @@ pub async fn deploy_apps(
 
         let db_app = App::get_or_create(&mut db, &app).await?;
 
-        pull_image(tx, &state.docker, &app).await?;
+        pull_image(tx, &state.docker, &app).await.inspect_err(
+            |err| tracing::error!(app = %app.name, error = %err, "failed to get or create app"),
+        )?;
         let (deployment_id, container_id, port) =
-            run_image(tx, &state.docker, &db_app, &app, &mut db).await?;
+            run_image(tx, &state.docker, &db_app, &app, &mut db)
+                .await
+                .inspect_err(
+                    |err| tracing::error!(app = %app.name, error = %err, "failed to run container"),
+                )?;
 
         if let (AppRole::Web, Some(web_app)) = (&app.role, &app.web_app) {
             if let Some(mut previous_deployment) =
@@ -257,7 +264,6 @@ pub async fn deploy_apps(
                         port,
                         state: RouteState::Draining,
                         container_id,
-                        kind: RouteKind::App,
                     };
 
                     let drain_stream = state.socket_client.connect().await?;
@@ -284,7 +290,6 @@ pub async fn deploy_apps(
                 port,
                 state: RouteState::Active,
                 container_id,
-                kind: RouteKind::App,
             };
 
             let upsert_stream = state.socket_client.connect().await?;

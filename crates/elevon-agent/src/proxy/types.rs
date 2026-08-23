@@ -12,12 +12,6 @@ pub enum AgentEvent {
     DrainRoute(RouteConfig),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum RouteKind {
-    Agent,
-    App,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RouteConfig {
     pub id: String,
@@ -26,7 +20,6 @@ pub struct RouteConfig {
     pub port: u16,
     pub state: RouteState,
     pub container_id: String,
-    pub kind: RouteKind,
 }
 
 #[derive(Debug)]

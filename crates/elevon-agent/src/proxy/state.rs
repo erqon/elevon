@@ -13,7 +13,7 @@ use crate::{
     cli::ProxyArgs,
     proxy::{
         tls::DynamicCert,
-        types::{BackendRuntime, RouteConfig, RouteKind, RouteState},
+        types::{BackendRuntime, RouteConfig, RouteState},
     },
 };
 
@@ -38,11 +38,11 @@ impl ProxyState {
     pub fn new(args: &ProxyArgs) -> Arc<Self> {
         let dynamic_cert = DynamicCert::new();
 
-        if let (Some(cert), Some(key)) = (args.tls_cert_path.clone(), args.tls_key_path.clone()) {
-            dynamic_cert
-                .setup_agent_certs(&args.agent_domain, &cert, &key)
-                .expect("failed to initialize agent TLS");
-        }
+        let _ = dynamic_cert.setup_agent_certs(
+            &args.agent_domain,
+            args.tls_cert_path.as_deref(),
+            args.tls_key_path.as_deref(),
+        );
 
         let agent_state = AgentState {
             domain: args.agent_domain.clone(),
@@ -63,7 +63,7 @@ impl ProxyState {
     pub fn upsert_route(&self, config: RouteConfig) {
         let name = config.domain.clone();
 
-        if config.kind == RouteKind::App && config.domain == self.agent.domain {
+        if config.domain == self.agent.domain {
             tracing::warn!(
                 domain = %config.domain,
                 "refusing application route on reserved agent domain"
@@ -71,7 +71,7 @@ impl ProxyState {
             return;
         }
 
-        if config.kind == RouteKind::App && config.state != RouteState::Active {
+        if config.state != RouteState::Active {
             tracing::debug!(
                 domain = %config.domain,
                 state = ?config.state,
@@ -83,6 +83,19 @@ impl ProxyState {
         self.routes.rcu(|current| {
             let mut next = current.as_ref().clone();
             let backends = next.entry(name.clone()).or_default();
+
+            self.dynamic_cert
+                .add_cert(&config.name, config.domain.clone(), Some(true))
+                .unwrap_or_else(|err| {
+                    tracing::error!(
+                        domain = %config.domain,
+                        state = ?config.state,
+                        error = %err,
+                        "failed to save/update certificates"
+                    )
+                });
+
+            println!("certs: {:?}", self.dynamic_cert.certs);
 
             if let Some(existing) = backends.iter_mut().find(|route| route.id == config.id) {
                 *existing = config.clone();
@@ -98,7 +111,7 @@ impl ProxyState {
 
         let addrs: Vec<String> = backends
             .iter()
-            .filter(|b| b.kind == RouteKind::App && b.state == RouteState::Active)
+            .filter(|b| b.state == RouteState::Active)
             .map(|b| format!("127.0.0.1:{}", b.port))
             .collect();
 
@@ -123,7 +136,7 @@ impl ProxyState {
             .get(domain)
             .into_iter()
             .flatten()
-            .filter(|route| route.kind == RouteKind::App && route.state == RouteState::Active)
+            .filter(|route| route.state == RouteState::Active)
             .map(|route| format!("127.0.0.1:{}", route.port))
             .collect();
 
@@ -152,11 +165,6 @@ impl ProxyState {
     }
 
     pub fn drain_route(&self, route: RouteConfig) {
-        if route.kind == RouteKind::Agent {
-            tracing::warn!(domain = %route.domain, "refusing to drain agent route");
-            return;
-        }
-
         self.routes.rcu(|current| {
             let mut next = current.as_ref().clone();
             let backends = next.entry(route.domain.clone()).or_default();

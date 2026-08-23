@@ -18,6 +18,21 @@ pub trait ResolveEnvCredentials {
     fn resolved_credentials(&self) -> Result<Self::Output, ConfigError>;
 }
 
+pub trait ResolveEnvCredentialsOrDefault<T: Default> {
+    fn resolved_credentials_or_default(&self) -> Result<T, ConfigError>;
+}
+
+impl<R, T> ResolveEnvCredentialsOrDefault<T> for R
+where
+    R: ResolveEnvCredentials<Output = Option<T>>,
+    T: Default,
+{
+    fn resolved_credentials_or_default(&self) -> Result<T, ConfigError> {
+        self.resolved_credentials()
+            .map(|opt| opt.unwrap_or_default())
+    }
+}
+
 pub trait ElevonConfig: DeserializeOwned + Sized
 where
     Self: 'static,

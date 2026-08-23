@@ -1,4 +1,3 @@
-
 use std::collections::HashMap;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::{
@@ -101,7 +100,22 @@ pub fn get_socket_path(delete: bool) -> PathBuf {
     path
 }
 
-pub fn get_proxy_systemd_content(exec: &str) -> String {
+pub fn get_proxy_systemd_content(
+    exec: &str,
+    agent_domain: &str,
+    tls_cert_path: Option<&str>,
+    tls_key_path: Option<&str>,
+) -> String {
+    let mut exec_start = format!("{exec} proxy --agent-domain {agent_domain}");
+
+    if let Some(cert_path) = tls_cert_path {
+        exec_start.push_str(&format!(" --tls-cert-path {cert_path}"));
+    }
+
+    if let Some(key_path) = tls_key_path {
+        exec_start.push_str(&format!(" --tls-key-path {key_path}"));
+    }
+
     format!(
         "
         [Unit]
@@ -111,7 +125,7 @@ pub fn get_proxy_systemd_content(exec: &str) -> String {
         
         [Service]
         User=root
-        ExecStart={exec} proxy
+        ExecStart={exec_start}
         Restart=on-failure
         RuntimeDirectory=elevon-agent
         
@@ -143,8 +157,18 @@ pub fn get_api_systemd_content(exec: &str) -> String {
     )
 }
 
-pub fn install_proxy_unit(exec: &Path) -> Result<()> {
-    let unit = get_proxy_systemd_content(&exec.display().to_string());
+pub fn install_proxy_unit(
+    exec: &Path,
+    agent_domain: &str,
+    tls_cert_path: Option<&str>,
+    tls_key_path: Option<&str>,
+) -> Result<()> {
+    let unit = get_proxy_systemd_content(
+        &exec.display().to_string(),
+        agent_domain,
+        tls_cert_path,
+        tls_key_path,
+    );
     let dest = AgentPath::SystemdUnit("elevon-agent-proxy.service".into()).ensure()?;
     std::fs::write(dest, unit)?;
     Ok(())
@@ -182,7 +206,7 @@ fn write_env_file(path: impl AsRef<Path>, env: &HashMap<String, String>) -> Resu
 pub fn get_tls_file(project_name: &str, t: TlsType, is_project: Option<bool>) -> Result<PathBuf> {
     let file_dir_name = match is_project {
         Some(_) => format!("projects/{project_name}"),
-        None => format!("{project_name}"),
+        None => project_name.to_string(),
     };
 
     let file_name = match t {

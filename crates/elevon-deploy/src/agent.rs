@@ -4,7 +4,7 @@ use anyhow::Result;
 use elevon_config::ResolveEnvCredentials;
 use elevon_contracts::deploy::{
     AppDeployPayload, AppEnvPayload, AppEnvSetPayload, AppPayload, AppRole, WebApp,
-    format_app_env_name, log_stream_events,
+    log_stream_events,
 };
 use reqwest::{
     Client, Url,
@@ -41,7 +41,7 @@ impl AgentClient {
 
     fn absolute_url(&self, endpoint: &str) -> Url {
         self.base_url
-            .join(&format!("{}", endpoint))
+            .join(endpoint)
             .expect("Failed to append endpoint")
     }
 
@@ -56,14 +56,20 @@ impl AgentClient {
         headers
     }
 
-    pub async fn push_env(&self, app_name: String, vars: &HashMap<String, String>) -> Result<()> {
+    pub async fn push_env(
+        &self,
+        project_name: String,
+        app_name: String,
+        vars: &HashMap<String, String>,
+    ) -> Result<()> {
         let url = self.absolute_url("/env");
         let headers = self.headers();
 
         let apps_payload = AppEnvPayload {
-            project: app_name.clone(),
+            project: project_name,
             name: app_name,
             vars: vars.clone(),
+            tls: None,
         };
 
         let payload = serde_json::json!(AppEnvSetPayload {
@@ -94,15 +100,22 @@ impl AgentClient {
         let apps_payload: Vec<AppEnvPayload> = apps
             .iter()
             .map(|(name, config)| -> Result<Option<AppEnvPayload>> {
-                let Some(env_cfg) = config.env.as_ref() else {
-                    return Ok(None);
+                let vars = match config.env {
+                    Some(vars) => Some(vars.resolved_credentials()?),
+                    None => None
+                };
+                let tls_with_credentials = match config.tls.clone() {
+                    Some(tls) => tls.resolved_credentials()?),
+                    None => None,
                 };
 
-                let vars = env_cfg.resolved_credentials()?;
+                println!("tls: {:?}", tls_with_credentials);
+
                 Ok(Some(AppEnvPayload {
                     project: project_name.to_string(),
-                    name: format_app_env_name(project_name, name),
-                    vars,
+                    name: name.clone(),
+                    vars: vars.clone(),
+                    tls: tls_with_credentials,
                 }))
             })
             .collect::<Result<Vec<_>>>()?

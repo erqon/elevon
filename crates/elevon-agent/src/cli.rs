@@ -79,6 +79,9 @@ pub struct InstallSystemdArgs {
         help = "Run systemctl daemon-reload && enable --now after writing units"
     )]
     pub enable: bool,
+
+    #[command(flatten)]
+    pub proxy_args: ProxyArgs,
 }
 
 #[derive(Args)]

@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::api::db::AgentDb;
 use crate::api::db::models::{Deployment, DeploymentStatus};
 use crate::env::ElevonEnv;
-use crate::proxy::types::{AgentEvent, RouteConfig, RouteKind, RouteState};
+use crate::proxy::types::{AgentEvent, RouteConfig, RouteState};
 
 pub struct AppState {
     pub agent_db: AgentDb,
@@ -48,17 +48,16 @@ impl AppState {
                 .inspect_container(&active_container.container_id, None)
                 .await?;
 
-            if let Some(state) = docker_container.state {
-                if let Some(running) = state.running {
-                    if !running {
-                        let id = Uuid::parse_str(&active_container.id)?;
+            if let Some(state) = docker_container.state
+                && let Some(running) = state.running
+                && !running
+            {
+                let id = Uuid::parse_str(&active_container.id)?;
 
-                        Deployment::update_by_id(id)
-                            .status(DeploymentStatus::Drained)
-                            .exec(&mut db)
-                            .await?;
-                    }
-                }
+                Deployment::update_by_id(id)
+                    .status(DeploymentStatus::Drained)
+                    .exec(&mut db)
+                    .await?;
             }
         }
 
@@ -76,43 +75,61 @@ impl AppState {
 
         let mut routes: Vec<RouteConfig> = Vec::new();
 
-        for deployment in deployments {
+        for mut deployment in deployments {
             let app = deployment.app.get();
 
-            let (Some(container_id), Some(domain)) = (deployment.container_id, app.domain.clone())
+            let (Some(container_id), Some(domain)) =
+                (deployment.container_id.clone(), app.domain.clone())
             else {
                 continue;
             };
+
+            let app_name = app.name.clone();
 
             let options = InspectContainerOptionsBuilder::default()
                 .size(false)
                 .build();
 
-            let container = self
+            let container = match self
                 .docker
                 .inspect_container(&container_id, Some(options))
-                .await?;
+                .await
+            {
+                Ok(container) => Some(container),
+                Err(_) => {
+                    toasty::update!(deployment {
+                        status: DeploymentStatus::Drained
+                    })
+                    .exec(&mut db)
+                    .await?;
 
-            let Some(state) = container.state.and_then(|s| s.running).map(|running| {
-                if running {
-                    RouteState::Active
-                } else {
-                    RouteState::Draining
+                    None
                 }
-            }) else {
-                continue;
             };
 
-            let route_config = RouteConfig {
-                id: deployment.id.to_string(),
-                container_id,
-                name: app.name.clone(),
-                domain,
-                port: deployment.port,
-                state,
-                kind: RouteKind::App,
-            };
-            routes.push(route_config);
+            if let Some(container) = container {
+                let Some(state) = container.state.and_then(|s| s.running).map(|running| {
+                    if running {
+                        RouteState::Active
+                    } else {
+                        RouteState::Draining
+                    }
+                }) else {
+                    continue;
+                };
+
+                let route_config = RouteConfig {
+                    id: deployment.id.to_string(),
+                    container_id,
+                    name: app_name,
+                    domain,
+                    port: deployment.port,
+                    state,
+                };
+                routes.push(route_config);
+            } else {
+                continue;
+            }
         }
 
         Ok(routes)

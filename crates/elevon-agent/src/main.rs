@@ -31,7 +31,7 @@ fn run() -> Result<()> {
             elevon_agent::proxy::run_proxy(args);
         }
         Commands::InstallSystemd(args) => {
-            elevon_agent::setup::install_systemd(args.enable)
+            elevon_agent::setup::install_systemd(args)
                 .context("failed to install systemd units")?;
         }
         Commands::Key { subcommand } => {

@@ -1,10 +1,12 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use elevon_contracts::deploy::TlsType;
+use elevon_fs::agent::write_tls_file;
 use pingora::protocols::tls::TlsRef;
 use pingora::tls::pkey::{PKey, Private};
 use pingora::tls::ssl::NameType;
@@ -12,6 +14,7 @@ use pingora::tls::x509::X509;
 
 #[derive(Clone)]
 pub struct DynamicCert {
+    #[allow(clippy::type_complexity)]
     pub certs: Arc<ArcSwap<HashMap<String, (X509, PKey<Private>)>>>,
 }
 
@@ -22,11 +25,22 @@ impl DynamicCert {
         }
     }
 
-    pub fn add_cert(&self, domain: String, cert_path: &str, key_path: &str) -> Result<()> {
-        let cert_bytes = std::fs::read(cert_path)?;
-        let cert = X509::from_pem(&cert_bytes)?;
+    fn get_stored_key_paths(
+        &self,
+        project: &str,
+        is_project: Option<bool>,
+    ) -> Result<(PathBuf, PathBuf)> {
+        let stored_cert = elevon_fs::agent::get_tls_file(project, TlsType::Cert, is_project)?;
+        let stored_key = elevon_fs::agent::get_tls_file(project, TlsType::Key, is_project)?;
+        Ok((stored_cert, stored_key))
+    }
 
-        let key_bytes = std::fs::read(key_path)?;
+    pub fn add_cert(&self, project: &str, domain: String, is_project: Option<bool>) -> Result<()> {
+        let (stored_cert, stored_key) = self.get_stored_key_paths(project, is_project)?;
+        let cert_bytes = std::fs::read(stored_cert)?;
+        let key_bytes = std::fs::read(stored_key)?;
+
+        let cert = X509::from_pem(&cert_bytes)?;
         let key = PKey::private_key_from_pem(&key_bytes)?;
 
         self.certs.rcu(|c| {
@@ -45,21 +59,20 @@ impl DynamicCert {
             .map(|(c, k)| (Arc::new(c.clone()), Arc::new(k.clone())))
     }
 
-    pub fn setup_agent_certs(&self, domain: &str, cert_path: &str, key_path: &str) -> Result<()> {
-        let cert_bytes = std::fs::read(cert_path)?;
-        let key_bytes = std::fs::read(key_path)?;
+    pub fn setup_agent_certs(
+        &self,
+        domain: &str,
+        cert_path: Option<&str>,
+        key_path: Option<&str>,
+    ) -> Result<()> {
+        if let (Some(cert), Some(key)) = (cert_path, key_path) {
+            let cert_bytes = std::fs::read(cert)?;
+            let key_bytes = std::fs::read(key)?;
+            write_tls_file("agent", &cert_bytes, TlsType::Cert, None)?;
+            write_tls_file("agent", &key_bytes, TlsType::Key, None)?;
+        }
 
-        let stored_cert = elevon_fs::agent::get_tls_file("agent", TlsType::Cert, None)?;
-        let stored_key = elevon_fs::agent::get_tls_file("agent", TlsType::Key, None)?;
-
-        std::fs::write(&stored_cert, &cert_bytes)?;
-        std::fs::write(&stored_key, &key_bytes)?;
-
-        self.add_cert(
-            domain.to_string(),
-            stored_cert.to_str().context("invalid certificate path")?,
-            stored_key.to_str().context("invalid key path")?,
-        )?;
+        self.add_cert("agent", domain.to_string(), None)?;
 
         Ok(())
     }
@@ -76,11 +89,15 @@ impl pingora::listeners::TlsAccept for DynamicCert {
         }
 
         if let Some(server_name) = ssl.servername(NameType::HOST_NAME) {
-            if let Some((cert, key)) = self.find_certs_with_hostname(server_name) {
-                ext::ssl_use_certificate(ssl, &cert).unwrap();
-                ext::ssl_use_private_key(ssl, &key).unwrap();
-                return;
-            }
+            println!("server_name: {}", server_name)
+        }
+
+        if let Some(server_name) = ssl.servername(NameType::HOST_NAME)
+            && let Some((cert, key)) = self.find_certs_with_hostname(server_name)
+        {
+            ext::ssl_use_certificate(ssl, &cert).unwrap();
+            ext::ssl_use_private_key(ssl, &key).unwrap();
+            return;
         }
     }
 }
