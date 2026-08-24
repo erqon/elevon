@@ -80,6 +80,7 @@ impl DynamicCert {
             write_tls_file("agent", &key_bytes, TlsType::Key, None)?;
         }
 
+        // TODO: Fix this. This is not ideal but for now its ok
         self.add_cert("agent", "agent", domain.to_string(), None)?;
 
         Ok(())
@@ -94,10 +95,6 @@ impl pingora::listeners::TlsAccept for DynamicCert {
         if self.certs.load().is_empty() {
             tracing::warn!("No certificates are configured.");
             return;
-        }
-
-        if let Some(server_name) = ssl.servername(NameType::HOST_NAME) {
-            println!("server_name: {}", server_name)
         }
 
         if let Some(server_name) = ssl.servername(NameType::HOST_NAME)

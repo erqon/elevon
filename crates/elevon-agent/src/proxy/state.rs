@@ -100,8 +100,6 @@ impl ProxyState {
                     )
                 });
 
-            println!("certs: {:?}", self.dynamic_cert.certs);
-
             if let Some(existing) = backends.iter_mut().find(|route| route.id == config.id) {
                 *existing = config.clone();
             } else {
