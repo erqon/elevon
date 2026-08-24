@@ -54,7 +54,7 @@ runs:
 
     - name: Build
       shell: bash
-      run: cargo build -p "${{ inputs.name }}" --release --target x86_64-unknown-linux-musl
+      run: cargo build -p "${{ inputs.name }}" --release
 
     - name: Resolve build archive
       id: resolve
