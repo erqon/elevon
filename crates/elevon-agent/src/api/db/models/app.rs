@@ -9,6 +9,8 @@ pub struct App {
     #[column(type = varchar(32))]
     pub name: String,
 
+    pub project: String,
+
     pub domain: Option<String>,
 
     #[has_many]
@@ -40,6 +42,7 @@ impl App {
 
         let app = toasty::create!(App {
             name: payload.name.to_string(),
+            project: payload.project.to_string(),
             domain
         })
         .exec(db)

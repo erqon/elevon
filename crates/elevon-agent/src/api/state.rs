@@ -85,6 +85,7 @@ impl AppState {
             };
 
             let app_name = app.name.clone();
+            let project_name = app.project.clone();
 
             let options = InspectContainerOptionsBuilder::default()
                 .size(false)
@@ -120,11 +121,12 @@ impl AppState {
 
                 let route_config = RouteConfig {
                     id: deployment.id.to_string(),
-                    container_id,
+                    project: project_name,
                     name: app_name,
                     domain,
                     port: deployment.port,
                     state,
+                    container_id,
                 };
                 routes.push(route_config);
             } else {

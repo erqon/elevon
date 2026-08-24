@@ -5,7 +5,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use arc_swap::ArcSwap;
 use async_trait::async_trait;
-use elevon_contracts::deploy::TlsType;
+use elevon_contracts::deploy::{TlsType, resolve_app_env_name};
 use elevon_fs::agent::write_tls_file;
 use pingora::protocols::tls::TlsRef;
 use pingora::tls::pkey::{PKey, Private};
@@ -28,15 +28,23 @@ impl DynamicCert {
     fn get_stored_key_paths(
         &self,
         project: &str,
+        app_name: &str,
         is_project: Option<bool>,
     ) -> Result<(PathBuf, PathBuf)> {
-        let stored_cert = elevon_fs::agent::get_tls_file(project, TlsType::Cert, is_project)?;
-        let stored_key = elevon_fs::agent::get_tls_file(project, TlsType::Key, is_project)?;
+        let env_path = resolve_app_env_name(project, app_name);
+        let stored_cert = elevon_fs::agent::get_tls_file(&env_path, TlsType::Cert, is_project)?;
+        let stored_key = elevon_fs::agent::get_tls_file(&env_path, TlsType::Key, is_project)?;
         Ok((stored_cert, stored_key))
     }
 
-    pub fn add_cert(&self, project: &str, domain: String, is_project: Option<bool>) -> Result<()> {
-        let (stored_cert, stored_key) = self.get_stored_key_paths(project, is_project)?;
+    pub fn add_cert(
+        &self,
+        project: &str,
+        app_name: &str,
+        domain: String,
+        is_project: Option<bool>,
+    ) -> Result<()> {
+        let (stored_cert, stored_key) = self.get_stored_key_paths(project, app_name, is_project)?;
         let cert_bytes = std::fs::read(stored_cert)?;
         let key_bytes = std::fs::read(stored_key)?;
 
@@ -72,7 +80,7 @@ impl DynamicCert {
             write_tls_file("agent", &key_bytes, TlsType::Key, None)?;
         }
 
-        self.add_cert("agent", domain.to_string(), None)?;
+        self.add_cert("agent", "agent", domain.to_string(), None)?;
 
         Ok(())
     }

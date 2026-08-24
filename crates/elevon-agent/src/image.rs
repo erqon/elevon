@@ -260,6 +260,7 @@ pub async fn deploy_apps(
 
                     let route_config = RouteConfig {
                         id: deployment_id.clone(),
+                        project: app.project.clone(),
                         name: app.name.clone(),
                         domain: web_app.domain.clone(),
                         port,
@@ -286,6 +287,7 @@ pub async fn deploy_apps(
 
             let route_config = RouteConfig {
                 id: deployment_id,
+                project: app.project,
                 name: app.name,
                 domain: web_app.domain.clone(),
                 port,
