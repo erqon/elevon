@@ -43,8 +43,8 @@ pub async fn pull_image(
     )
     .await;
 
-    // TODO: Fix - this still creates empty env file in case the project has a single app with no apps:
-    let project_env = load_app_env(&app_config.project, None)?;
+    let resolved_path = resolve_app_env_name(&app_config.project, "default");
+    let project_env = load_app_env(&resolved_path, None)?;
 
     let (registry_server, registry_username, registry_password) = match (
         project_env.get("REGISTRY_SERVER"),
@@ -122,7 +122,8 @@ pub async fn run_image(
             .name(&container_name)
             .build();
 
-        let project_env = load_app_string_env(&app_config.project)?;
+        let resolved_project_env = resolve_app_env_name(&app_config.project, "default");
+        let project_env = load_app_string_env(&resolved_project_env)?;
         let mut app_env =
             load_app_string_env(&resolve_app_env_name(&app_config.project, &app_config.name))?;
 

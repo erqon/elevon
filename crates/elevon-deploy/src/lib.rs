@@ -1,4 +1,4 @@
-use elevon_config::{ElevonConfig, ResolveEnvCredentials, ResolveEnvCredentialsOrDefault};
+use elevon_config::{ElevonConfig, ResolveEnvCredentials};
 
 use crate::{
     agent::AgentClient,
@@ -34,8 +34,6 @@ pub async fn run_deploy_cli(arg: DeployArgs, command: Commands) -> anyhow::Resul
         }
         Commands::Env { args, subcommand } => {
             let selected = config.get_selected_apps(&args.apps)?;
-
-            config.routing.res
 
             let registry_credentials = config.registry.resolved_credentials()?;
             let root_vars = match &config.env {

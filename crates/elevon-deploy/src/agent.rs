@@ -100,16 +100,14 @@ impl AgentClient {
         let apps_payload: Vec<AppEnvPayload> = apps
             .iter()
             .map(|(name, config)| -> Result<Option<AppEnvPayload>> {
-                let vars = match config.env {
-                    Some(vars) => Some(vars.resolved_credentials()?),
-                    None => None
+                let vars = match &config.env {
+                    Some(vars) => vars.resolved_credentials()?,
+                    None => HashMap::default(),
                 };
-                let tls_with_credentials = match config.tls.clone() {
-                    Some(tls) => tls.resolved_credentials()?),
+                let tls_with_credentials = match &config.tls {
+                    Some(tls) => Some(tls.resolved_credentials()?),
                     None => None,
                 };
-
-                println!("tls: {:?}", tls_with_credentials);
 
                 Ok(Some(AppEnvPayload {
                     project: project_name.to_string(),
