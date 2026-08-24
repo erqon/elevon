@@ -207,6 +207,10 @@ pub fn print_success(message: &str) {
     tracing_indicatif::indicatif_println!("  \x1b[32m✓\x1b[0m {message}");
 }
 
+pub fn print_success_compact(message: &str) {
+    tracing_indicatif::indicatif_println!("  \x1b[32m✓\x1b[0m {message}");
+}
+
 #[cfg(test)]
 mod tests {
     use super::{format_bytes, prettify_status};

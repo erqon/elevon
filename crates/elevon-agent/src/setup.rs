@@ -5,6 +5,7 @@ use elevon_fs::agent::{install_api_unit, install_proxy_unit};
 
 use crate::{
     api::db::{AgentDb, models::AuthKey},
+    cli::InstallSystemdArgs,
     env::{ElevonEnv, ElevonEnvKey},
 };
 
@@ -35,7 +36,7 @@ pub async fn setup(turso_remote_url: Option<String>) -> Result<()> {
     Ok(())
 }
 
-pub fn install_systemd(enable: bool) -> Result<()> {
+pub fn install_systemd(args: InstallSystemdArgs) -> Result<()> {
     ensure_systemd_writable()?;
 
     let agent = std::env::current_exe().context("failed to resolve current executable")?;
@@ -43,13 +44,19 @@ pub fn install_systemd(enable: bool) -> Result<()> {
     tracing::info!("Creating systemd units in /etc/systemd/system/ ...");
 
     install_api_unit(&agent).context("failed to write elevon-agent-api.service")?;
-    install_proxy_unit(&agent).context("failed to write elevon-agent-proxy.service")?;
+    install_proxy_unit(
+        &agent,
+        &args.proxy_args.agent_domain,
+        args.proxy_args.tls_cert_path.as_deref(),
+        args.proxy_args.tls_cert_path.as_deref(),
+    )
+    .context("failed to write elevon-agent-proxy.service")?;
 
     tracing::info!("Systemd units written");
 
     run_systemctl(&["daemon-reload"])?;
 
-    if enable {
+    if args.enable {
         run_systemctl(&[
             "enable",
             "--now",

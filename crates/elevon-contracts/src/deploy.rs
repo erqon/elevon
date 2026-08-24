@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
+use anyhow::Result;
 use bytes::Bytes;
+use elevon_config::{ConfigError, ResolveEnvCredentials, resolve_env_or_literal};
 use futures_util::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 
@@ -9,6 +11,7 @@ pub struct AppEnvPayload {
     pub project: String,
     pub name: String,
     pub vars: HashMap<String, String>,
+    pub tls: Option<TlsConfig>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -30,6 +33,23 @@ pub struct WebApp {
     pub port: u16,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TlsConfig {
+    pub cert: String,
+    pub key: String,
+}
+
+impl ResolveEnvCredentials for TlsConfig {
+    type Output = Self;
+
+    fn resolved_credentials(&self) -> Result<Self::Output, ConfigError> {
+        Ok(Self {
+            cert: resolve_env_or_literal(&self.cert)?,
+            key: resolve_env_or_literal(&self.key)?,
+        })
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AppPayload {
     pub project: String,
@@ -44,8 +64,8 @@ pub struct AppDeployPayload {
     pub apps: Vec<AppPayload>,
 }
 
-pub fn format_app_env_name(project_name: &str, app_name: &str) -> String {
-    format!("{}.{}", app_name, project_name)
+pub fn resolve_app_env_name(project_name: &str, app_name: &str) -> String {
+    format!("{}/{}", project_name, app_name)
 }
 
 #[derive(PartialEq, Eq)]
@@ -98,12 +118,10 @@ where
                     StreamEvent::Log { message, .. } => {
                         tracing::info!(message);
                     }
-                    StreamEvent::Done => {
-                        tracing::info!("Done");
-                    }
                     StreamEvent::Error { message } => {
                         tracing::error!(message);
                     }
+                    _ => {}
                 }
             }
         }

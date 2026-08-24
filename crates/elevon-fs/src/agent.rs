@@ -100,24 +100,22 @@ pub fn get_socket_path(delete: bool) -> PathBuf {
     path
 }
 
-pub fn get_tls_file(project_name: &str, t: TlsType) -> Result<PathBuf> {
-    let file_name = match t {
-        TlsType::Cert => "cert.pem",
-        TlsType::Key => "key.pem",
-    };
+pub fn get_proxy_systemd_content(
+    exec: &str,
+    agent_domain: &str,
+    tls_cert_path: Option<&str>,
+    tls_key_path: Option<&str>,
+) -> String {
+    let mut exec_start = format!("{exec} proxy --agent-domain {agent_domain}");
 
-    let path = AgentPath::ProjectTlsDir(format!("{project_name}/{file_name}")).ensure()?;
+    if let Some(cert_path) = tls_cert_path {
+        exec_start.push_str(&format!(" --tls-cert-path {cert_path}"));
+    }
 
-    Ok(path)
-}
+    if let Some(key_path) = tls_key_path {
+        exec_start.push_str(&format!(" --tls-key-path {key_path}"));
+    }
 
-pub fn write_tls_file(project_name: &str, content: &str, t: TlsType) -> Result<()> {
-    let path = get_tls_file(project_name, t)?;
-    std::fs::write(path, content)?;
-    Ok(())
-}
-
-pub fn get_proxy_systemd_content(exec: &str) -> String {
     format!(
         "
         [Unit]
@@ -126,7 +124,8 @@ pub fn get_proxy_systemd_content(exec: &str) -> String {
         Wants=elevon-agent-api.service
         
         [Service]
-        ExecStart={exec} proxy
+        User=root
+        ExecStart={exec_start}
         Restart=on-failure
         RuntimeDirectory=elevon-agent
         
@@ -158,8 +157,18 @@ pub fn get_api_systemd_content(exec: &str) -> String {
     )
 }
 
-pub fn install_proxy_unit(exec: &Path) -> Result<()> {
-    let unit = get_proxy_systemd_content(&exec.display().to_string());
+pub fn install_proxy_unit(
+    exec: &Path,
+    agent_domain: &str,
+    tls_cert_path: Option<&str>,
+    tls_key_path: Option<&str>,
+) -> Result<()> {
+    let unit = get_proxy_systemd_content(
+        &exec.display().to_string(),
+        agent_domain,
+        tls_cert_path,
+        tls_key_path,
+    );
     let dest = AgentPath::SystemdUnit("elevon-agent-proxy.service".into()).ensure()?;
     std::fs::write(dest, unit)?;
     Ok(())
@@ -191,6 +200,33 @@ fn write_env_file(path: impl AsRef<Path>, env: &HashMap<String, String>) -> Resu
     }
 
     std::fs::write(path, contents)?;
+    Ok(())
+}
+
+pub fn get_tls_file(project_name: &str, t: TlsType, is_project: Option<bool>) -> Result<PathBuf> {
+    let file_dir_name = match is_project {
+        Some(_) => format!("projects/{project_name}"),
+        None => project_name.to_string(),
+    };
+
+    let file_name = match t {
+        TlsType::Cert => "cert.pem",
+        TlsType::Key => "key.pem",
+    };
+
+    let path = AgentPath::ProjectTlsDir(format!("{file_dir_name}/{file_name}")).ensure()?;
+
+    Ok(path)
+}
+
+pub fn write_tls_file(
+    project_name: &str,
+    content: &[u8],
+    t: TlsType,
+    is_project: Option<bool>,
+) -> Result<()> {
+    let path = get_tls_file(project_name, t, is_project)?;
+    std::fs::write(path, content)?;
     Ok(())
 }
 

@@ -11,7 +11,7 @@ use bollard::{
     query_parameters::{CreateContainerOptionsBuilder, CreateImageOptionsBuilder},
 };
 use elevon_contracts::deploy::{
-    AppPayload, AppRole, StreamEvent, StreamLogLevel, format_app_env_name,
+    AppPayload, AppRole, StreamEvent, StreamLogLevel, resolve_app_env_name,
 };
 use elevon_fs::agent::{load_app_env, load_app_string_env};
 use futures::StreamExt;
@@ -29,98 +29,6 @@ use crate::{
 static ALLOCATED_PORTS: LazyLock<RwLock<HashSet<u16>>> =
     LazyLock::new(|| RwLock::new(HashSet::new()));
 
-pub async fn deploy_apps(
-    tx: &StreamSender,
-    state: Arc<AppState>,
-    apps: Vec<AppPayload>,
-) -> Result<()> {
-    let mut db = state.agent_db.db.clone();
-
-    for app in apps {
-        emit(
-            tx,
-            StreamEvent::Log {
-                level: StreamLogLevel::Info,
-                message: format!("[{}] Deploying...", app.name),
-            },
-        )
-        .await;
-
-        let db_app = App::get_or_create(&mut db, &app).await?;
-
-        pull_image(tx, &state.docker, &app).await?;
-        let (deployment_id, container_id, port) =
-            run_image(tx, &state.docker, &db_app, &app, &mut db).await?;
-
-        if let (AppRole::Web, Some(web_app)) = (&app.role, &app.web_app) {
-            if let Some(mut previous_deployment) =
-                Deployment::get_previous_deployment(&mut db, &db_app.id, &container_id).await?
-            {
-                emit(
-                    tx,
-                    StreamEvent::Log {
-                        level: StreamLogLevel::Info,
-                        message: format!(
-                            "[{}] Found previously released container, draining it...",
-                            app.name,
-                        ),
-                    },
-                )
-                .await;
-
-                if let Some(container_id) = previous_deployment.container_id.clone() {
-                    toasty::update!(previous_deployment {
-                        status: DeploymentStatus::Drained
-                    })
-                    .exec(&mut db)
-                    .await?;
-
-                    let route_config = RouteConfig {
-                        id: deployment_id.clone(),
-                        name: app.name.clone(),
-                        domain: web_app.domain.clone(),
-                        port,
-                        state: RouteState::Draining,
-                        container_id,
-                    };
-
-                    let drain_stream = state.socket_client.connect().await?;
-                    state
-                        .socket_client
-                        .send(drain_stream, AgentEvent::DrainRoute(route_config))
-                        .await?;
-                }
-            }
-
-            emit(
-                tx,
-                StreamEvent::Log {
-                    level: StreamLogLevel::Info,
-                    message: format!("[{}] Updating proxy routing for traffic", app.name),
-                },
-            )
-            .await;
-
-            let route_config = RouteConfig {
-                id: deployment_id,
-                name: app.name,
-                domain: web_app.domain.clone(),
-                port,
-                state: RouteState::Active,
-                container_id,
-            };
-
-            let upsert_stream = state.socket_client.connect().await?;
-            state
-                .socket_client
-                .send(upsert_stream, AgentEvent::UpsertRoute(route_config))
-                .await?;
-        }
-    }
-
-    Ok(())
-}
-
 pub async fn pull_image(
     tx: &StreamSender,
     docker: &bollard::Docker,
@@ -135,8 +43,8 @@ pub async fn pull_image(
     )
     .await;
 
-    // FIX: This still creates empty env file in case the project has a single app with no apps:
-    let project_env = load_app_env(&app_config.project, None)?;
+    let resolved_path = resolve_app_env_name(&app_config.project, "default");
+    let project_env = load_app_env(&resolved_path, None)?;
 
     let (registry_server, registry_username, registry_password) = match (
         project_env.get("REGISTRY_SERVER"),
@@ -214,9 +122,11 @@ pub async fn run_image(
             .name(&container_name)
             .build();
 
-        let project_env = load_app_string_env(&app_config.project)?;
+        let resolved_project_env = resolve_app_env_name(&app_config.project, "default");
+        let project_env = load_app_string_env(&resolved_project_env)?;
         let mut app_env =
-            load_app_string_env(&format_app_env_name(&app_config.project, &app_config.name))?;
+            load_app_string_env(&resolve_app_env_name(&app_config.project, &app_config.name))?;
+
         app_env.extend(project_env);
 
         let mut port_bindings = PortMap::new();
@@ -294,4 +204,104 @@ fn find_free_port() -> Option<u16> {
         }
     }
     None
+}
+
+pub async fn deploy_apps(
+    tx: &StreamSender,
+    state: Arc<AppState>,
+    apps: Vec<AppPayload>,
+) -> Result<()> {
+    let mut db = state.agent_db.db.clone();
+
+    for app in apps {
+        emit(
+            tx,
+            StreamEvent::Log {
+                level: StreamLogLevel::Info,
+                message: format!("[{}] Deploying...", app.name),
+            },
+        )
+        .await;
+
+        let db_app = App::get_or_create(&mut db, &app).await?;
+
+        pull_image(tx, &state.docker, &app).await.inspect_err(
+            |err| tracing::error!(app = %app.name, error = %err, "failed to get or create app"),
+        )?;
+        let (deployment_id, container_id, port) =
+            run_image(tx, &state.docker, &db_app, &app, &mut db)
+                .await
+                .inspect_err(
+                    |err| tracing::error!(app = %app.name, error = %err, "failed to run container"),
+                )?;
+
+        if let (AppRole::Web, Some(web_app)) = (&app.role, &app.web_app) {
+            if let Some(mut previous_deployment) =
+                Deployment::get_previous_deployment(&mut db, &db_app.id, &container_id).await?
+            {
+                emit(
+                    tx,
+                    StreamEvent::Log {
+                        level: StreamLogLevel::Info,
+                        message: format!(
+                            "[{}] Found previously released container, draining it...",
+                            app.name,
+                        ),
+                    },
+                )
+                .await;
+
+                if let Some(container_id) = previous_deployment.container_id.clone() {
+                    toasty::update!(previous_deployment {
+                        status: DeploymentStatus::Drained
+                    })
+                    .exec(&mut db)
+                    .await?;
+
+                    let route_config = RouteConfig {
+                        id: deployment_id.clone(),
+                        project: app.project.clone(),
+                        name: app.name.clone(),
+                        domain: web_app.domain.clone(),
+                        port,
+                        state: RouteState::Draining,
+                        container_id,
+                    };
+
+                    let drain_stream = state.socket_client.connect().await?;
+                    state
+                        .socket_client
+                        .send(drain_stream, AgentEvent::DrainRoute(route_config))
+                        .await?;
+                }
+            }
+
+            emit(
+                tx,
+                StreamEvent::Log {
+                    level: StreamLogLevel::Info,
+                    message: format!("[{}] Updating proxy routing for traffic", app.name),
+                },
+            )
+            .await;
+
+            let route_config = RouteConfig {
+                id: deployment_id,
+                project: app.project,
+                name: app.name,
+                domain: web_app.domain.clone(),
+                port,
+                state: RouteState::Active,
+                container_id,
+            };
+
+            let upsert_stream = state.socket_client.connect().await?;
+            state
+                .socket_client
+                .send(upsert_stream, AgentEvent::UpsertRoute(route_config))
+                .await?;
+        }
+    }
+
+    Ok(())
 }

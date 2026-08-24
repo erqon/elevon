@@ -20,7 +20,7 @@ jiff.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-pingora = { version = "0.8.1", features = ["lb", "proxy"] }
+pingora = { version = "0.8.1", features = ["lb", "proxy", "boringssl"] }
 tokio = { workspace = true, features = ["net"] }
 tower-http.workspace = true
 toasty.workspace = true

@@ -4,13 +4,15 @@ use anyhow::Result;
 use elevon_config::ResolveEnvCredentials;
 use elevon_contracts::deploy::{
     AppDeployPayload, AppEnvPayload, AppEnvSetPayload, AppPayload, AppRole, WebApp,
-    format_app_env_name, log_stream_events,
+    log_stream_events,
 };
 use reqwest::{
     Client, Url,
     header::{AUTHORIZATION, HeaderMap},
 };
+use tracing_indicatif::span_ext::IndicatifSpanExt;
 
+use crate::image::progress::{print_success, print_success_compact};
 use crate::{
     config::{AppConfig, Config},
     util::COMMIT_SHA,
@@ -39,7 +41,7 @@ impl AgentClient {
 
     fn absolute_url(&self, endpoint: &str) -> Url {
         self.base_url
-            .join(&format!("/api{}", endpoint))
+            .join(endpoint)
             .expect("Failed to append endpoint")
     }
 
@@ -54,14 +56,20 @@ impl AgentClient {
         headers
     }
 
-    pub async fn push_env(&self, app_name: String, vars: &HashMap<String, String>) -> Result<()> {
+    pub async fn push_env(
+        &self,
+        project_name: String,
+        app_name: String,
+        vars: &HashMap<String, String>,
+    ) -> Result<()> {
         let url = self.absolute_url("/env");
         let headers = self.headers();
 
         let apps_payload = AppEnvPayload {
-            project: app_name.clone(),
+            project: project_name,
             name: app_name,
             vars: vars.clone(),
+            tls: None,
         };
 
         let payload = serde_json::json!(AppEnvSetPayload {
@@ -78,6 +86,7 @@ impl AgentClient {
         Ok(())
     }
 
+    #[tracing::instrument(name = "push-envs", skip_all)]
     pub async fn push_envs(
         &self,
         project_name: &str,
@@ -86,18 +95,25 @@ impl AgentClient {
         let url = self.absolute_url("/env");
         let headers = self.headers();
 
+        tracing::Span::current().pb_set_message(&format!("pushing envs for {project_name}"));
+
         let apps_payload: Vec<AppEnvPayload> = apps
             .iter()
             .map(|(name, config)| -> Result<Option<AppEnvPayload>> {
-                let Some(env_cfg) = config.env.as_ref() else {
-                    return Ok(None);
+                let vars = match &config.env {
+                    Some(vars) => vars.resolved_credentials()?,
+                    None => HashMap::default(),
+                };
+                let tls_with_credentials = match &config.tls {
+                    Some(tls) => Some(tls.resolved_credentials()?),
+                    None => None,
                 };
 
-                let vars = env_cfg.resolved_credentials()?;
                 Ok(Some(AppEnvPayload {
                     project: project_name.to_string(),
-                    name: format_app_env_name(project_name, name),
-                    vars,
+                    name: name.clone(),
+                    vars: vars.clone(),
+                    tls: tls_with_credentials,
                 }))
             })
             .collect::<Result<Vec<_>>>()?
@@ -114,14 +130,18 @@ impl AgentClient {
             .send()
             .await?;
 
+        print_success_compact(&format!("Pushed app envs for {project_name}"));
+
         Ok(())
     }
 
+    #[tracing::instrument(name = "deploy", skip_all)]
     pub async fn push_deploy(&self, config: &Config, apps: Vec<(String, AppConfig)>) -> Result<()> {
         let url = self.absolute_url("/deploy");
         let headers = self.headers();
 
         let app_names: Vec<_> = apps.iter().map(|(key, _)| key).collect();
+        tracing::Span::current().pb_set_message(&format!("deploying {}", config.name));
         tracing::info!("Deploying apps: {:?}", app_names);
 
         let apps_payload: Vec<AppPayload> = apps
@@ -161,6 +181,8 @@ impl AgentClient {
             .bytes_stream();
 
         log_stream_events(event_stream).await?;
+
+        print_success(&format!("Deployed {}", config.name));
 
         Ok(())
     }

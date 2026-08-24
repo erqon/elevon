@@ -15,6 +15,7 @@ pub enum AgentEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RouteConfig {
     pub id: String,
+    pub project: String,
     pub name: String,
     pub domain: String,
     pub port: u16,

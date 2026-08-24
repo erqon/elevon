@@ -5,8 +5,8 @@ pub mod registry;
 use std::collections::HashMap;
 
 use anyhow::Result;
-use elevon_config::{ElevonConfig, ResolveEnvCredentials};
-use elevon_contracts::deploy::AppRole;
+use elevon_config::{ConfigError, ElevonConfig, ResolveEnvCredentials, resolve_env_or_literal};
+use elevon_contracts::deploy::{AppRole, TlsConfig};
 use serde::Deserialize;
 
 use crate::{agent::AgentClient, config::env::EnvConfig};
@@ -57,7 +57,15 @@ impl Config {
                 return Ok(self
                     .apps
                     .iter()
-                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .map(|(k, v)| {
+                        (
+                            k.clone(),
+                            AppConfig {
+                                tls: self.routing.tls.clone(),
+                                ..v.clone()
+                            },
+                        )
+                    })
                     .collect());
             } else {
                 return Ok(vec![(
@@ -65,6 +73,7 @@ impl Config {
                     AppConfig {
                         role: AppRole::Web,
                         env: None,
+                        tls: self.routing.tls.clone(),
                     },
                 )]);
             }
@@ -76,7 +85,15 @@ impl Config {
                 self.apps
                     .get(name)
                     .cloned()
-                    .map(|cfg| (name.clone(), cfg))
+                    .map(|cfg| {
+                        (
+                            name.clone(),
+                            AppConfig {
+                                tls: self.routing.tls.clone(),
+                                ..cfg
+                            },
+                        )
+                    })
                     .ok_or_else(|| anyhow::anyhow!("unknown app `{name}`"))
             })
             .collect()
@@ -89,10 +106,26 @@ impl Config {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize)]
 pub struct RoutingConfig {
     pub domain: String,
     pub port: u16,
+    pub tls: Option<TlsConfig>,
+}
+
+impl ResolveEnvCredentials for RoutingConfig {
+    type Output = HashMap<String, String>;
+
+    fn resolved_credentials(&self) -> Result<Self::Output, ConfigError> {
+        let mut resolved = HashMap::new();
+
+        if let Some(tls) = &self.tls {
+            resolved.insert("TLS_CERT".to_string(), resolve_env_or_literal(&tls.cert)?);
+            resolved.insert("TLS_KEY".to_string(), resolve_env_or_literal(&tls.key)?);
+        }
+
+        Ok(resolved)
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -122,4 +155,7 @@ pub struct AppConfig {
 
     #[serde(default)]
     pub env: Option<EnvConfig>,
+
+    #[serde(skip)]
+    pub tls: Option<TlsConfig>,
 }

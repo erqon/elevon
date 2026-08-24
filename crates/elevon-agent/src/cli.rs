@@ -30,7 +30,7 @@ pub enum Commands {
     Setup(SetupArgs),
 
     #[command(about = "Run the reverse proxy for the agent.")]
-    Proxy,
+    Proxy(ProxyArgs),
 
     #[command(about = "Run the agent HTTP control API")]
     Api,
@@ -46,12 +46,42 @@ pub enum Commands {
 }
 
 #[derive(Args)]
+pub struct ProxyArgs {
+    #[arg(
+        long,
+        default_value = "localhost",
+        help = "Hostname used to access the agent API over HTTPS",
+        long_help = "Hostname used to access the agent API over HTTPS, for example agent.example.com. The certificate must include this hostname in its Subject Alternative Names."
+    )]
+    pub agent_domain: String,
+
+    #[arg(
+        long,
+        value_name = "PATH",
+        help = "Path to the PEM-encoded TLS certificate chain",
+        long_help = "Path to the PEM-encoded TLS certificate chain for the agent domain. Include intermediate certificates when required by your certificate authority."
+    )]
+    pub tls_cert_path: Option<String>,
+
+    #[arg(
+        long,
+        value_name = "PATH",
+        help = "Path to the PEM-encoded TLS private key",
+        long_help = "Path to the PEM-encoded private key matching the agent TLS certificate. Keep this file readable only by the agent service."
+    )]
+    pub tls_key_path: Option<String>,
+}
+
+#[derive(Args)]
 pub struct InstallSystemdArgs {
     #[arg(
         long,
         help = "Run systemctl daemon-reload && enable --now after writing units"
     )]
     pub enable: bool,
+
+    #[command(flatten)]
+    pub proxy_args: ProxyArgs,
 }
 
 #[derive(Args)]

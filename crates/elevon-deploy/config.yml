@@ -36,8 +36,10 @@ apps:
   worker:
     include: ./custom/worker.yml   # custom path
   web:
-    role: web
+    role: worker
+
     runtime:
+      role: web
       restart: unless-stopped
       memory_limit: 512mb
       cpu_limit: "1.0"

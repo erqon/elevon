@@ -24,18 +24,20 @@ impl EnvCommands {
         match self {
             EnvCommands::Push => {
                 agent_client
-                    .push_env(project_name.to_string(), &registry_credentials.vars())
+                    .push_env(
+                        project_name.to_string(),
+                        "default".to_string(),
+                        &registry_credentials.vars(),
+                    )
                     .await?;
 
                 if let Some(root_vars) = root_vars {
                     agent_client
-                        .push_env(project_name.to_string(), &root_vars)
+                        .push_env(project_name.to_string(), "default".to_string(), &root_vars)
                         .await?;
                 }
 
                 agent_client.push_envs(project_name, selected).await?;
-
-                tracing::info!("Environment variables were pushed successfully!");
             }
         }
 

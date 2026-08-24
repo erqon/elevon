@@ -1,5 +1,6 @@
 mod socket;
 mod state;
+mod tls;
 pub mod types;
 
 use std::{sync::Arc, time::Duration};
@@ -10,6 +11,7 @@ use futures::stream::{self, StreamExt};
 use pingora::{
     Error, ErrorType, Result,
     http::ResponseHeader,
+    listeners::tls::TlsSettings,
     protocols::l4::socket::SocketAddr,
     proxy::{ProxyHttp, Session, http_proxy_service},
     server::{Server, ShutdownWatch},
@@ -17,58 +19,10 @@ use pingora::{
     upstreams::peer::HttpPeer,
 };
 
-use crate::proxy::{socket::SocketControl, state::ProxyState};
-
-pub fn run_proxy() {
-    let proxy_state = ProxyState::new();
-
-    let mut server = Server::new(None).unwrap();
-    server.bootstrap();
-
-    let mut lb = http_proxy_service(
-        &server.configuration,
-        Proxy {
-            state: proxy_state.clone(),
-        },
-    );
-    lb.add_tcp("0.0.0.0:6188");
-
-    let control = background_service(
-        "socket control",
-        SocketControl {
-            state: proxy_state.clone(),
-        },
-    );
-
-    let lb_health_check = background_service(
-        "lb health check",
-        LbHealthCheck {
-            state: proxy_state.clone(),
-        },
-    );
-
-    let drain_janitor = background_service(
-        "drain janitor",
-        DrainJanitor {
-            state: proxy_state.clone(),
-        },
-    );
-
-    let cloned_state = proxy_state.clone();
-    std::thread::spawn(move || {
-        run_async(async move {
-            if let Err(err) = cloned_state.load_conainters().await {
-                tracing::warn!("initial container load failed: {err}");
-            }
-        })
-    });
-
-    server.add_service(lb);
-    server.add_service(control);
-    server.add_service(lb_health_check);
-    server.add_service(drain_janitor);
-    server.run_forever();
-}
+use crate::{
+    cli::ProxyArgs,
+    proxy::{socket::SocketControl, state::ProxyState},
+};
 
 pub struct RequestCtx {
     pub container_id: Option<String>,
@@ -97,6 +51,18 @@ impl ProxyHttp for Proxy {
             .split(':')
             .next()
             .unwrap_or("");
+
+        if host == self.state.agent.domain {
+            let agent_addr = format!("127.0.0.1:{}", self.state.agent.port)
+                .parse()
+                .expect("agent route must have a valid address");
+
+            return Ok(Box::new(HttpPeer::new(
+                SocketAddr::Inet(agent_addr),
+                false,
+                String::new(),
+            )));
+        }
 
         let lbs = self.state.lbs.load();
         let Some(lb) = lbs.get(host) else {
@@ -202,4 +168,66 @@ impl BackgroundService for DrainJanitor {
             }
         }
     }
+}
+
+pub fn run_proxy(args: ProxyArgs) {
+    let proxy_state = ProxyState::new(&args);
+
+    let mut server = Server::new(None).unwrap();
+    server.bootstrap();
+
+    let mut lb = http_proxy_service(
+        &server.configuration,
+        Proxy {
+            state: proxy_state.clone(),
+        },
+    );
+
+    let tls_settings = TlsSettings::with_callbacks(Box::new(proxy_state.dynamic_cert.clone()))
+        .expect("failed to initialize TLS settings");
+
+    let (http_port, https_port) = if cfg!(debug_assertions) {
+        ("6188", "6189")
+    } else {
+        ("80", "443")
+    };
+
+    lb.add_tcp(&format!("0.0.0.0:{}", http_port));
+    lb.add_tls_with_settings(&format!("0.0.0.0:{}", https_port), None, tls_settings);
+
+    let control = background_service(
+        "socket control",
+        SocketControl {
+            state: proxy_state.clone(),
+        },
+    );
+
+    let lb_health_check = background_service(
+        "lb health check",
+        LbHealthCheck {
+            state: proxy_state.clone(),
+        },
+    );
+
+    let drain_janitor = background_service(
+        "drain janitor",
+        DrainJanitor {
+            state: proxy_state.clone(),
+        },
+    );
+
+    let cloned_state = proxy_state.clone();
+    std::thread::spawn(move || {
+        run_async(async move {
+            if let Err(err) = cloned_state.load_conainters().await {
+                tracing::warn!("initial container load failed: {err}");
+            }
+        })
+    });
+
+    server.add_service(lb);
+    server.add_service(control);
+    server.add_service(lb_health_check);
+    server.add_service(drain_janitor);
+    server.run_forever();
 }
