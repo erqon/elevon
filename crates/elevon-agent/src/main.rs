@@ -20,6 +20,12 @@ fn run() -> Result<()> {
     let env = ElevonEnv::load().context("failed to load agent environment from /etc/elevon/env")?;
 
     match cli.command {
+        Commands::Init => {
+            elevon_agent::cli::init::run().context("init command failed")?;
+        }
+        Commands::Install => {
+            elevon_agent::cli::install::run(cli.args).context("install command failed")?;
+        }
         Commands::Setup(args) => {
             run_async(elevon_agent::setup::setup(args.turso_remote_url))
                 .context("setup command failed")?;

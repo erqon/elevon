@@ -1,3 +1,5 @@
+pub mod init;
+pub mod install;
 pub mod key;
 
 use clap::{
@@ -20,12 +22,33 @@ const STYLES: Styles = Styles::styled()
     styles = STYLES
 )]
 pub struct Cli {
+    #[command(flatten)]
+    pub args: CliArgs,
+
     #[command(subcommand)]
     pub command: Commands,
 }
 
+#[derive(Args)]
+pub struct CliArgs {
+    #[arg(
+        short,
+        long,
+        global = true,
+        value_name = "PATH",
+        help = "Path to the config file"
+    )]
+    pub config: Option<String>,
+}
+
 #[derive(Subcommand)]
 pub enum Commands {
+    #[command(about = "Init config file")]
+    Init,
+
+    #[command(about = "Install agent as a background service")]
+    Install,
+
     #[command(about = "Setup agent in your vps")]
     Setup(SetupArgs),
 
