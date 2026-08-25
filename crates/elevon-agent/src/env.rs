@@ -5,13 +5,17 @@ use elevon_fs::agent::{add_app_env, load_app_env};
 
 #[derive(Debug, Clone, Default)]
 pub struct ElevonEnv {
+    pub agent_domain: String,
     pub turso_remote_url: Option<String>,
 }
 
 impl ElevonEnv {
-    pub fn load() -> Result<Self> {
+    pub fn new(agent_domain: String, turso_remote_url: Option<String>) -> Result<Self> {
         let vars = load_app_env("default", Some(true))?;
-        let mut env = Self::default();
+        let mut env = Self {
+            agent_domain,
+            turso_remote_url,
+        };
 
         for key in ElevonEnvKey::all() {
             if let Some(value) = key.read_from(&vars) {
@@ -22,19 +26,31 @@ impl ElevonEnv {
         Ok(env)
     }
 
-    pub fn update_value(&mut self, key: ElevonEnvKey, value: impl Into<String>) -> Result<()> {
-        self.set_value(key, value.into())?;
-        Ok(())
+    pub fn load() -> Result<Self> {
+        let vars = load_app_env("default", Some(true))?;
+        let mut env = Self::default();
+
+        for key in ElevonEnvKey::all() {
+            if let Some(value) = key.read_from(&vars) {
+                env.apply_value(key, value);
+            }
+        }
+
+        Ok(env)
+    }
+
+    // updates the in-memory field only, without touching disk
+    fn apply_value(&mut self, key: ElevonEnvKey, value: String) {
+        match key {
+            ElevonEnvKey::AgentDomain => self.agent_domain = value,
+            ElevonEnvKey::TursoRemoteUrl => self.turso_remote_url = Some(value),
+        }
     }
 
     fn set_value(&mut self, key: ElevonEnvKey, value: String) -> Result<()> {
         let persisted = value.clone();
 
-        match key {
-            ElevonEnvKey::TursoRemoteUrl => {
-                self.turso_remote_url = Some(value);
-            }
-        }
+        self.apply_value(key, value);
 
         add_app_env(
             "default",
@@ -42,22 +58,25 @@ impl ElevonEnv {
             key.bare_name().to_string(),
             persisted,
         )?;
+
         Ok(())
     }
 }
 
 #[derive(Debug, Copy, Clone)]
 pub enum ElevonEnvKey {
+    AgentDomain,
     TursoRemoteUrl,
 }
 
 impl ElevonEnvKey {
-    pub fn all() -> [Self; 1] {
-        [Self::TursoRemoteUrl]
+    pub fn all() -> [Self; 2] {
+        [Self::AgentDomain, Self::TursoRemoteUrl]
     }
 
     pub fn bare_name(&self) -> &'static str {
         match self {
+            Self::AgentDomain => "AGENT_DOMAIN",
             Self::TursoRemoteUrl => "TURSO_REMOTE_URL",
         }
     }

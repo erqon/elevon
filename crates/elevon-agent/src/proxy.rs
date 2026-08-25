@@ -20,7 +20,7 @@ use pingora::{
 };
 
 use crate::{
-    cli::ProxyArgs,
+    env::ElevonEnv,
     proxy::{socket::SocketControl, state::ProxyState},
 };
 
@@ -170,8 +170,8 @@ impl BackgroundService for DrainJanitor {
     }
 }
 
-pub fn run_proxy(args: ProxyArgs) {
-    let proxy_state = ProxyState::new(&args);
+pub fn run_proxy(env: &ElevonEnv) -> anyhow::Result<()> {
+    let proxy_state = ProxyState::new(env)?;
 
     let mut server = Server::new(None).unwrap();
     server.bootstrap();

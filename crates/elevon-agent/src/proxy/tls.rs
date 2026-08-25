@@ -6,7 +6,6 @@ use anyhow::{Context, Result};
 use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use elevon_contracts::deploy::{TlsType, resolve_app_env_name};
-use elevon_fs::agent::write_tls_file;
 use pingora::protocols::tls::TlsRef;
 use pingora::tls::pkey::{PKey, Private};
 use pingora::tls::ssl::NameType;
@@ -76,22 +75,9 @@ impl DynamicCert {
             .map(|(c, k)| (Arc::new(c.clone()), Arc::new(k.clone())))
     }
 
-    pub fn setup_agent_certs(
-        &self,
-        domain: &str,
-        cert_path: Option<&str>,
-        key_path: Option<&str>,
-    ) -> Result<()> {
+    pub fn setup_agent_certs(&self, domain: &str) -> Result<()> {
         let stored_cert = elevon_fs::agent::get_tls_file("agent", TlsType::Cert, None)?;
         let stored_key = elevon_fs::agent::get_tls_file("agent", TlsType::Key, None)?;
-
-        if let (Some(cert), Some(key)) = (cert_path, key_path) {
-            let cert_bytes = std::fs::read(cert)?;
-            let key_bytes = std::fs::read(key)?;
-
-            write_tls_file("agent", &cert_bytes, TlsType::Cert, None)?;
-            write_tls_file("agent", &key_bytes, TlsType::Key, None)?;
-        }
 
         self.add_cert_from_paths(
             domain.to_string(),

@@ -10,7 +10,7 @@ use dashmap::DashMap;
 use pingora::lb::{LoadBalancer, health_check::TcpHealthCheck, selection::RoundRobin};
 
 use crate::{
-    cli::ProxyArgs,
+    env::ElevonEnv,
     proxy::{
         tls::DynamicCert,
         types::{BackendRuntime, RouteConfig, RouteState},
@@ -35,21 +35,17 @@ pub struct ProxyState {
 }
 
 impl ProxyState {
-    pub fn new(args: &ProxyArgs) -> Arc<Self> {
+    pub fn new(env: &ElevonEnv) -> anyhow::Result<Arc<Self>> {
         let dynamic_cert = DynamicCert::new();
 
-        let _ = dynamic_cert.setup_agent_certs(
-            &args.agent_domain,
-            args.tls_cert_path.as_deref(),
-            args.tls_key_path.as_deref(),
-        );
+        dynamic_cert.setup_agent_certs(&env.agent_domain)?;
 
         let agent_state = AgentState {
-            domain: args.agent_domain.clone(),
+            domain: env.agent_domain.clone(),
             port: 3000,
         };
 
-        Arc::new(ProxyState {
+        Ok(Arc::new(ProxyState {
             agent: agent_state,
             docker: Arc::new(bollard::Docker::connect_with_defaults().unwrap()),
             routes: ArcSwap::from_pointee(HashMap::new()),
@@ -57,7 +53,7 @@ impl ProxyState {
             runtime: DashMap::new(),
             dynamic_cert,
             api_client: reqwest::Client::new(),
-        })
+        }))
     }
 
     pub fn upsert_route(&self, config: RouteConfig) {
