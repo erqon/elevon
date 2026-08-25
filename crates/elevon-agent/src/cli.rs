@@ -63,11 +63,19 @@ pub enum Commands {
     },
 }
 
-#[derive(Args)]
+#[derive(Debug, Args)]
 pub struct InstallArgs {
     #[arg(
         long,
         help = "Run systemctl daemon-reload && enable --now after writing units"
     )]
     pub enable: bool,
+
+    #[arg(
+        long,
+        action = clap::ArgAction::SetTrue,
+        default_value_t = false,
+        help = "Avoid creating systemd units"
+    )]
+    pub no_systemd: bool,
 }

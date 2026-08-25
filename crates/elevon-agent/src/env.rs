@@ -11,16 +11,14 @@ pub struct ElevonEnv {
 
 impl ElevonEnv {
     pub fn new(agent_domain: String, turso_remote_url: Option<String>) -> Result<Self> {
-        let vars = load_app_env("default", Some(true))?;
         let mut env = Self {
-            agent_domain,
-            turso_remote_url,
+            agent_domain: agent_domain.clone(),
+            turso_remote_url: turso_remote_url.clone(),
         };
 
-        for key in ElevonEnvKey::all() {
-            if let Some(value) = key.read_from(&vars) {
-                env.set_value(key, value)?;
-            }
+        env.set_value(ElevonEnvKey::AgentDomain, agent_domain)?;
+        if let Some(turso_remote_url) = turso_remote_url {
+            env.set_value(ElevonEnvKey::TursoRemoteUrl, turso_remote_url)?;
         }
 
         Ok(env)

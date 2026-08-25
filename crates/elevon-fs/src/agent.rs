@@ -83,7 +83,7 @@ pub fn add_app_env(
 
     env.insert(key, value);
 
-    let path = get_app_env(app_name, None).context("failed to resolve env file path")?;
+    let path = get_app_env(app_name, bypass_default).context("failed to resolve env file path")?;
     write_env_file(&path, &env)
         .with_context(|| format!("failed to write env file {}", path.display()))?;
 

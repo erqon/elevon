@@ -40,7 +40,9 @@ fn run_systemctl(args: &[&str]) -> Result<()> {
 }
 
 pub async fn run(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
-    ensure_systemd_writable()?;
+    if !cfg!(debug_assertions) {
+        ensure_systemd_writable()?;
+    }
 
     let config = Config::from_file(cli_args.config).context("failed to load config")?;
     config.setup_agent()?;
@@ -62,29 +64,31 @@ pub async fn run(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
         tracing::info!("API Key was created, make sure to save it: {}", &api_key);
     }
 
-    let agent = std::env::current_exe().context("failed to resolve current executable")?;
+    if !args.no_systemd {
+        let agent = std::env::current_exe().context("failed to resolve current executable")?;
 
-    tracing::info!("Creating systemd units in /etc/systemd/system/ ...");
+        tracing::info!("Creating systemd units in /etc/systemd/system/ ...");
 
-    install_api_unit(&agent).context("failed to write elevon-agent-api.service")?;
-    install_proxy_unit(&agent).context("failed to write elevon-agent-proxy.service")?;
+        install_api_unit(&agent).context("failed to write elevon-agent-api.service")?;
+        install_proxy_unit(&agent).context("failed to write elevon-agent-proxy.service")?;
 
-    tracing::info!("Systemd units written");
+        tracing::info!("Systemd units written");
 
-    run_systemctl(&["daemon-reload"])?;
+        run_systemctl(&["daemon-reload"])?;
 
-    if args.enable {
-        run_systemctl(&[
-            "enable",
-            "--now",
-            "elevon-agent-api.service",
-            "elevon-agent-proxy.service",
-        ])?;
-        tracing::info!("Services enabled and started");
-    } else {
-        tracing::info!(
-            "Run `systemctl enable --now elevon-agent-api elevon-agent-proxy` when ready"
-        );
+        if args.enable {
+            run_systemctl(&[
+                "enable",
+                "--now",
+                "elevon-agent-api.service",
+                "elevon-agent-proxy.service",
+            ])?;
+            tracing::info!("Services enabled and started");
+        } else {
+            tracing::info!(
+                "Run `systemctl enable --now elevon-agent-api elevon-agent-proxy` when ready"
+            );
+        }
     }
 
     Ok(())
