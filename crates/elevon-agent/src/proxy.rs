@@ -9,14 +9,7 @@ use async_trait::async_trait;
 use elevon_http::runtime::run_async;
 use futures::stream::{self, StreamExt};
 use pingora::{
-    Error, ErrorType, Result,
-    http::ResponseHeader,
-    listeners::tls::TlsSettings,
-    protocols::l4::socket::SocketAddr,
-    proxy::{ProxyHttp, Session, http_proxy_service},
-    server::{Server, ShutdownWatch},
-    services::background::{BackgroundService, background_service},
-    upstreams::peer::HttpPeer,
+    Error, ErrorType, Result, http::ResponseHeader, listeners::tls::TlsSettings, protocols::l4::socket::SocketAddr, proxy::{ProxyHttp, Session, http_proxy_service}, server::{RunArgs, Server, ShutdownWatch}, services::background::{BackgroundService, background_service}, upstreams::peer::HttpPeer,
 };
 
 use crate::{
@@ -229,5 +222,7 @@ pub fn run_proxy(env: &ElevonEnv) -> anyhow::Result<()> {
     server.add_service(control);
     server.add_service(lb_health_check);
     server.add_service(drain_janitor);
-    server.run_forever();
+    server.run(RunArgs::default());
+
+    Ok(())
 }
