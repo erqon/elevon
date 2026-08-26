@@ -1454,6 +1454,7 @@ dependencies = [
  "bytes",
  "clap",
  "dashmap",
+ "elevon-config",
  "elevon-contracts",
  "elevon-fs",
  "elevon-http",

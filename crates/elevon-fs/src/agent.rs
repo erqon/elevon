@@ -83,7 +83,7 @@ pub fn add_app_env(
 
     env.insert(key, value);
 
-    let path = get_app_env(app_name, None).context("failed to resolve env file path")?;
+    let path = get_app_env(app_name, bypass_default).context("failed to resolve env file path")?;
     write_env_file(&path, &env)
         .with_context(|| format!("failed to write env file {}", path.display()))?;
 
@@ -100,22 +100,7 @@ pub fn get_socket_path(delete: bool) -> PathBuf {
     path
 }
 
-pub fn get_proxy_systemd_content(
-    exec: &str,
-    agent_domain: &str,
-    tls_cert_path: Option<&str>,
-    tls_key_path: Option<&str>,
-) -> String {
-    let mut exec_start = format!("{exec} proxy --agent-domain {agent_domain}");
-
-    if let Some(cert_path) = tls_cert_path {
-        exec_start.push_str(&format!(" --tls-cert-path {cert_path}"));
-    }
-
-    if let Some(key_path) = tls_key_path {
-        exec_start.push_str(&format!(" --tls-key-path {key_path}"));
-    }
-
+pub fn get_proxy_systemd_content(exec: &str) -> String {
     format!(
         "
         [Unit]
@@ -125,7 +110,7 @@ pub fn get_proxy_systemd_content(
         
         [Service]
         User=root
-        ExecStart={exec_start}
+        ExecStart={exec} proxy
         Restart=on-failure
         RuntimeDirectory=elevon-agent
         
@@ -157,18 +142,8 @@ pub fn get_api_systemd_content(exec: &str) -> String {
     )
 }
 
-pub fn install_proxy_unit(
-    exec: &Path,
-    agent_domain: &str,
-    tls_cert_path: Option<&str>,
-    tls_key_path: Option<&str>,
-) -> Result<()> {
-    let unit = get_proxy_systemd_content(
-        &exec.display().to_string(),
-        agent_domain,
-        tls_cert_path,
-        tls_key_path,
-    );
+pub fn install_proxy_unit(exec: &Path) -> Result<()> {
+    let unit = get_proxy_systemd_content(&exec.display().to_string());
     let dest = AgentPath::SystemdUnit("elevon-agent-proxy.service".into()).ensure()?;
     std::fs::write(dest, unit)?;
     Ok(())

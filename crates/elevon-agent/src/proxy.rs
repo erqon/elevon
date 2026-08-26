@@ -14,13 +14,13 @@ use pingora::{
     listeners::tls::TlsSettings,
     protocols::l4::socket::SocketAddr,
     proxy::{ProxyHttp, Session, http_proxy_service},
-    server::{Server, ShutdownWatch},
+    server::{RunArgs, Server, ShutdownWatch},
     services::background::{BackgroundService, background_service},
     upstreams::peer::HttpPeer,
 };
 
 use crate::{
-    cli::ProxyArgs,
+    env::ElevonEnv,
     proxy::{socket::SocketControl, state::ProxyState},
 };
 
@@ -170,8 +170,8 @@ impl BackgroundService for DrainJanitor {
     }
 }
 
-pub fn run_proxy(args: ProxyArgs) {
-    let proxy_state = ProxyState::new(&args);
+pub fn run_proxy(env: &ElevonEnv) -> anyhow::Result<()> {
+    let proxy_state = ProxyState::new(env)?;
 
     let mut server = Server::new(None).unwrap();
     server.bootstrap();
@@ -229,5 +229,7 @@ pub fn run_proxy(args: ProxyArgs) {
     server.add_service(control);
     server.add_service(lb_health_check);
     server.add_service(drain_janitor);
-    server.run_forever();
+    server.run(RunArgs::default());
+
+    Ok(())
 }

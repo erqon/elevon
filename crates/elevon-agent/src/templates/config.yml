@@ -1,0 +1,7 @@
+agent:
+  # Domain used by the agent
+  domain: agent.example.com
+  tls:
+    # Paths to certificate files
+    cert: ./cert.pem
+    key: ./key.pem

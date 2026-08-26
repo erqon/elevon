@@ -2,10 +2,7 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 use jiff::Timestamp;
 
-use crate::{
-    api::db::{AgentDb, models::AuthKey},
-    env::ElevonEnv,
-};
+use crate::api::db::{AgentDb, models::AuthKey};
 
 #[derive(Subcommand)]
 pub enum KeyCommands {
@@ -18,10 +15,10 @@ pub enum KeyCommands {
 }
 
 impl KeyCommands {
-    pub async fn run(command: &KeyCommands, env: &ElevonEnv) -> Result<()> {
+    pub async fn run(command: &KeyCommands) -> Result<()> {
         match command {
             KeyCommands::Create(args) => {
-                create(args.name.clone(), env.turso_remote_url.clone()).await?;
+                create(args.name.clone()).await?;
             }
             KeyCommands::List => list().await?,
             KeyCommands::Revoke => {}
@@ -37,9 +34,9 @@ pub struct KeyCreateArgs {
     pub name: String,
 }
 
-pub async fn create(name: impl Into<String>, remote_url: Option<String>) -> Result<()> {
+pub async fn create(name: impl Into<String>) -> Result<String> {
     tracing::info!("Creating an auth key...");
-    let mut agent_db = AgentDb::new(remote_url.as_deref()).await?;
+    let mut agent_db = AgentDb::new(None).await?;
 
     let api_key = elevon_http::token::opaque();
     let hashed_api_key = elevon_http::token::hash(&api_key);
@@ -56,9 +53,7 @@ pub async fn create(name: impl Into<String>, remote_url: Option<String>) -> Resu
     .exec(&mut agent_db.db)
     .await?;
 
-    tracing::info!("Your API Key: {}", &api_key);
-
-    Ok(())
+    Ok(api_key)
 }
 
 async fn list() -> Result<()> {

@@ -29,6 +29,7 @@ toasty-driver-turso = { workspace = true, features = ["sync"] }
 tracing.workspace = true
 uuid.workspace = true
 
+elevon-config.workspace = true
 elevon-contracts.workspace = true
 elevon-fs = { workspace = true, features = ["agent"] }
 elevon-http.workspace = true
