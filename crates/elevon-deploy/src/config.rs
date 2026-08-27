@@ -1,3 +1,4 @@
+pub mod app;
 pub mod elevon;
 pub mod env;
 pub mod registry;
@@ -5,13 +6,54 @@ pub mod registry;
 use std::collections::HashMap;
 
 use anyhow::Result;
-use elevon_config::{ConfigError, ElevonConfig, ResolveEnvCredentials, resolve_env_or_literal};
+use elevon_config::{ElevonConfig, ResolveEnvCredentials};
 use elevon_contracts::deploy::{AppRole, TlsConfig};
 use serde::Deserialize;
 
-use crate::{agent::AgentClient, config::env::EnvConfig};
+use crate::{
+    agent::AgentClient,
+    config::{app::AppConfig, env::EnvConfig},
+};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct RoutingConfig {
+    pub domain: String,
+    pub port: u16,
+    pub tls: Option<TlsConfig>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum BuildConfig {
+    Path(String),
+    Options(BuildOptions),
+}
+
+impl Default for BuildConfig {
+    fn default() -> Self {
+        BuildConfig::Path(".".to_string())
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(default)]
+pub struct BuildOptions {
+    pub path: String,
+    pub dockerfile: Option<String>,
+}
+
+impl Default for BuildOptions {
+    fn default() -> Self {
+        Self {
+            path: ".".to_string(),
+            dockerfile: None,
+        }
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
 pub struct Config {
     pub name: String,
     pub image: String,
@@ -24,10 +66,8 @@ pub struct Config {
 
     pub routing: RoutingConfig,
 
-    #[serde(default)]
     pub env: Option<EnvConfig>,
 
-    #[serde(default)]
     pub apps: HashMap<String, AppConfig>,
 }
 
@@ -72,8 +112,8 @@ impl Config {
                     "web".to_string(),
                     AppConfig {
                         role: AppRole::Web,
-                        env: None,
                         tls: self.routing.tls.clone(),
+                        ..Default::default()
                     },
                 )]);
             }
@@ -104,58 +144,4 @@ impl Config {
         agent_client.push_deploy(self, selected).await?;
         Ok(())
     }
-}
-
-#[derive(Debug, Deserialize)]
-pub struct RoutingConfig {
-    pub domain: String,
-    pub port: u16,
-    pub tls: Option<TlsConfig>,
-}
-
-impl ResolveEnvCredentials for RoutingConfig {
-    type Output = HashMap<String, String>;
-
-    fn resolved_credentials(&self) -> Result<Self::Output, ConfigError> {
-        let mut resolved = HashMap::new();
-
-        if let Some(tls) = &self.tls {
-            resolved.insert("TLS_CERT".to_string(), resolve_env_or_literal(&tls.cert)?);
-            resolved.insert("TLS_KEY".to_string(), resolve_env_or_literal(&tls.key)?);
-        }
-
-        Ok(resolved)
-    }
-}
-
-#[derive(Debug, Deserialize, Clone)]
-#[serde(untagged)]
-pub enum BuildConfig {
-    Path(String),
-    Options(BuildOptions),
-}
-
-impl Default for BuildConfig {
-    fn default() -> Self {
-        BuildConfig::Path(".".to_string())
-    }
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct BuildOptions {
-    pub path: String,
-    #[serde(default)]
-    pub dockerfile: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct AppConfig {
-    #[serde(default)]
-    pub role: AppRole,
-
-    #[serde(default)]
-    pub env: Option<EnvConfig>,
-
-    #[serde(skip)]
-    pub tls: Option<TlsConfig>,
 }

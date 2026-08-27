@@ -49,3 +49,10 @@ env:
 #     role: web
 #   worker:
 #     role: worker
+#     cmd: "deno run worker.ts"
+#     runtime:
+#       restart: unless-stopped
+#       cpu: 2
+#       memory: 512mb
+#       network: my-network
+

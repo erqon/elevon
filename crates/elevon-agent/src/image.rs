@@ -7,7 +7,7 @@ use std::{
 use anyhow::Result;
 use bollard::{
     auth::DockerCredentials,
-    plugin::{ContainerCreateBody, HostConfig, PortBinding, PortMap},
+    plugin::{ContainerCreateBody, HostConfig, PortBinding, PortMap, RestartPolicy},
     query_parameters::{CreateContainerOptionsBuilder, CreateImageOptionsBuilder},
 };
 use elevon_contracts::deploy::{
@@ -142,12 +142,20 @@ pub async fn run_image(
         }
 
         let host_config = Some(HostConfig {
+            restart_policy: Some(RestartPolicy {
+                name: app_config.options.restart,
+                ..Default::default()
+            }),
+            nano_cpus: app_config.options.cpu_limit,
+            memory: app_config.options.memory_limit,
+            network_mode: app_config.options.network.clone(),
             port_bindings: Some(port_bindings),
             ..Default::default()
         });
 
         let config = ContainerCreateBody {
             image: Some(app_config.image.clone()),
+            cmd: app_config.options.cmd.clone(),
             env: Some(app_env),
             host_config,
             ..Default::default()
@@ -235,7 +243,7 @@ pub async fn deploy_apps(
                     |err| tracing::error!(app = %app.name, error = %err, "failed to run container"),
                 )?;
 
-        if let (AppRole::Web, Some(web_app)) = (&app.role, &app.web_app) {
+        if let (AppRole::Web, Some(web_app)) = (&app.options.role, &app.web_app) {
             if let Some(mut previous_deployment) =
                 Deployment::get_previous_deployment(&mut db, &db_app.id, &container_id).await?
             {

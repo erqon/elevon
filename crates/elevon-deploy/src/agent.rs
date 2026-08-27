@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use elevon_config::ResolveEnvCredentials;
 use elevon_contracts::deploy::{
-    AppDeployPayload, AppEnvPayload, AppEnvSetPayload, AppPayload, AppRole, WebApp,
+    AppDeployPayload, AppEnvPayload, AppEnvSetPayload, AppOptions, AppPayload, AppRole, WebApp,
     log_stream_events,
 };
 use reqwest::{
@@ -14,7 +14,7 @@ use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::image::progress::{print_success, print_success_compact};
 use crate::{
-    config::{AppConfig, Config},
+    config::{Config, app::AppConfig},
     util::COMMIT_SHA,
 };
 
@@ -155,6 +155,21 @@ impl AgentClient {
                     AppRole::Worker => None,
                 };
 
+                let cmd = cfg.cmd.as_ref().and_then(|c| shlex::split(c));
+                let (cpu, memory, network) = match cfg.runtime.clone() {
+                    Some(runtime) => (runtime.cpu, runtime.memory, runtime.network),
+                    None => (None, None, None),
+                };
+
+                let options = AppOptions {
+                    role: cfg.role.clone(),
+                    cmd,
+                    cpu_limit: cpu.as_ref().map(|c| c.nano_cpus()),
+                    memory_limit: memory.as_ref().map(|m| m.bytes()),
+                    network,
+                    ..Default::default()
+                };
+
                 AppPayload {
                     project: config.name.clone(),
                     image: crate::image::util::full_image_name(
@@ -163,7 +178,7 @@ impl AgentClient {
                         COMMIT_SHA,
                     ),
                     name: name.to_string(),
-                    role: cfg.role.clone(),
+                    options,
                     web_app,
                 }
             })
