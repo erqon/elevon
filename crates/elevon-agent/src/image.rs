@@ -7,7 +7,7 @@ use std::{
 use anyhow::Result;
 use bollard::{
     auth::DockerCredentials,
-    plugin::{ContainerCreateBody, HostConfig, PortBinding, PortMap},
+    plugin::{ContainerCreateBody, HostConfig, PortBinding, PortMap, RestartPolicy},
     query_parameters::{CreateContainerOptionsBuilder, CreateImageOptionsBuilder},
 };
 use elevon_contracts::deploy::{
@@ -142,6 +142,12 @@ pub async fn run_image(
         }
 
         let host_config = Some(HostConfig {
+            restart_policy: Some(RestartPolicy {
+                name: app_config.options.restart,
+                ..Default::default()
+            }),
+            memory: app_config.options.memory_limit,
+            network_mode: app_config.options.network.clone(),
             port_bindings: Some(port_bindings),
             ..Default::default()
         });

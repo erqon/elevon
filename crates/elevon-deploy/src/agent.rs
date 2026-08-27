@@ -156,9 +156,17 @@ impl AgentClient {
                 };
 
                 let cmd = cfg.cmd.as_ref().and_then(|c| shlex::split(c));
+                let (memory, network) = match cfg.runtime.clone() {
+                    Some(runtime) => (runtime.memory, runtime.network),
+                    None => (None, None),
+                };
+
                 let options = AppOptions {
                     role: cfg.role.clone(),
                     cmd,
+                    memory_limit: memory.as_ref().map(|m| m.bytes()),
+                    network,
+                    ..Default::default()
                 };
 
                 AppPayload {

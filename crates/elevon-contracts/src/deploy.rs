@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
+use bollard::plugin::RestartPolicyNameEnum;
 use bytes::Bytes;
 use elevon_config::{ConfigError, ResolveEnvCredentials, resolve_env_or_literal};
 use futures_util::{Stream, StreamExt};
@@ -50,13 +51,18 @@ impl ResolveEnvCredentials for TlsConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AppOptions {
     pub role: AppRole,
     pub cmd: Option<Vec<String>>,
+    pub restart: Option<RestartPolicyNameEnum>,
+    pub memory_limit: Option<i64>,
+    pub network: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AppPayload {
     pub project: String,
     pub image: String,

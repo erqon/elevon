@@ -50,3 +50,8 @@ env:
 #   worker:
 #     role: worker
 #     cmd: "deno run worker.ts"
+#     runtime:
+#       restart: unless-stopped
+#       memory: 512mb
+#       network: my-network
+

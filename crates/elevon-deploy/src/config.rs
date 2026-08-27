@@ -112,10 +112,8 @@ impl Config {
                     "web".to_string(),
                     AppConfig {
                         role: AppRole::Web,
-                        env: None,
-                        cmd: None,
-                        runtime: None,
                         tls: self.routing.tls.clone(),
+                        ..Default::default()
                     },
                 )]);
             }
