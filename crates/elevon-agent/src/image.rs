@@ -146,6 +146,7 @@ pub async fn run_image(
                 name: app_config.options.restart,
                 ..Default::default()
             }),
+            nano_cpus: app_config.options.cpu_limit,
             memory: app_config.options.memory_limit,
             network_mode: app_config.options.network.clone(),
             port_bindings: Some(port_bindings),

@@ -58,6 +58,7 @@ pub struct AppOptions {
     pub cmd: Option<Vec<String>>,
     pub restart: Option<RestartPolicyNameEnum>,
     pub memory_limit: Option<i64>,
+    pub cpu_limit: Option<i64>,
     pub network: Option<String>,
 }
 
