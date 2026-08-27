@@ -51,11 +51,17 @@ impl ResolveEnvCredentials for TlsConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct AppOptions {
+    pub role: AppRole,
+    pub cmd: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AppPayload {
     pub project: String,
     pub image: String,
     pub name: String,
-    pub role: AppRole,
+    pub options: AppOptions,
     pub web_app: Option<WebApp>,
 }
 

@@ -5,6 +5,7 @@ pub mod registry;
 use std::collections::HashMap;
 
 use anyhow::Result;
+use bollard::plugin::RestartPolicyNameEnum;
 use elevon_config::{ConfigError, ElevonConfig, ResolveEnvCredentials, resolve_env_or_literal};
 use elevon_contracts::deploy::{AppRole, TlsConfig};
 use serde::Deserialize;
@@ -73,6 +74,8 @@ impl Config {
                     AppConfig {
                         role: AppRole::Web,
                         env: None,
+                        cmd: None,
+                        runtime: None,
                         tls: self.routing.tls.clone(),
                     },
                 )]);
@@ -148,14 +151,21 @@ pub struct BuildOptions {
     pub dockerfile: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Default, Deserialize, Clone)]
 pub struct AppConfig {
-    #[serde(default)]
     pub role: AppRole,
 
-    #[serde(default)]
+    pub cmd: Option<String>,
+
+    pub runtime: Option<AppRuntimeConfig>,
+
     pub env: Option<EnvConfig>,
 
     #[serde(skip)]
     pub tls: Option<TlsConfig>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct AppRuntimeConfig {
+    pub restart: RestartPolicyNameEnum,
 }

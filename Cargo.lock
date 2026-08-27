@@ -1524,6 +1524,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "shlex 2.0.1",
  "tar",
  "tokio",
  "tracing",

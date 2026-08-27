@@ -148,6 +148,7 @@ pub async fn run_image(
 
         let config = ContainerCreateBody {
             image: Some(app_config.image.clone()),
+            cmd: app_config.options.cmd.clone(),
             env: Some(app_env),
             host_config,
             ..Default::default()
@@ -235,7 +236,7 @@ pub async fn deploy_apps(
                     |err| tracing::error!(app = %app.name, error = %err, "failed to run container"),
                 )?;
 
-        if let (AppRole::Web, Some(web_app)) = (&app.role, &app.web_app) {
+        if let (AppRole::Web, Some(web_app)) = (&app.options.role, &app.web_app) {
             if let Some(mut previous_deployment) =
                 Deployment::get_previous_deployment(&mut db, &db_app.id, &container_id).await?
             {

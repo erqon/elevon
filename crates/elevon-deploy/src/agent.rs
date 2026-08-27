@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use elevon_config::ResolveEnvCredentials;
 use elevon_contracts::deploy::{
-    AppDeployPayload, AppEnvPayload, AppEnvSetPayload, AppPayload, AppRole, WebApp,
+    AppDeployPayload, AppEnvPayload, AppEnvSetPayload, AppOptions, AppPayload, AppRole, WebApp,
     log_stream_events,
 };
 use reqwest::{
@@ -155,6 +155,12 @@ impl AgentClient {
                     AppRole::Worker => None,
                 };
 
+                let cmd = cfg.cmd.as_ref().and_then(|c| shlex::split(c));
+                let options = AppOptions {
+                    role: cfg.role.clone(),
+                    cmd,
+                };
+
                 AppPayload {
                     project: config.name.clone(),
                     image: crate::image::util::full_image_name(
@@ -163,7 +169,7 @@ impl AgentClient {
                         COMMIT_SHA,
                     ),
                     name: name.to_string(),
-                    role: cfg.role.clone(),
+                    options,
                     web_app,
                 }
             })

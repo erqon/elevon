@@ -119,6 +119,10 @@ impl AppState {
                     continue;
                 };
 
+                if state == RouteState::Draining {
+                    continue;
+                }
+
                 let route_config = RouteConfig {
                     id: deployment.id.to_string(),
                     project: project_name,

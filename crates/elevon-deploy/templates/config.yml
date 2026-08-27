@@ -49,3 +49,4 @@ env:
 #     role: web
 #   worker:
 #     role: worker
+#     cmd: "deno run worker.ts"
