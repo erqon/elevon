@@ -14,7 +14,7 @@ use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use crate::image::progress::{print_success, print_success_compact};
 use crate::{
-    config::{AppConfig, Config},
+    config::{Config, app::AppConfig},
     util::COMMIT_SHA,
 };
 

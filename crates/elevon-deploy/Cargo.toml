@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 walkdir = "2.5.0"
 tar = "0.4.46"
+shlex = "2.0.1"
 
 anyhow.workspace = true
 bollard.workspace = true
@@ -23,4 +24,3 @@ tracing-subscriber.workspace = true
 elevon-config.workspace = true
 elevon-contracts.workspace = true
 elevon-http.workspace = true
-shlex = "2.0.1"

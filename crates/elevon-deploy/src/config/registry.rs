@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use elevon_config::{ConfigError, ResolveEnvCredentials, resolve_env_or_literal};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct RegistryConfig {
     #[serde(default = "RegistryConfig::default_server")]
     pub server: String,

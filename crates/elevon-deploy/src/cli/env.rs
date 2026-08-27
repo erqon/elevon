@@ -4,7 +4,7 @@ use clap::Subcommand;
 
 use crate::{
     agent::AgentClient,
-    config::{AppConfig, registry::RegistryConfig},
+    config::{app::AppConfig, registry::RegistryConfig},
 };
 
 #[derive(Debug, Subcommand)]
