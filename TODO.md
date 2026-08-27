@@ -12,7 +12,7 @@ Markers for features before the release
 
 ### Elevon Agent
 
-- [ ] TLS termination with Let's Encrypt or user-provided certificates **(M) - (user provided at least)**
+- [x] TLS termination with Let's Encrypt or user-provided certificates **(M) - (user provided at least)**
 - [ ] Streaming application logs **(M)**
 - [ ] Metrics pipeline (CPU, mem, req latency, error rate) **(M)**
 - [ ] Running infrastructure Docker services (Postgres, Redis, etc.) **(N)**
