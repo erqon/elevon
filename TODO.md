@@ -26,7 +26,7 @@ Markers for features before the release
 
 - [x] Init command **(M)**
 - [ ] Fix/add install script **(N/P)**
-- [ ] App runtime configuration **(M)**
+- [x] App runtime configuration **(M)**
 - [ ] Deploy rollback command **(M)**
 - [ ] Interactive rollback selector (choose previous release) **(N)**
 - [ ] Release snapshot export/import (images + env + runtime config) **(M)**
