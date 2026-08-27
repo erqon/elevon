@@ -86,10 +86,11 @@ pub async fn pull_image(
 
 pub async fn run_image(
     tx: &StreamSender,
+    db: &mut toasty::Db,
     docker: &bollard::Docker,
     app: &App,
     app_config: &AppPayload,
-    db: &mut toasty::Db,
+    prev_deployment_id: Option<uuid::Uuid>,
 ) -> Result<(String, String, u16)> {
     let port = {
         let mut ports = ALLOCATED_PORTS.write().await;
@@ -109,9 +110,9 @@ pub async fn run_image(
 
     let mut deployment = toasty::create!(Deployment {
         app_id: app.id,
-        container_id: None,
         status: DeploymentStatus::Pending,
         port,
+        prev_deployment_id,
     })
     .exec(db)
     .await?;
@@ -236,17 +237,24 @@ pub async fn deploy_apps(
         pull_image(tx, &state.docker, &app).await.inspect_err(
             |err| tracing::error!(app = %app.name, error = %err, "failed to get or create app"),
         )?;
-        let (deployment_id, container_id, port) =
-            run_image(tx, &state.docker, &db_app, &app, &mut db)
-                .await
-                .inspect_err(
-                    |err| tracing::error!(app = %app.name, error = %err, "failed to run container"),
-                )?;
+
+        let previous_deployment = Deployment::get_previous_deployment(&mut db, &db_app.id).await?;
+
+        let (deployment_id, container_id, port) = run_image(
+            tx,
+            &mut db,
+            &state.docker,
+            &db_app,
+            &app,
+            previous_deployment.as_ref().map(|d| d.id),
+        )
+        .await
+        .inspect_err(
+            |err| tracing::error!(app = %app.name, error = %err, "failed to run container"),
+        )?;
 
         if let (AppRole::Web, Some(web_app)) = (&app.options.role, &app.web_app) {
-            if let Some(mut previous_deployment) =
-                Deployment::get_previous_deployment(&mut db, &db_app.id, &container_id).await?
-            {
+            if let Some(mut previous_deployment) = previous_deployment {
                 emit(
                     tx,
                     StreamEvent::Log {

@@ -69,6 +69,9 @@ pub struct Deployment {
     #[index]
     pub app_id: uuid::Uuid,
 
+    #[index]
+    pub prev_deployment_id: Option<uuid::Uuid>,
+
     pub container_id: Option<String>,
 
     pub port: u16,
@@ -77,6 +80,9 @@ pub struct Deployment {
 
     #[belongs_to(key = app_id, references = id)]
     pub app: toasty::Deferred<App>,
+
+    #[belongs_to(key = prev_deployment_id, references = id)]
+    pub prev_deployment: toasty::Deferred<Option<Deployment>>,
 
     #[auto]
     pub created_at: jiff::Timestamp,
@@ -89,19 +95,14 @@ impl Deployment {
     pub async fn get_previous_deployment(
         db: &mut toasty::Db,
         app_id: &uuid::Uuid,
-        current_deployment_id: &str,
     ) -> anyhow::Result<Option<Deployment>> {
         let previous_deployment = Deployment::filter(
             Deployment::fields()
                 .app_id()
                 .eq(app_id)
-                .and(
-                    Deployment::fields()
-                        .container_id()
-                        .ne(Some(current_deployment_id.to_string())),
-                )
                 .and(Deployment::fields().status().eq(DeploymentStatus::Active)),
         )
+        .latest_by(Deployment::fields().created_at())
         .first()
         .exec(db)
         .await?;
