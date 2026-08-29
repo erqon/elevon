@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::api::db::AgentDb;
 use crate::api::db::models::{Deployment, DeploymentStatus};
 use crate::env::ElevonEnv;
-use crate::proxy::types::{AgentEvent, RouteConfig, RouteState};
+use crate::proxy::types::{AgentEvent, AppData, AppState as AppStateType, RouteData};
 
 pub struct AppState {
     pub agent_db: AgentDb,

@@ -77,6 +77,7 @@ impl ProxyHttp for Proxy {
             SocketAddr::Inet(addr) => Some(addr.port()),
             _ => None,
         };
+
         if let Some(port) = selected_port {
             let selected = self.state.get_backend_by_port(port);
             if let Some(backend) = selected {

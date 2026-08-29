@@ -1,51 +1,47 @@
-use std::{
-    sync::{Arc, atomic::AtomicUsize},
-    time::Instant,
-};
+use std::{sync::atomic::AtomicUsize, time::Instant};
 
+use elevon_contracts::deploy::WebApp;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "event", content = "data")]
 pub enum AgentEvent {
-    UpsertRoute(RouteConfig),
-    DrainRoute(RouteConfig),
+    UpsertRoute(DeployAppData),
+    DrainApp(DeployAppData),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RouteConfig {
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum DeployAppState {
+    Active,
+    Draining,
+}
+
+impl Default for DeployAppState {
+    fn default() -> Self {
+        Self::Active
+    }
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct DeployAppData {
     pub id: String,
     pub project: String,
     pub name: String,
-    pub domain: String,
-    pub port: u16,
-    pub state: RouteState,
+    pub state: DeployAppState,
     pub container_id: String,
+    pub web_app: Option<WebApp>,
 }
 
-#[derive(Debug)]
-pub struct BackendRuntime {
-    pub container_id: String,
-    pub state: RouteState,
+#[derive(Debug, Default)]
+pub struct RouteBackendRuntime {
     pub port: u16,
     pub inflight: AtomicUsize,
     pub drain_started_at: Option<Instant>,
 }
 
-impl BackendRuntime {
-    pub fn new(container_id: String, port: u16) -> Arc<Self> {
-        Arc::new(BackendRuntime {
-            container_id,
-            state: RouteState::Active,
-            port,
-            inflight: AtomicUsize::new(0),
-            drain_started_at: None,
-        })
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum RouteState {
-    Active,
-    Draining,
+#[derive(Debug, Default)]
+pub struct BackendRuntime {
+    pub container_id: String,
+    pub state: DeployAppState,
+    pub route: Option<RouteBackendRuntime>,
 }

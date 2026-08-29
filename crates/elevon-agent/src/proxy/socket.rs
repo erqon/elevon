@@ -48,12 +48,10 @@ async fn run_socket_listener(state: Arc<ProxyState>) -> Result<(), Box<dyn Error
 
             match message {
                 AgentEvent::UpsertRoute(route) => {
-                    let id = route.id.clone();
                     state.upsert_route(route);
-                    tracing::info!("route {} upserted", &id);
                 }
-                AgentEvent::DrainRoute(route) => {
-                    state.drain_route(route);
+                AgentEvent::DrainApp(app) => {
+                    state.drain_app(app);
                 }
             }
         });

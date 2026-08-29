@@ -11,7 +11,7 @@ use bollard::{
     query_parameters::{CreateContainerOptionsBuilder, CreateImageOptionsBuilder},
 };
 use elevon_contracts::deploy::{
-    AppPayload, AppRole, StreamEvent, StreamLogLevel, resolve_app_env_name,
+    AppPayload, AppRole, AppRollbackPayloadData, StreamEvent, StreamLogLevel, WebApp, resolve_app_env_name,
 };
 use elevon_fs::agent::{load_app_env, load_app_string_env};
 use futures::StreamExt;
@@ -23,7 +23,7 @@ use crate::{
         state::AppState,
         stream::{StreamSender, emit},
     },
-    proxy::types::{AgentEvent, RouteConfig, RouteState},
+    proxy::types::{AgentEvent, DeployAppData, DeployAppState},
 };
 
 static ALLOCATED_PORTS: LazyLock<RwLock<HashSet<u16>>> =
@@ -215,6 +215,36 @@ fn find_free_port() -> Option<u16> {
     None
 }
 
+async fn drain_app(
+    state: &AppState,
+    db: &mut toasty::Db,
+    mut deployment: Deployment,
+    id: String,
+    container_id: String,
+    web_app: Option<WebApp>,
+) -> Result<()> {
+    toasty::update!(deployment {
+        status: DeploymentStatus::Drained
+    })
+    .exec(db)
+    .await?;
+
+    let app_data = DeployAppData {
+        id,
+        state: DeployAppState::Draining,
+        container_id,
+        web_app,
+    };
+
+    let drain_stream = state.socket_client.connect().await?;
+    state
+        .socket_client
+        .send(drain_stream, AgentEvent::DrainApp(app_data))
+        .await?;
+
+    Ok(())
+}
+
 pub async fn deploy_apps(
     tx: &StreamSender,
     state: Arc<AppState>,
@@ -238,15 +268,16 @@ pub async fn deploy_apps(
             |err| tracing::error!(app = %app.name, error = %err, "failed to get or create app"),
         )?;
 
-        let previous_deployment = Deployment::get_previous_deployment(&mut db, &db_app.id).await?;
+        // Gets currently running deployment
+        let current_deployment = Deployment::get_current_deployment(&mut db, &db_app.id).await?;
 
-        let (deployment_id, container_id, port) = run_image(
+        let (deployment_id, _new_container_id, port) = run_image(
             tx,
             &mut db,
             &state.docker,
             &db_app,
             &app,
-            previous_deployment.as_ref().map(|d| d.id),
+            current_deployment.as_ref().map(|d| d.id),
         )
         .await
         .inspect_err(
@@ -254,7 +285,9 @@ pub async fn deploy_apps(
         )?;
 
         if let (AppRole::Web, Some(web_app)) = (&app.options.role, &app.web_app) {
-            if let Some(mut previous_deployment) = previous_deployment {
+            // Marks the current deployment as draining, so no new requests will be handled by it,
+            // and later the DrainJanitor service will terminate the container.
+            if let Some(current_deployment) = current_deployment {
                 emit(
                     tx,
                     StreamEvent::Log {
@@ -267,28 +300,23 @@ pub async fn deploy_apps(
                 )
                 .await;
 
-                if let Some(container_id) = previous_deployment.container_id.clone() {
-                    toasty::update!(previous_deployment {
-                        status: DeploymentStatus::Drained
-                    })
-                    .exec(&mut db)
-                    .await?;
-
-                    let route_config = RouteConfig {
-                        id: deployment_id.clone(),
+                if let Some(container_id) = current_deployment.container_id.clone() {
+                    let route_data = RouteData {
                         project: app.project.clone(),
                         name: app.name.clone(),
-                        domain: web_app.domain.clone(),
                         port,
-                        state: RouteState::Draining,
-                        container_id,
+                        domain: web_app.domain.clone(),
                     };
 
-                    let drain_stream = state.socket_client.connect().await?;
-                    state
-                        .socket_client
-                        .send(drain_stream, AgentEvent::DrainRoute(route_config))
-                        .await?;
+                    drain_app(
+                        &state,
+                        &mut db,
+                        current_deployment,
+                        deployment_id.clone(),
+                        container_id,
+                        Some(route_data),
+                    )
+                    .await?;
                 }
             }
 
@@ -301,21 +329,72 @@ pub async fn deploy_apps(
             )
             .await;
 
-            let route_config = RouteConfig {
-                id: deployment_id,
+            let route_data = RouteData {
                 project: app.project,
                 name: app.name,
-                domain: web_app.domain.clone(),
                 port,
-                state: RouteState::Active,
-                container_id,
+                domain: web_app.domain.clone(),
             };
 
             let upsert_stream = state.socket_client.connect().await?;
             state
                 .socket_client
-                .send(upsert_stream, AgentEvent::UpsertRoute(route_config))
+                .send(upsert_stream, AgentEvent::UpsertRoute(route_data))
                 .await?;
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn rollback_apps(
+    tx: &StreamSender,
+    state: Arc<AppState>,
+    apps: Vec<AppRollbackPayloadData>,
+) -> Result<()> {
+    let mut db = state.agent_db.db.clone();
+
+    // TODO: During rollback previous app's image might be usinig different env variables
+    // since it might have been updated afterwards.
+    // So some kind of env backups would be a nice feature for future, but for now this should be ok.
+
+    for app in apps {
+        let db_app = App::get_by_project_and_name(&mut db, &app.project, &app.name).await?;
+
+        let Some(db_app) = db_app else {
+            emit(
+                tx,
+                StreamEvent::Log {
+                    level: StreamLogLevel::Info,
+                    message: format!("[{}] App not found, skipping...", app.name,),
+                },
+            )
+            .await;
+
+            continue;
+        };
+
+        let previous_deployment = Deployment::get_previous_deployment(&mut db, &db_app.id).await?;
+        let current_deployment = Deployment::get_current_deployment(&mut db, &db_app.id).await?;
+
+        let (Some(previous_deployment), Some(current_deployment)) =
+            (previous_deployment, current_deployment)
+        else {
+            continue;
+        };
+
+        if let (Some(domain), Some(container_id)) =
+            (db_app.domain, previous_deployment.container_id)
+        {
+            // let route_config = RouteConfig {
+            //     id: previous_deployment.id.to_string(),
+            //     project: app.project,
+            //     name: app.name,
+            //     domain,
+            //     port: previous_deployment.port,
+            //     state: RouteState::Active,
+            //     container_id,
+            // };
         }
     }
 

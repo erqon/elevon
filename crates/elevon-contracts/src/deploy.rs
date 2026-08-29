@@ -8,6 +8,81 @@ use futures_util::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StreamLogLevel {
+    Info,
+    Warn,
+    Error,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum StreamEvent {
+    Log {
+        level: StreamLogLevel,
+        message: String,
+    },
+    Done,
+    Error {
+        message: String,
+    },
+}
+
+pub async fn log_stream_events<S>(mut event_stream: S) -> anyhow::Result<()>
+where
+    S: Stream<Item = Result<Bytes, reqwest::Error>> + Unpin,
+{
+    while let Some(chunk_result) = event_stream.next().await {
+        let chunk = match chunk_result {
+            Ok(c) => c,
+            Err(err) => {
+                tracing::error!(error = %err, "Stream connection error");
+                return Err(err.into());
+            }
+        };
+        let text = String::from_utf8_lossy(&chunk);
+
+        for line in text.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+
+            if line.starts_with(":") {
+                continue;
+            }
+
+            if let Some(payload) = line.strip_prefix("data: ") {
+                if payload == "[DONE]" {
+                    tracing::debug!("Stream sent [DONE] payload");
+                    continue;
+                }
+
+                match serde_json::from_str::<StreamEvent>(payload) {
+                    Ok(StreamEvent::Log { message, .. }) => {
+                        tracing::info!(message);
+                    }
+                    Ok(StreamEvent::Error { message }) => {
+                        tracing::error!(message);
+                    }
+                    Ok(other_event) => {
+                        tracing::debug!(?other_event, "Unhandled stream event variant");
+                    }
+                    Err(err) => {
+                        tracing::warn!(
+                            error = %err,
+                            raw_payload = payload,
+                            "Failed to parse SSE payload as StreamEvent"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AppEnvPayload {
     pub project: String,
     pub name: String,
@@ -30,8 +105,8 @@ pub enum AppRole {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WebApp {
-    pub domain: String,
     pub port: u16,
+    pub domain: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,57 +163,12 @@ pub enum TlsType {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum StreamLogLevel {
-    Info,
-    Warn,
-    Error,
+pub struct AppRollbackPayloadData {
+    pub project: String,
+    pub name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum StreamEvent {
-    Log {
-        level: StreamLogLevel,
-        message: String,
-    },
-    Done,
-    Error {
-        message: String,
-    },
-}
-
-pub async fn log_stream_events<S>(mut event_stream: S) -> anyhow::Result<()>
-where
-    S: Stream<Item = Result<Bytes, reqwest::Error>> + Unpin,
-{
-    while let Some(chunk) = event_stream.next().await {
-        let chunk = chunk?;
-        let text = String::from_utf8_lossy(&chunk);
-
-        for line in text.lines() {
-            if line.trim().is_empty() {
-                continue;
-            }
-
-            if line.starts_with(":") {
-                continue;
-            }
-
-            if let Some(payload) = line.strip_prefix("data: ") {
-                let event: StreamEvent = serde_json::from_str(payload)?;
-                match event {
-                    StreamEvent::Log { message, .. } => {
-                        tracing::info!(message);
-                    }
-                    StreamEvent::Error { message } => {
-                        tracing::error!(message);
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
-
-    Ok(())
+pub struct AppRollbackPayload {
+    pub apps: Vec<AppRollbackPayloadData>,
 }

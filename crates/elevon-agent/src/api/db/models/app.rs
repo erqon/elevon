@@ -1,3 +1,4 @@
+use anyhow::Result;
 use elevon_contracts::deploy::AppPayload;
 
 #[derive(Debug, toasty::Model)]
@@ -7,8 +8,10 @@ pub struct App {
     pub id: uuid::Uuid,
 
     #[column(type = varchar(32))]
+    #[index]
     pub name: String,
 
+    #[index]
     pub project: String,
 
     pub domain: Option<String>,
@@ -24,7 +27,19 @@ pub struct App {
 }
 
 impl App {
-    pub async fn get_or_create(db: &mut toasty::Db, payload: &AppPayload) -> anyhow::Result<Self> {
+    pub async fn get_by_project_and_name(
+        db: &mut toasty::Db,
+        project: &str,
+        name: &str,
+    ) -> Result<Option<Self>> {
+        Ok(Self::filter_by_project(project)
+            .filter_by_name(name)
+            .first()
+            .exec(db)
+            .await?)
+    }
+
+    pub async fn get_or_create(db: &mut toasty::Db, payload: &AppPayload) -> Result<Self> {
         let app = Self::filter(Self::fields().name().eq(&payload.name))
             .order_by(Self::fields().updated_at().asc())
             .first()
@@ -92,11 +107,11 @@ pub struct Deployment {
 }
 
 impl Deployment {
-    pub async fn get_previous_deployment(
+    pub async fn get_current_deployment(
         db: &mut toasty::Db,
         app_id: &uuid::Uuid,
     ) -> anyhow::Result<Option<Deployment>> {
-        let previous_deployment = Deployment::filter(
+        let deployment = Deployment::filter(
             Deployment::fields()
                 .app_id()
                 .eq(app_id)
@@ -107,6 +122,26 @@ impl Deployment {
         .exec(db)
         .await?;
 
-        Ok(previous_deployment)
+        Ok(deployment)
+    }
+
+    pub async fn get_previous_deployment(
+        db: &mut toasty::Db,
+        app_id: &uuid::Uuid,
+    ) -> anyhow::Result<Option<Deployment>> {
+        let deployment = Deployment::filter(
+            Deployment::fields()
+                .app_id()
+                .eq(app_id)
+                .and(Deployment::fields().status().eq(DeploymentStatus::Active)),
+        )
+        .latest_by(Deployment::fields().created_at())
+        .offset(1)
+        .limit(1)
+        .first()
+        .exec(db)
+        .await?;
+
+        Ok(deployment)
     }
 }

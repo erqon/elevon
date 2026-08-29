@@ -1,19 +1,25 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, atomic::AtomicUsize},
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
     time::{Duration, Instant},
 };
 
 use anyhow::Result;
 use arc_swap::ArcSwap;
 use dashmap::DashMap;
+use elevon_contracts::deploy::AppRole;
 use pingora::lb::{LoadBalancer, health_check::TcpHealthCheck, selection::RoundRobin};
 
 use crate::{
     env::ElevonEnv,
     proxy::{
         tls::DynamicCert,
-        types::{BackendRuntime, RouteConfig, RouteState},
+        types::{
+            AppData, AppState as AppStateType, BackendRuntime, RouteBackendRuntime, RouteData,
+        },
     },
 };
 
@@ -56,29 +62,27 @@ impl ProxyState {
         }))
     }
 
-    pub fn upsert_route(&self, config: RouteConfig) {
-        let name = config.domain.clone();
-
-        if config.domain == self.agent.domain {
+    pub fn upsert_route(&self, route: RouteData) {
+        if route.domain == self.agent.domain {
             tracing::warn!(
-                domain = %config.domain,
+                domain = %route.domain,
                 "refusing application route on reserved agent domain"
             );
             return;
         }
 
-        if config.state != RouteState::Active {
-            tracing::debug!(
-                domain = %config.domain,
-                state = ?config.state,
-                "skipping inactive application route"
-            );
-            return;
-        }
+        // if route.state != RouteState::Active {
+        //     tracing::debug!(
+        //         domain = %route.domain,
+        //         state = ?config.state,
+        //         "skipping inactive application route"
+        //     );
+        //     return;
+        // }
 
         self.routes.rcu(|current| {
             let mut next = current.as_ref().clone();
-            let backends = next.entry(name.clone()).or_default();
+            let backends = next.entry(route.domain.clone()).or_default();
 
             self.dynamic_cert
                 .add_cert(
@@ -128,21 +132,21 @@ impl ProxyState {
         tracing::info!("Routes changed, current state: {:?}", self.routes.load());
     }
 
-    fn rebuild_load_balancer(&self, domain: &str) {
+    fn rebuild_load_balancer(&self, domain: String) {
         let routes = self.routes.load();
 
         let addrs: Vec<String> = routes
-            .get(domain)
+            .get(&domain)
             .into_iter()
             .flatten()
-            .filter(|route| route.state == RouteState::Active)
+            .filter(|route| route.state == AppStateType::Active)
             .map(|route| format!("127.0.0.1:{}", route.port))
             .collect();
 
         if addrs.is_empty() {
             self.lbs.rcu(|current| {
                 let mut next = (**current).clone();
-                next.remove(domain);
+                next.remove(&domain);
                 next
             });
             return;
@@ -163,87 +167,111 @@ impl ProxyState {
         });
     }
 
-    pub fn drain_route(&self, route: RouteConfig) {
-        self.routes.rcu(|current| {
-            let mut next = current.as_ref().clone();
-            let backends = next.entry(route.domain.clone()).or_default();
+    pub fn drain_app(&self, app: AppData) {
+        let mut backend_runtime = BackendRuntime {
+            container_id: app.container_id,
+            state: AppStateType::Draining,
+            ..Default::default()
+        };
 
-            for backend in backends.iter_mut() {
-                if backend.container_id == route.container_id {
-                    backend.state = RouteState::Draining;
+        if let Some(route) = app.route {
+            self.routes.rcu(|current| {
+                let mut next = current.as_ref().clone();
+                let backends = next.entry(route.domain).or_default();
+
+                for backend in backends.iter_mut() {
+                    if backend.container_id == app.container_id {
+                        backend.state = AppStateType::Draining;
+                    }
                 }
-            }
 
-            next
-        });
+                next
+            });
+            self.rebuild_load_balancer(route.domain);
 
-        self.rebuild_load_balancer(&route.domain);
+            let inflight = self
+                .runtime
+                .get(&app.container_id)
+                .map(|r| {
+                    r.route
+                        .map(|ro| ro.inflight.load(std::sync::atomic::Ordering::Relaxed))
+                        .unwrap_or(0)
+                })
+                .unwrap_or(0);
 
-        let inflight = self
-            .runtime
-            .get(&route.container_id)
-            .map(|r| r.inflight.load(std::sync::atomic::Ordering::Relaxed))
-            .unwrap_or(0);
+            // TODO: Suspicious 
+            let drain_started_at = self
+                .runtime
+                .get(&app.container_id)
+                .and_then(|r| r.route.and_then(|ro| ro.drain_started_at))
+                .or(Some(Instant::now()));
 
-        let drain_started_at = self
-            .runtime
-            .get(&route.container_id)
-            .and_then(|r| r.drain_started_at)
-            .or(Some(Instant::now()));
-
-        self.runtime.insert(
-            route.container_id.clone(),
-            Arc::new(BackendRuntime {
-                container_id: route.container_id.clone(),
-                state: RouteState::Draining,
+            let route_backend_runtime = RouteBackendRuntime {
                 port: route.port,
                 inflight: AtomicUsize::new(inflight),
                 drain_started_at,
-            }),
-        );
+            };
 
-        tracing::info!(%route.container_id, "route marked as draining");
+            backend_runtime.route = Some(route_backend_runtime);
+        }
+
+        self.runtime
+            .insert(app.container_id.clone(), Arc::new(backend_runtime));
+
+        tracing::info!(%app.container_id, "route marked as draining");
     }
 
     pub fn get_backend_by_port(&self, port: u16) -> Option<Arc<BackendRuntime>> {
         self.runtime
             .iter()
-            .find(|r| r.value().port == port)
+            .find(|r| r.value().route.as_ref().is_some_and(|ro| ro.port == port))
             .map(|r| r.value().clone())
     }
 
     pub fn increase_inflight_count(&self, container_id: &str) {
-        if let Some(runtime) = self.runtime.get(container_id) {
-            runtime
-                .inflight
-                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if let Some(route) = self
+            .runtime
+            .get(container_id)
+            .as_ref()
+            .and_then(|r| r.route.as_ref())
+        {
+            route.inflight.fetch_add(1, Ordering::Relaxed);
         }
     }
 
     pub fn decrease_inflight_count(&self, container_id: &str) {
-        if let Some(runtime) = self.runtime.get(container_id) {
-            runtime
-                .inflight
-                .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+        if let Some(route) = self
+            .runtime
+            .get(container_id)
+            .as_ref()
+            .and_then(|r| r.route.as_ref())
+        {
+            route.inflight.fetch_sub(1, Ordering::Relaxed);
         }
     }
 
     pub fn ready_to_terminate(&self, grace_period: Duration) -> Vec<(String, u16)> {
         self.runtime
             .iter()
-            .filter(|r| {
+            .filter_map(|r| {
                 let runtime = r.value();
-                if runtime.state != RouteState::Draining {
-                    return false;
+                if runtime.state != AppStateType::Draining {
+                    return None;
                 }
-                let inflight = runtime.inflight.load(std::sync::atomic::Ordering::Relaxed);
-                let past_grace = runtime
+
+                let route = runtime.route.as_ref()?;
+
+                let inflight = route.inflight.load(std::sync::atomic::Ordering::Relaxed);
+                let past_grace = route
                     .drain_started_at
                     .is_some_and(|t| t.elapsed() >= grace_period);
 
-                inflight == 0 || past_grace
+                if inflight == 0 || past_grace {
+                    Some((r.key().clone(), route.port))
+                } else {
+                    None
+                }
             })
-            .map(|r| (r.key().clone(), r.value().port))
             .collect()
     }
 
@@ -274,7 +302,7 @@ impl ProxyState {
         });
 
         for domain in domains {
-            self.rebuild_load_balancer(&domain);
+            self.rebuild_load_balancer(domain);
         }
     }
 
@@ -288,7 +316,7 @@ impl ProxyState {
 
             match response {
                 Ok(resp) if resp.status().is_success() => {
-                    let containers: Vec<RouteConfig> = resp.json().await?;
+                    let containers: Vec<AppData> = resp.json().await?;
                     if containers.is_empty() {
                         return Ok(());
                     }
