@@ -291,6 +291,9 @@ pub async fn deploy_apps(
             ..Default::default()
         };
 
+        // Currently this doesn't deploy Worker apps, doing so requires updating UpsertRoute in a way 
+        // that it would be DeployApp or something, that would start the container and upsert as a route
+        // in case of it being a web app.
         if AppRole::Web == app.options.role {
             // Marks the current deployment as draining, so no new requests will be handled by it,
             // and later the DrainJanitor service will terminate the container.
@@ -366,14 +369,17 @@ pub async fn rollback_apps(
             continue;
         };
 
-        let _previous_deployment = Deployment::get_previous_deployment(&mut db, &db_app.id).await?;
+        let previous_deployment = Deployment::get_previous_deployment(&mut db, &db_app.id).await?;
         let _current_deployment = Deployment::get_current_deployment(&mut db, &db_app.id).await?;
 
-        // let (Some(previous_deployment), Some(current_deployment)) =
-        //     (previous_deployment, current_deployment)
-        // else {
-        //     continue;
-        // };
+        // Prevous deployment must exist since what are you trying to rollback to, right?
+        // Also current deployment might not be active because of a failure or something,
+        // so rollback can still happen.
+        let Some(_previous_deployment) = previous_deployment else {
+            continue;
+        };
+
+        
 
         // if let (Some(domain), Some(container_id)) =
         //     (db_app.domain, previous_deployment.container_id)

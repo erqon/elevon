@@ -107,6 +107,7 @@ pub struct Deployment {
 }
 
 impl Deployment {
+    // It would be better this to be also checking the containers status just to make sure its running or not
     pub async fn get_current_deployment(
         db: &mut toasty::Db,
         app_id: &uuid::Uuid,
