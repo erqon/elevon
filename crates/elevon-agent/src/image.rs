@@ -11,7 +11,8 @@ use bollard::{
     query_parameters::{CreateContainerOptionsBuilder, CreateImageOptionsBuilder},
 };
 use elevon_contracts::deploy::{
-    AppPayload, AppRole, AppRollbackPayloadData, StreamEvent, StreamLogLevel, WebApp, resolve_app_env_name,
+    AppPayload, AppRole, AppRollbackPayloadData, StreamEvent, StreamLogLevel, WebApp,
+    resolve_app_env_name,
 };
 use elevon_fs::agent::{load_app_env, load_app_string_env};
 use futures::StreamExt;
@@ -23,7 +24,7 @@ use crate::{
         state::AppState,
         stream::{StreamSender, emit},
     },
-    proxy::types::{AgentEvent, DeployAppData, DeployAppState},
+    proxy::types::{AgentEvent, DeployAppData},
 };
 
 static ALLOCATED_PORTS: LazyLock<RwLock<HashSet<u16>>> =
@@ -219,22 +220,13 @@ async fn drain_app(
     state: &AppState,
     db: &mut toasty::Db,
     mut deployment: Deployment,
-    id: String,
-    container_id: String,
-    web_app: Option<WebApp>,
+    app_data: DeployAppData,
 ) -> Result<()> {
     toasty::update!(deployment {
         status: DeploymentStatus::Drained
     })
     .exec(db)
     .await?;
-
-    let app_data = DeployAppData {
-        id,
-        state: DeployAppState::Draining,
-        container_id,
-        web_app,
-    };
 
     let drain_stream = state.socket_client.connect().await?;
     state
@@ -271,7 +263,7 @@ pub async fn deploy_apps(
         // Gets currently running deployment
         let current_deployment = Deployment::get_current_deployment(&mut db, &db_app.id).await?;
 
-        let (deployment_id, _new_container_id, port) = run_image(
+        let (new_deployment_id, new_container_id, port) = run_image(
             tx,
             &mut db,
             &state.docker,
@@ -284,7 +276,20 @@ pub async fn deploy_apps(
             |err| tracing::error!(app = %app.name, error = %err, "failed to run container"),
         )?;
 
+        let mut app_data = DeployAppData {
+            id: new_deployment_id,
+            project: app.project,
+            name: app.name.clone(),
+            container_id: new_container_id,
+            ..Default::default()
+        };
+
         if let (AppRole::Web, Some(web_app)) = (&app.options.role, &app.web_app) {
+            app_data.web_app = Some(WebApp {
+                port,
+                domain: web_app.domain.clone(),
+            });
+
             // Marks the current deployment as draining, so no new requests will be handled by it,
             // and later the DrainJanitor service will terminate the container.
             if let Some(current_deployment) = current_deployment {
@@ -301,22 +306,13 @@ pub async fn deploy_apps(
                 .await;
 
                 if let Some(container_id) = current_deployment.container_id.clone() {
-                    let route_data = RouteData {
-                        project: app.project.clone(),
-                        name: app.name.clone(),
-                        port,
-                        domain: web_app.domain.clone(),
+                    let current_app_data = DeployAppData {
+                        id: current_deployment.id.to_string(),
+                        container_id,
+                        ..app_data.clone()
                     };
 
-                    drain_app(
-                        &state,
-                        &mut db,
-                        current_deployment,
-                        deployment_id.clone(),
-                        container_id,
-                        Some(route_data),
-                    )
-                    .await?;
+                    drain_app(&state, &mut db, current_deployment, current_app_data).await?;
                 }
             }
 
@@ -329,17 +325,10 @@ pub async fn deploy_apps(
             )
             .await;
 
-            let route_data = RouteData {
-                project: app.project,
-                name: app.name,
-                port,
-                domain: web_app.domain.clone(),
-            };
-
             let upsert_stream = state.socket_client.connect().await?;
             state
                 .socket_client
-                .send(upsert_stream, AgentEvent::UpsertRoute(route_data))
+                .send(upsert_stream, AgentEvent::UpsertRoute(app_data))
                 .await?;
         }
     }

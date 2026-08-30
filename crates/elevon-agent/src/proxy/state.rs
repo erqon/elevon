@@ -10,16 +10,13 @@ use std::{
 use anyhow::Result;
 use arc_swap::ArcSwap;
 use dashmap::DashMap;
-use elevon_contracts::deploy::AppRole;
 use pingora::lb::{LoadBalancer, health_check::TcpHealthCheck, selection::RoundRobin};
 
 use crate::{
     env::ElevonEnv,
     proxy::{
         tls::DynamicCert,
-        types::{
-            AppData, AppState as AppStateType, BackendRuntime, RouteBackendRuntime, RouteData,
-        },
+        types::{BackendRuntime, DeployAppData, DeployAppState, RouteBackendRuntime},
     },
 };
 
@@ -33,7 +30,7 @@ pub struct AgentState {
 pub struct ProxyState {
     pub agent: AgentState,
     pub docker: Arc<bollard::Docker>,
-    pub routes: ArcSwap<HashMap<String, Vec<RouteConfig>>>,
+    pub routes: ArcSwap<HashMap<String, Vec<DeployAppData>>>,
     pub lbs: ArcSwap<HashMap<String, Arc<LoadBalancer<RoundRobin>>>>,
     pub runtime: DashMap<String, Arc<BackendRuntime>>,
     pub dynamic_cert: DynamicCert,
@@ -62,60 +59,65 @@ impl ProxyState {
         }))
     }
 
-    pub fn upsert_route(&self, route: RouteData) {
-        if route.domain == self.agent.domain {
+    pub fn upsert_route(&self, route: DeployAppData) {
+        let Some(web_app) = route.web_app.clone() else {
+            tracing::warn!(app = %&route.name, "refusing application route on non web app");
+            return;
+        };
+
+        if web_app.domain == self.agent.domain {
             tracing::warn!(
-                domain = %route.domain,
+                domain = %web_app.domain,
                 "refusing application route on reserved agent domain"
             );
             return;
         }
 
-        // if route.state != RouteState::Active {
-        //     tracing::debug!(
-        //         domain = %route.domain,
-        //         state = ?config.state,
-        //         "skipping inactive application route"
-        //     );
-        //     return;
-        // }
+        if route.state != DeployAppState::Active {
+            tracing::debug!(
+                domain = %web_app.domain,
+                state = ?route.state,
+                "skipping inactive application route"
+            );
+            return;
+        }
 
         self.routes.rcu(|current| {
             let mut next = current.as_ref().clone();
-            let backends = next.entry(route.domain.clone()).or_default();
+            let backends = next.entry(web_app.domain.clone()).or_default();
 
             self.dynamic_cert
                 .add_cert(
-                    &config.project,
-                    &config.name,
-                    config.domain.clone(),
+                    &route.project,
+                    &route.name,
+                    web_app.domain.clone(),
                     Some(true),
                 )
                 .unwrap_or_else(|err| {
                     tracing::error!(
-                        domain = %config.domain,
-                        state = ?config.state,
+                        domain = %web_app.domain,
+                        state = ?route.state,
                         error = %err,
                         "failed to save/update certificates"
                     )
                 });
 
-            if let Some(existing) = backends.iter_mut().find(|route| route.id == config.id) {
-                *existing = config.clone();
+            if let Some(existing) = backends.iter_mut().find(|a| a.id == route.id) {
+                *existing = route.clone();
             } else {
-                backends.push(config.clone());
+                backends.push(route.clone());
             }
 
             next
         });
 
         let routes = self.routes.load();
-        let backends = routes.get(&name).cloned().unwrap_or_default();
+        let backends = routes.get(&web_app.domain).cloned().unwrap_or_default();
 
         let addrs: Vec<String> = backends
             .iter()
-            .filter(|b| b.state == RouteState::Active)
-            .map(|b| format!("127.0.0.1:{}", b.port))
+            .filter(|b| b.state == DeployAppState::Active)
+            .map(|_| format!("127.0.0.1:{}", web_app.port))
             .collect();
 
         let mut lb = LoadBalancer::<RoundRobin>::try_from_iter(addrs).expect("valid backends");
@@ -125,7 +127,7 @@ impl ProxyState {
 
         self.lbs.rcu(|current| {
             let mut next = (**current).clone();
-            next.insert(name.clone(), lb.clone());
+            next.insert(web_app.domain.clone(), lb.clone());
             next
         });
 
@@ -139,8 +141,17 @@ impl ProxyState {
             .get(&domain)
             .into_iter()
             .flatten()
-            .filter(|route| route.state == AppStateType::Active)
-            .map(|route| format!("127.0.0.1:{}", route.port))
+            .filter_map(|route| {
+                let Some(web_app) = route.web_app.clone() else {
+                    return None;
+                };
+
+                if route.state != DeployAppState::Active {
+                    return None;
+                }
+
+                Some(format!("127.0.0.1:{}", web_app.port))
+            })
             .collect();
 
         if addrs.is_empty() {
@@ -167,49 +178,43 @@ impl ProxyState {
         });
     }
 
-    pub fn drain_app(&self, app: AppData) {
+    pub fn drain_app(&self, app: DeployAppData) {
         let mut backend_runtime = BackendRuntime {
-            container_id: app.container_id,
-            state: AppStateType::Draining,
+            container_id: app.container_id.clone(),
+            state: DeployAppState::Draining,
             ..Default::default()
         };
 
-        if let Some(route) = app.route {
+        if let Some(web_app) = app.web_app {
             self.routes.rcu(|current| {
                 let mut next = current.as_ref().clone();
-                let backends = next.entry(route.domain).or_default();
+                let backends = next.entry(web_app.domain.clone()).or_default();
 
                 for backend in backends.iter_mut() {
-                    if backend.container_id == app.container_id {
-                        backend.state = AppStateType::Draining;
+                    if backend.container_id == app.container_id.clone() {
+                        backend.state = DeployAppState::Draining;
                     }
                 }
 
                 next
             });
-            self.rebuild_load_balancer(route.domain);
+            self.rebuild_load_balancer(web_app.domain);
 
             let inflight = self
                 .runtime
                 .get(&app.container_id)
                 .map(|r| {
                     r.route
+                        .as_ref()
                         .map(|ro| ro.inflight.load(std::sync::atomic::Ordering::Relaxed))
                         .unwrap_or(0)
                 })
                 .unwrap_or(0);
 
-            // TODO: Suspicious 
-            let drain_started_at = self
-                .runtime
-                .get(&app.container_id)
-                .and_then(|r| r.route.and_then(|ro| ro.drain_started_at))
-                .or(Some(Instant::now()));
-
             let route_backend_runtime = RouteBackendRuntime {
-                port: route.port,
+                port: web_app.port,
                 inflight: AtomicUsize::new(inflight),
-                drain_started_at,
+                drain_started_at: Some(Instant::now()),
             };
 
             backend_runtime.route = Some(route_backend_runtime);
@@ -255,7 +260,7 @@ impl ProxyState {
             .iter()
             .filter_map(|r| {
                 let runtime = r.value();
-                if runtime.state != AppStateType::Draining {
+                if runtime.state != DeployAppState::Draining {
                     return None;
                 }
 
@@ -316,7 +321,7 @@ impl ProxyState {
 
             match response {
                 Ok(resp) if resp.status().is_success() => {
-                    let containers: Vec<AppData> = resp.json().await?;
+                    let containers: Vec<DeployAppData> = resp.json().await?;
                     if containers.is_empty() {
                         return Ok(());
                     }

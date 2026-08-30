@@ -22,7 +22,7 @@ impl Default for DeployAppState {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DeployAppData {
     pub id: String,
     pub project: String,

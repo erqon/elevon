@@ -103,7 +103,7 @@ pub enum AppRole {
     Worker,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebApp {
     pub port: u16,
     pub domain: String,

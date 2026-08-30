@@ -59,9 +59,7 @@ pub async fn run(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
     if !auth_keys.is_empty() {
         tracing::info!("Auth key already exist, run 'key list' to view the keys");
     } else {
-        let api_key = crate::cli::key::create("Default").await?;
-
-        tracing::info!("API Key was created, make sure to save it: {}", &api_key);
+        crate::cli::key::create("Default").await?;
     }
 
     if !args.no_systemd {
