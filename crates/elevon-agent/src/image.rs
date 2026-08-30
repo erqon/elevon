@@ -260,8 +260,7 @@ pub async fn deploy_apps(
             |err| tracing::error!(app = %app.name, error = %err, "failed to get or create app"),
         )?;
 
-        // Gets currently running deployment
-        let current_deployment = Deployment::get_current_deployment(&mut db, &db_app.id).await?;
+        let latest_deployment = Deployment::get_latest_deployment(&mut db, &db_app.id).await?;
 
         let (new_deployment_id, new_container_id, port) = run_image(
             tx,
@@ -269,7 +268,7 @@ pub async fn deploy_apps(
             &state.docker,
             &db_app,
             &app,
-            current_deployment.as_ref().map(|d| d.id),
+            latest_deployment.as_ref().map(|d| d.id),
         )
         .await
         .inspect_err(
@@ -291,13 +290,13 @@ pub async fn deploy_apps(
             ..Default::default()
         };
 
-        // Currently this doesn't deploy Worker apps, doing so requires updating UpsertRoute in a way 
+        // Currently this doesn't deploy Worker apps, doing so requires updating UpsertRoute in a way
         // that it would be DeployApp or something, that would start the container and upsert as a route
         // in case of it being a web app.
         if AppRole::Web == app.options.role {
             // Marks the current deployment as draining, so no new requests will be handled by it,
             // and later the DrainJanitor service will terminate the container.
-            if let Some(current_deployment) = current_deployment {
+            if let Some(latest_deployment) = latest_deployment {
                 emit(
                     tx,
                     StreamEvent::Log {
@@ -310,15 +309,15 @@ pub async fn deploy_apps(
                 )
                 .await;
 
-                if let Some(container_id) = current_deployment.container_id.clone() {
+                if let Some(container_id) = latest_deployment.container_id.clone() {
                     let current_app_data = DeployAppData {
-                        id: current_deployment.id.to_string(),
+                        id: latest_deployment.id.to_string(),
                         container_id,
                         state: DeployAppState::Draining,
                         ..app_data.clone()
                     };
 
-                    drain_app(&state, &mut db, current_deployment, current_app_data).await?;
+                    drain_app(&state, &mut db, latest_deployment, current_app_data).await?;
                 }
             }
 
@@ -370,7 +369,7 @@ pub async fn rollback_apps(
         };
 
         let previous_deployment = Deployment::get_previous_deployment(&mut db, &db_app.id).await?;
-        let _current_deployment = Deployment::get_current_deployment(&mut db, &db_app.id).await?;
+        let _latest_deployment = Deployment::get_latest_deployment(&mut db, &db_app.id).await?;
 
         // Prevous deployment must exist since what are you trying to rollback to, right?
         // Also current deployment might not be active because of a failure or something,
@@ -379,7 +378,9 @@ pub async fn rollback_apps(
             continue;
         };
 
-        
+        let _prev_app_data = DeployAppData {
+            ..Default::default()
+        };
 
         // if let (Some(domain), Some(container_id)) =
         //     (db_app.domain, previous_deployment.container_id)

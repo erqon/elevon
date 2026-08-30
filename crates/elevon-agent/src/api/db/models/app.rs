@@ -108,41 +108,45 @@ pub struct Deployment {
 
 impl Deployment {
     // It would be better this to be also checking the containers status just to make sure its running or not
-    pub async fn get_current_deployment(
+    async fn _get_by_app_id(
         db: &mut toasty::Db,
         app_id: &uuid::Uuid,
-    ) -> anyhow::Result<Option<Deployment>> {
-        let deployment = Deployment::filter(
+        status: DeploymentStatus,
+        latest: bool,
+    ) -> Result<Option<Self>> {
+        let mut query = Deployment::filter(
             Deployment::fields()
                 .app_id()
                 .eq(app_id)
-                .and(Deployment::fields().status().eq(DeploymentStatus::Active)),
+                .and(Deployment::fields().status().eq(status)),
         )
-        .latest_by(Deployment::fields().created_at())
-        .first()
-        .exec(db)
-        .await?;
+        .include(Deployment::fields().app())
+        .latest_by(Deployment::fields().created_at());
 
+        if !latest {
+            query = query.offset(1).limit(1);
+        }
+
+        let deployment = query.first().exec(db).await?;
+
+        Ok(deployment)
+    }
+
+    pub async fn get_latest_deployment(
+        db: &mut toasty::Db,
+        app_id: &uuid::Uuid,
+    ) -> Result<Option<Deployment>> {
+        let deployment =
+            Deployment::_get_by_app_id(db, app_id, DeploymentStatus::Active, true).await?;
         Ok(deployment)
     }
 
     pub async fn get_previous_deployment(
         db: &mut toasty::Db,
         app_id: &uuid::Uuid,
-    ) -> anyhow::Result<Option<Deployment>> {
-        let deployment = Deployment::filter(
-            Deployment::fields()
-                .app_id()
-                .eq(app_id)
-                .and(Deployment::fields().status().eq(DeploymentStatus::Active)),
-        )
-        .latest_by(Deployment::fields().created_at())
-        .offset(1)
-        .limit(1)
-        .first()
-        .exec(db)
-        .await?;
-
+    ) -> Result<Option<Deployment>> {
+        let deployment =
+            Deployment::_get_by_app_id(db, app_id, DeploymentStatus::Active, false).await?;
         Ok(deployment)
     }
 }
