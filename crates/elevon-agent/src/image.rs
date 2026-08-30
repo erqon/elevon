@@ -24,7 +24,7 @@ use crate::{
         state::AppState,
         stream::{StreamSender, emit},
     },
-    proxy::types::{AgentEvent, DeployAppData},
+    proxy::types::{AgentEvent, DeployAppData, DeployAppState},
 };
 
 static ALLOCATED_PORTS: LazyLock<RwLock<HashSet<u16>>> =
@@ -276,20 +276,22 @@ pub async fn deploy_apps(
             |err| tracing::error!(app = %app.name, error = %err, "failed to run container"),
         )?;
 
-        let mut app_data = DeployAppData {
+        let app_data = DeployAppData {
             id: new_deployment_id,
             project: app.project,
             name: app.name.clone(),
             container_id: new_container_id,
+            web_app: match (&app.options.role, &app.web_app) {
+                (AppRole::Web, Some(web_app)) => Some(WebApp {
+                    port,
+                    domain: web_app.domain.clone(),
+                }),
+                _ => None,
+            },
             ..Default::default()
         };
 
-        if let (AppRole::Web, Some(web_app)) = (&app.options.role, &app.web_app) {
-            app_data.web_app = Some(WebApp {
-                port,
-                domain: web_app.domain.clone(),
-            });
-
+        if AppRole::Web == app.options.role {
             // Marks the current deployment as draining, so no new requests will be handled by it,
             // and later the DrainJanitor service will terminate the container.
             if let Some(current_deployment) = current_deployment {
@@ -309,6 +311,7 @@ pub async fn deploy_apps(
                     let current_app_data = DeployAppData {
                         id: current_deployment.id.to_string(),
                         container_id,
+                        state: DeployAppState::Draining,
                         ..app_data.clone()
                     };
 
@@ -363,28 +366,28 @@ pub async fn rollback_apps(
             continue;
         };
 
-        let previous_deployment = Deployment::get_previous_deployment(&mut db, &db_app.id).await?;
-        let current_deployment = Deployment::get_current_deployment(&mut db, &db_app.id).await?;
+        let _previous_deployment = Deployment::get_previous_deployment(&mut db, &db_app.id).await?;
+        let _current_deployment = Deployment::get_current_deployment(&mut db, &db_app.id).await?;
 
-        let (Some(previous_deployment), Some(current_deployment)) =
-            (previous_deployment, current_deployment)
-        else {
-            continue;
-        };
+        // let (Some(previous_deployment), Some(current_deployment)) =
+        //     (previous_deployment, current_deployment)
+        // else {
+        //     continue;
+        // };
 
-        if let (Some(domain), Some(container_id)) =
-            (db_app.domain, previous_deployment.container_id)
-        {
-            // let route_config = RouteConfig {
-            //     id: previous_deployment.id.to_string(),
-            //     project: app.project,
-            //     name: app.name,
-            //     domain,
-            //     port: previous_deployment.port,
-            //     state: RouteState::Active,
-            //     container_id,
-            // };
-        }
+        // if let (Some(domain), Some(container_id)) =
+        //     (db_app.domain, previous_deployment.container_id)
+        // {
+        //     // let route_config = RouteConfig {
+        //     //     id: previous_deployment.id.to_string(),
+        //     //     project: app.project,
+        //     //     name: app.name,
+        //     //     domain,
+        //     //     port: previous_deployment.port,
+        //     //     state: RouteState::Active,
+        //     //     container_id,
+        //     // };
+        // }
     }
 
     Ok(())
