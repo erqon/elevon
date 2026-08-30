@@ -10,16 +10,11 @@ pub enum AgentEvent {
     DrainApp(DeployAppData),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub enum DeployAppState {
+    #[default]
     Active,
     Draining,
-}
-
-impl Default for DeployAppState {
-    fn default() -> Self {
-        Self::Active
-    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
