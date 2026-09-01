@@ -164,13 +164,14 @@ async fn clear_port(port: &u16) {
 
 struct DeployAppOptions<'a> {
     port: u16,
+    db: &'a mut toasty::Db,
     app_config: &'a AppPayload,
-    new_deployment: &'a Deployment,
 }
 
 async fn deploy_app<'a>(
     tx: &StreamSender,
     docker: &bollard::Docker,
+    mut deployment: Deployment,
     options: DeployAppOptions<'a>,
 ) -> Result<String> {
     emit(
@@ -185,13 +186,7 @@ async fn deploy_app<'a>(
     )
     .await;
 
-    let container_id = run_image(
-        docker,
-        &options.new_deployment,
-        options.app_config,
-        options.port,
-    )
-    .await;
+    let container_id = run_image(docker, &deployment, options.app_config, options.port).await;
 
     match container_id {
         Err(err) => {
@@ -206,6 +201,12 @@ async fn deploy_app<'a>(
             )
             .await;
 
+            toasty::update!(deployment {
+                status: DeploymentStatus::Failed
+            })
+            .exec(options.db)
+            .await?;
+
             Err(err)
         }
         Ok(container_id) => {
@@ -217,6 +218,13 @@ async fn deploy_app<'a>(
                 },
             )
             .await;
+
+            toasty::update!(deployment {
+                container_id: container_id.clone(),
+                status: DeploymentStatus::Active
+            })
+            .exec(options.db)
+            .await?;
 
             Ok(container_id)
         }
@@ -265,7 +273,7 @@ pub async fn deploy_apps(
         let latest_deployment = Deployment::get_latest_deployment(&mut db, &db_app.id).await?;
 
         let new_port = get_free_port().await?;
-        let mut new_deployment = toasty::create!(Deployment {
+        let new_deployment = toasty::create!(Deployment {
             app_id: db_app.id,
             status: DeploymentStatus::Pending,
             port: new_port,
@@ -296,34 +304,16 @@ pub async fn deploy_apps(
 
         let deploy_app_options = DeployAppOptions {
             port: new_port,
+            db: &mut db,
             app_config: &app,
-            new_deployment: &new_deployment,
         };
 
-        let new_container_id = match deploy_app(tx, &state.docker, deploy_app_options).await {
-            Err(err) => {
-                toasty::update!(new_deployment {
-                    status: DeploymentStatus::Failed
-                })
-                .exec(&mut db)
-                .await?;
-
-                Err(err)
-            }
-            Ok(container_id) => {
-                toasty::update!(new_deployment {
-                    container_id: container_id.clone(),
-                    status: DeploymentStatus::Active
-                })
-                .exec(&mut db)
-                .await?;
-
-                Ok(container_id)
-            }
-        }?;
+        let new_deployment_id = new_deployment.id.to_string();
+        let new_container_id =
+            deploy_app(tx, &state.docker, new_deployment, deploy_app_options).await?;
 
         let app_data = DeployAppData {
-            id: new_deployment.id.to_string(),
+            id: new_deployment_id,
             project: app.project,
             name: app.name.clone(),
             container_id: new_container_id,
