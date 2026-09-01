@@ -150,63 +150,61 @@ fn find_free_port() -> Option<u16> {
     None
 }
 
-async fn deploy_app(
-    tx: &StreamSender,
-    db: &mut toasty::Db,
-    docker: &bollard::Docker,
-    prev_deployment_id: Option<uuid::Uuid>,
-    app: &App,
-    app_config: &AppPayload,
-) -> Result<(String, String, u16)> {
-    let port = {
-        let mut ports = ALLOCATED_PORTS.write().await;
-        let port = find_free_port().ok_or_else(|| anyhow::anyhow!("No free port found"))?;
-        ports.insert(port);
-        port
-    };
+async fn get_free_port() -> Result<u16> {
+    let mut ports = ALLOCATED_PORTS.write().await;
+    let port = find_free_port().ok_or_else(|| anyhow::anyhow!("No free port found"))?;
+    ports.insert(port);
+    Ok(port)
+}
 
+async fn clear_port(port: &u16) {
+    let mut ports = ALLOCATED_PORTS.write().await;
+    ports.remove(port);
+}
+
+struct DeployAppOptions<'a> {
+    port: u16,
+    app_config: &'a AppPayload,
+    new_deployment: &'a Deployment,
+}
+
+async fn deploy_app<'a>(
+    tx: &StreamSender,
+    docker: &bollard::Docker,
+    options: DeployAppOptions<'a>,
+) -> Result<String> {
     emit(
         tx,
         StreamEvent::Log {
             level: StreamLogLevel::Info,
             message: format!(
                 "[{}] Starting running a container on port {}",
-                app_config.name, port
+                options.app_config.name, options.port
             ),
         },
     )
     .await;
 
-    let mut deployment = toasty::create!(Deployment {
-        app_id: app.id,
-        status: DeploymentStatus::Pending,
-        port,
-        prev_deployment_id,
-    })
-    .exec(db)
-    .await?;
-
-    let container_id = run_image(docker, &deployment, app_config, port).await;
+    let container_id = run_image(
+        docker,
+        &options.new_deployment,
+        options.app_config,
+        options.port,
+    )
+    .await;
 
     match container_id {
         Err(err) => {
-            let mut ports = ALLOCATED_PORTS.write().await;
-            ports.remove(&port);
+            clear_port(&options.port).await;
 
             emit(
                 tx,
                 StreamEvent::Log {
                     level: StreamLogLevel::Error,
-                    message: format!("[{}] Container failed to start", app_config.name),
+                    message: format!("[{}] Container failed to start", options.app_config.name),
                 },
             )
             .await;
-
-            toasty::update!(deployment {
-                status: DeploymentStatus::Failed
-            })
-            .exec(db)
-            .await?;
 
             Err(err)
         }
@@ -215,19 +213,12 @@ async fn deploy_app(
                 tx,
                 StreamEvent::Log {
                     level: StreamLogLevel::Info,
-                    message: format!("[{}] Container started running", app_config.name),
+                    message: format!("[{}] Container started running", options.app_config.name),
                 },
             )
             .await;
 
-            toasty::update!(deployment {
-                container_id: container_id.clone(),
-                status: DeploymentStatus::Active
-            })
-            .exec(db)
-            .await?;
-
-            Ok((deployment.id.to_string(), container_id, port))
+            Ok(container_id)
         }
     }
 }
@@ -271,6 +262,17 @@ pub async fn deploy_apps(
         .await;
 
         let db_app = App::get_or_create(&mut db, &app).await?;
+        let latest_deployment = Deployment::get_latest_deployment(&mut db, &db_app.id).await?;
+
+        let new_port = get_free_port().await?;
+        let mut new_deployment = toasty::create!(Deployment {
+            app_id: db_app.id,
+            status: DeploymentStatus::Pending,
+            port: new_port,
+            prev_deployment_id: latest_deployment.as_ref().map(|d| d.id),
+        })
+        .exec(&mut db)
+        .await?;
 
         pull_image(tx, &state.docker, &app).await.inspect_err(
             |err| tracing::error!(app = %app.name, error = %err, "failed to get or create app"),
@@ -292,26 +294,42 @@ pub async fn deploy_apps(
             add_app_env(&resolved_path, None, key.clone(), value.clone())?;
         }
 
-        let latest_deployment = Deployment::get_latest_deployment(&mut db, &db_app.id).await?;
+        let deploy_app_options = DeployAppOptions {
+            port: new_port,
+            app_config: &app,
+            new_deployment: &new_deployment,
+        };
 
-        let (new_deployment_id, new_container_id, port) = deploy_app(
-            tx,
-            &mut db,
-            &state.docker,
-            latest_deployment.as_ref().map(|d| d.id),
-            &db_app,
-            &app,
-        )
-        .await?;
+        let new_container_id = match deploy_app(tx, &state.docker, deploy_app_options).await {
+            Err(err) => {
+                toasty::update!(new_deployment {
+                    status: DeploymentStatus::Failed
+                })
+                .exec(&mut db)
+                .await?;
+
+                Err(err)
+            }
+            Ok(container_id) => {
+                toasty::update!(new_deployment {
+                    container_id: container_id.clone(),
+                    status: DeploymentStatus::Active
+                })
+                .exec(&mut db)
+                .await?;
+
+                Ok(container_id)
+            }
+        }?;
 
         let app_data = DeployAppData {
-            id: new_deployment_id,
+            id: new_deployment.id.to_string(),
             project: app.project,
             name: app.name.clone(),
             container_id: new_container_id,
             web_app: match (&app.options.role, &app.web_app) {
                 (AppRole::Web, Some(web_app)) => Some(WebApp {
-                    port,
+                    port: new_port,
                     domain: web_app.domain.clone(),
                 }),
                 _ => None,
