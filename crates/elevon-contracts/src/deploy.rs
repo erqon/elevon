@@ -144,6 +144,8 @@ pub struct AppPayload {
     pub image: String,
     pub name: String,
     pub options: AppOptions,
+    pub vars: HashMap<String, String>,
+    pub tls: Option<TlsConfig>,
     pub web_app: Option<WebApp>,
 }
 

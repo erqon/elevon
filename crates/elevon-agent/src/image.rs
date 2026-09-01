@@ -11,10 +11,10 @@ use bollard::{
     query_parameters::{CreateContainerOptionsBuilder, CreateImageOptionsBuilder},
 };
 use elevon_contracts::deploy::{
-    AppPayload, AppRole, AppRollbackPayloadData, StreamEvent, StreamLogLevel, WebApp,
+    AppPayload, AppRole, AppRollbackPayloadData, StreamEvent, StreamLogLevel, TlsType, WebApp,
     resolve_app_env_name,
 };
-use elevon_fs::agent::{load_app_env, load_app_string_env};
+use elevon_fs::agent::{add_app_env, load_app_env, load_app_string_env, write_tls_file};
 use futures::StreamExt;
 use tokio::sync::RwLock;
 
@@ -84,14 +84,79 @@ pub async fn pull_image(
 
     Ok(())
 }
+async fn run_image(
+    docker: &bollard::Docker,
+    deployment: &Deployment,
+    app_config: &AppPayload,
+    port: u16,
+) -> Result<String> {
+    let container_name = format!("{}-{}", app_config.name, deployment.id);
+    let options = CreateContainerOptionsBuilder::new()
+        .name(&container_name)
+        .build();
 
-pub async fn run_image(
+    let project_env = load_app_string_env(&resolve_app_env_name(&app_config.project, "default"))?;
+    let mut app_env =
+        load_app_string_env(&resolve_app_env_name(&app_config.project, &app_config.name))?;
+
+    app_env.extend(project_env);
+
+    let mut port_bindings = PortMap::new();
+
+    if let Some(web_app) = &app_config.web_app {
+        port_bindings.insert(
+            format!("{}/tcp", web_app.port),
+            Some(vec![PortBinding {
+                host_ip: Some("0.0.0.0".to_string()),
+                host_port: Some(port.to_string()),
+            }]),
+        );
+    }
+
+    let host_config = Some(HostConfig {
+        restart_policy: Some(RestartPolicy {
+            name: app_config.options.restart,
+            ..Default::default()
+        }),
+        nano_cpus: app_config.options.cpu_limit,
+        memory: app_config.options.memory_limit,
+        network_mode: app_config.options.network.clone(),
+        port_bindings: Some(port_bindings),
+        ..Default::default()
+    });
+
+    let config = ContainerCreateBody {
+        image: Some(app_config.image.clone()),
+        cmd: app_config.options.cmd.clone(),
+        env: Some(app_env),
+        host_config,
+        ..Default::default()
+    };
+
+    let container = docker.create_container(Some(options), config).await?;
+
+    docker.start_container(&container.id, None).await?;
+
+    Ok(container.id)
+}
+
+fn find_free_port() -> Option<u16> {
+    for port in 3334..=9998 {
+        match TcpListener::bind(("0.0.0.0", port)) {
+            Ok(_) => return Some(port),
+            Err(_) => continue,
+        }
+    }
+    None
+}
+
+async fn deploy_app(
     tx: &StreamSender,
     db: &mut toasty::Db,
     docker: &bollard::Docker,
+    prev_deployment_id: Option<uuid::Uuid>,
     app: &App,
     app_config: &AppPayload,
-    prev_deployment_id: Option<uuid::Uuid>,
 ) -> Result<(String, String, u16)> {
     let port = {
         let mut ports = ALLOCATED_PORTS.write().await;
@@ -104,7 +169,10 @@ pub async fn run_image(
         tx,
         StreamEvent::Log {
             level: StreamLogLevel::Info,
-            message: format!("[{}] Running a container on port {}", app_config.name, port),
+            message: format!(
+                "[{}] Starting running a container on port {}",
+                app_config.name, port
+            ),
         },
     )
     .await;
@@ -118,63 +186,21 @@ pub async fn run_image(
     .exec(db)
     .await?;
 
-    let container_id = async {
-        let container_name = format!("{}-{}", app_config.name, deployment.id);
-        let options = CreateContainerOptionsBuilder::new()
-            .name(&container_name)
-            .build();
-
-        let resolved_project_env = resolve_app_env_name(&app_config.project, "default");
-        let project_env = load_app_string_env(&resolved_project_env)?;
-        let mut app_env =
-            load_app_string_env(&resolve_app_env_name(&app_config.project, &app_config.name))?;
-
-        app_env.extend(project_env);
-
-        let mut port_bindings = PortMap::new();
-
-        if let Some(web_app) = &app_config.web_app {
-            port_bindings.insert(
-                format!("{}/tcp", web_app.port),
-                Some(vec![PortBinding {
-                    host_ip: Some("0.0.0.0".to_string()),
-                    host_port: Some(port.to_string()),
-                }]),
-            );
-        }
-
-        let host_config = Some(HostConfig {
-            restart_policy: Some(RestartPolicy {
-                name: app_config.options.restart,
-                ..Default::default()
-            }),
-            nano_cpus: app_config.options.cpu_limit,
-            memory: app_config.options.memory_limit,
-            network_mode: app_config.options.network.clone(),
-            port_bindings: Some(port_bindings),
-            ..Default::default()
-        });
-
-        let config = ContainerCreateBody {
-            image: Some(app_config.image.clone()),
-            cmd: app_config.options.cmd.clone(),
-            env: Some(app_env),
-            host_config,
-            ..Default::default()
-        };
-
-        let container = docker.create_container(Some(options), config).await?;
-
-        docker.start_container(&container.id, None).await?;
-
-        Ok::<String, anyhow::Error>(container.id)
-    }
-    .await;
+    let container_id = run_image(docker, &deployment, app_config, port).await;
 
     match container_id {
         Err(err) => {
             let mut ports = ALLOCATED_PORTS.write().await;
             ports.remove(&port);
+
+            emit(
+                tx,
+                StreamEvent::Log {
+                    level: StreamLogLevel::Error,
+                    message: format!("[{}] Container failed to start", app_config.name),
+                },
+            )
+            .await;
 
             toasty::update!(deployment {
                 status: DeploymentStatus::Failed
@@ -185,13 +211,6 @@ pub async fn run_image(
             Err(err)
         }
         Ok(container_id) => {
-            toasty::update!(deployment {
-                container_id: container_id.clone(),
-                status: DeploymentStatus::Active
-            })
-            .exec(db)
-            .await?;
-
             emit(
                 tx,
                 StreamEvent::Log {
@@ -201,19 +220,16 @@ pub async fn run_image(
             )
             .await;
 
+            toasty::update!(deployment {
+                container_id: container_id.clone(),
+                status: DeploymentStatus::Active
+            })
+            .exec(db)
+            .await?;
+
             Ok((deployment.id.to_string(), container_id, port))
         }
     }
-}
-
-fn find_free_port() -> Option<u16> {
-    for port in 3334..=9998 {
-        match TcpListener::bind(("0.0.0.0", port)) {
-            Ok(_) => return Some(port),
-            Err(_) => continue,
-        }
-    }
-    None
 }
 
 async fn drain_app(
@@ -260,20 +276,33 @@ pub async fn deploy_apps(
             |err| tracing::error!(app = %app.name, error = %err, "failed to get or create app"),
         )?;
 
+        let resolved_path = resolve_app_env_name(&app.project, &app.name);
+
+        if let Some(tls) = app.tls.as_ref() {
+            write_tls_file(
+                &resolved_path,
+                tls.cert.as_bytes(),
+                TlsType::Cert,
+                Some(true),
+            )?;
+            write_tls_file(&resolved_path, tls.key.as_bytes(), TlsType::Key, Some(true))?;
+        }
+
+        for (key, value) in app.vars.clone() {
+            add_app_env(&resolved_path, None, key.clone(), value.clone())?;
+        }
+
         let latest_deployment = Deployment::get_latest_deployment(&mut db, &db_app.id).await?;
 
-        let (new_deployment_id, new_container_id, port) = run_image(
+        let (new_deployment_id, new_container_id, port) = deploy_app(
             tx,
             &mut db,
             &state.docker,
+            latest_deployment.as_ref().map(|d| d.id),
             &db_app,
             &app,
-            latest_deployment.as_ref().map(|d| d.id),
         )
-        .await
-        .inspect_err(
-            |err| tracing::error!(app = %app.name, error = %err, "failed to run container"),
-        )?;
+        .await?;
 
         let app_data = DeployAppData {
             id: new_deployment_id,
