@@ -74,10 +74,6 @@ impl AgentClient {
             .as_ref()
             .map_or_else(|| Ok(HashMap::default()), |env| env.resolved_credentials())?;
 
-        if let Some(env) = &config.env {
-            project_vars.extend(env.resolved_credentials()?);
-        }
-
         project_vars.extend(registry_config.vars());
 
         let apps_payload: Vec<AppPayload> = apps
