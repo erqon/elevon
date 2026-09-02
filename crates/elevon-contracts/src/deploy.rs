@@ -151,7 +151,6 @@ pub struct AppPayload {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AppDeployPayload {
-    pub project_vars: HashMap<String, String>,
     pub apps: Vec<AppPayload>,
 }
 

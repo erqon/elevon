@@ -3,8 +3,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use elevon_config::ResolveEnvCredentials;
 use elevon_contracts::deploy::{
-    AppDeployPayload, AppEnvPayload, AppEnvSetPayload, AppOptions, AppPayload, AppRole, WebApp,
-    log_stream_events,
+    AppDeployPayload, AppOptions, AppPayload, AppRole, WebApp, log_stream_events,
 };
 use reqwest::{
     Client, Url,
@@ -12,10 +11,7 @@ use reqwest::{
 };
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
-use crate::{
-    config::registry::RegistryConfig,
-    image::progress::{print_success, print_success_compact},
-};
+use crate::{config::registry::RegistryConfig, image::progress::print_success};
 use crate::{
     config::{Config, app::AppConfig},
     util::COMMIT_SHA,
@@ -59,85 +55,6 @@ impl AgentClient {
         headers
     }
 
-    pub async fn push_env(
-        &self,
-        project_name: String,
-        app_name: String,
-        vars: &HashMap<String, String>,
-    ) -> Result<()> {
-        let url = self.absolute_url("/env");
-        let headers = self.headers();
-
-        let apps_payload = AppEnvPayload {
-            project: project_name,
-            name: app_name,
-            vars: vars.clone(),
-            tls: None,
-        };
-
-        let payload = serde_json::json!(AppEnvSetPayload {
-            apps: vec![apps_payload]
-        });
-
-        self.client
-            .put(url)
-            .headers(headers)
-            .json(&payload)
-            .send()
-            .await?;
-
-        Ok(())
-    }
-
-    #[tracing::instrument(name = "push-envs", skip_all)]
-    pub async fn push_envs(
-        &self,
-        project_name: &str,
-        apps: Vec<(String, AppConfig)>,
-    ) -> Result<()> {
-        let url = self.absolute_url("/env");
-        let headers = self.headers();
-
-        tracing::Span::current().pb_set_message(&format!("pushing envs for {project_name}"));
-
-        let apps_payload: Vec<AppEnvPayload> = apps
-            .iter()
-            .map(|(name, config)| -> Result<Option<AppEnvPayload>> {
-                let vars = match &config.env {
-                    Some(vars) => vars.resolved_credentials()?,
-                    None => HashMap::default(),
-                };
-                let tls_with_credentials = match &config.tls {
-                    Some(tls) => Some(tls.resolved_credentials()?),
-                    None => None,
-                };
-
-                Ok(Some(AppEnvPayload {
-                    project: project_name.to_string(),
-                    name: name.clone(),
-                    vars: vars.clone(),
-                    tls: tls_with_credentials,
-                }))
-            })
-            .collect::<Result<Vec<_>>>()?
-            .into_iter()
-            .flatten()
-            .collect();
-
-        let payload = serde_json::json!(AppEnvSetPayload { apps: apps_payload });
-
-        self.client
-            .put(url)
-            .headers(headers)
-            .json(&payload)
-            .send()
-            .await?;
-
-        print_success_compact(&format!("Pushed app envs for {project_name}"));
-
-        Ok(())
-    }
-
     #[tracing::instrument(name = "deploy", skip_all)]
     pub async fn push_deploy(
         &self,
@@ -166,10 +83,12 @@ impl AgentClient {
         let apps_payload: Vec<AppPayload> = apps
             .iter()
             .map(|(name, cfg)| -> Result<Option<AppPayload>> {
-                let vars = cfg
+                let mut vars = cfg
                     .env
                     .as_ref()
                     .map_or_else(|| Ok(HashMap::default()), |env| env.resolved_credentials())?;
+
+                vars.extend(project_vars.clone());
 
                 let tls_with_credentials = cfg
                     .tls
@@ -219,10 +138,7 @@ impl AgentClient {
             .flatten()
             .collect();
 
-        let payload = serde_json::json!(AppDeployPayload {
-            project_vars,
-            apps: apps_payload
-        });
+        let payload = serde_json::json!(AppDeployPayload { apps: apps_payload });
 
         let event_stream = self
             .client

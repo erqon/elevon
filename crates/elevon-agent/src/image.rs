@@ -36,6 +36,7 @@ pub async fn pull_image(
     tx: &StreamSender,
     docker: &bollard::Docker,
     app_config: &AppPayload,
+    deployment_id: &str,
 ) -> Result<()> {
     emit(
         tx,
@@ -46,7 +47,7 @@ pub async fn pull_image(
     )
     .await;
 
-    let env_options = AppEnvOptions::app_base(&app_config.project, "default");
+    let env_options = AppEnvOptions::app(&app_config.project, &app_config.name, deployment_id);
     let project_env = load_app_env(env_options)?;
 
     let (registry_server, registry_username, registry_password) = match (
@@ -98,17 +99,12 @@ async fn run_container(
         .name(&container_name)
         .build();
 
-    let project_env_options = AppEnvOptions::app_base(&app_config.project, "default");
     let app_env_options = AppEnvOptions::app(
         &app_config.project,
         &app_config.name,
         &deployment.id.to_string(),
     );
-
-    let project_env = load_app_string_env(project_env_options)?;
-    let mut app_env = load_app_string_env(app_env_options)?;
-
-    app_env.extend(project_env);
+    let app_env = load_app_string_env(app_env_options)?;
 
     let mut port_bindings = PortMap::new();
 
@@ -219,7 +215,7 @@ async fn deploy_app<'a>(
 
     prepare_env_variables(options.app_config, &deployment.id.to_string())?;
 
-    pull_image(tx, docker, options.app_config).await.inspect_err(
+    pull_image(tx, docker, options.app_config, &deployment.id.to_string()).await.inspect_err(
         |err| tracing::error!(app = %options.app_config.name, error = %err, "failed to get or create app"),
     )?;
 
@@ -318,13 +314,6 @@ pub async fn deploy_apps(
     payload: AppDeployPayload,
 ) -> Result<()> {
     let mut db = state.agent_db.db.clone();
-
-    if let Some(first) = payload.apps.first() {
-        let env_options = AppEnvOptions::app_base(&first.project, "default");
-        for (key, value) in payload.project_vars {
-            add_app_env(key, value, env_options.clone())?;
-        }
-    }
 
     for app in payload.apps {
         emit(

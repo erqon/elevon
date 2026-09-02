@@ -55,15 +55,6 @@ impl AppEnvOptions {
         }
     }
 
-    pub fn app_base(project: &str, app: &str) -> Self {
-        Self {
-            project: project.to_string(),
-            app: Some(app.to_string()),
-            deployment_id: None,
-            bypass_default: None,
-        }
-    }
-
     pub fn app(project: &str, app: &str, deployment_id: &str) -> Self {
         Self {
             project: project.to_string(),
