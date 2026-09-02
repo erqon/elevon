@@ -87,12 +87,7 @@ impl ProxyState {
             let backends = next.entry(web_app.domain.clone()).or_default();
 
             self.dynamic_cert
-                .add_cert(
-                    &route.project,
-                    &route.name,
-                    web_app.domain.clone(),
-                    Some(true),
-                )
+                .add_cert(&route.project, &route.name, web_app.domain.clone())
                 .unwrap_or_else(|err| {
                     tracing::error!(
                         domain = %web_app.domain,

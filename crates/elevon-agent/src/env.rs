@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use elevon_fs::agent::{add_app_env, load_app_env};
+use elevon_fs::agent::{AppEnvOptions, add_app_env, load_app_env};
 
 #[derive(Debug, Clone, Default)]
 pub struct ElevonEnv {
@@ -25,7 +25,7 @@ impl ElevonEnv {
     }
 
     pub fn load() -> Result<Self> {
-        let vars = load_app_env("default", Some(true))?;
+        let vars = load_app_env(AppEnvOptions::elevon())?;
         let mut env = Self::default();
 
         for key in ElevonEnvKey::all() {
@@ -51,10 +51,9 @@ impl ElevonEnv {
         self.apply_value(key, value);
 
         add_app_env(
-            "default",
-            Some(true),
             key.bare_name().to_string(),
             persisted,
+            AppEnvOptions::elevon(),
         )?;
 
         Ok(())

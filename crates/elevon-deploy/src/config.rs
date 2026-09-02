@@ -52,11 +52,17 @@ impl Default for BuildOptions {
     }
 }
 
+fn default_keep_releases() -> Option<u8> {
+    Some(5)
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 pub struct Config {
     pub name: String,
     pub image: String,
+    #[serde(default = "default_keep_releases")]
+    pub keep_releases: Option<u8>,
 
     pub elevon: elevon::ElevonConfig,
 

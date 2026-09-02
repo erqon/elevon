@@ -154,14 +154,19 @@ pub struct AppDeployPayload {
     pub apps: Vec<AppPayload>,
 }
 
-pub fn resolve_app_env_name(project_name: &str, app_name: &str) -> String {
-    format!("{}/{}", project_name, app_name)
-}
-
-#[derive(PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum TlsType {
     Cert,
     Key,
+}
+
+impl TlsType {
+    pub fn get_file(&self) -> &str {
+        match self {
+            TlsType::Cert => "cert.pem",
+            TlsType::Key => "key.pem",
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

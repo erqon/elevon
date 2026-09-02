@@ -37,13 +37,51 @@ pub fn get_env_path() -> Result<PathBuf> {
     Ok(p)
 }
 
-pub fn get_app_env(app_name: &str, bypass_default: Option<bool>) -> Result<PathBuf> {
-    let bypass = bypass_default.unwrap_or(false);
-    if app_name == "default" && !bypass && dev_root().is_none() {
+#[derive(Clone)]
+pub struct AppEnvOptions {
+    pub project: String,
+    pub app: Option<String>,
+    pub deployment_id: Option<String>,
+    pub bypass_default: Option<bool>,
+}
+
+impl AppEnvOptions {
+    pub fn elevon() -> Self {
+        Self {
+            project: "default".to_string(),
+            app: None,
+            deployment_id: None,
+            bypass_default: Some(true),
+        }
+    }
+
+    pub fn app_base(project: &str, app: &str) -> Self {
+        Self {
+            project: project.to_string(),
+            app: Some(app.to_string()),
+            deployment_id: None,
+            bypass_default: None,
+        }
+    }
+
+    pub fn app(project: &str, app: &str, deployment_id: &str) -> Self {
+        Self {
+            project: project.to_string(),
+            app: Some(app.to_string()),
+            deployment_id: Some(deployment_id.to_string()),
+            bypass_default: None,
+        }
+    }
+}
+
+pub fn get_app_env(options: AppEnvOptions) -> Result<PathBuf> {
+    let bypass = options.bypass_default.unwrap_or(false);
+    if options.project == "default" && !bypass && dev_root().is_none() {
         anyhow::bail!("App can't be named 'default'");
     }
 
-    let path = AgentPath::AppEnv(app_name.to_string(), bypass).ensure()?;
+    let path =
+        AgentPath::AppEnv(options.project, options.app, options.deployment_id, bypass).ensure()?;
     if !path.exists() {
         std::fs::File::create(&path)?;
     }
@@ -54,11 +92,8 @@ pub fn get_app_env(app_name: &str, bypass_default: Option<bool>) -> Result<PathB
     Ok(path)
 }
 
-pub fn load_app_env(
-    app_name: &str,
-    bypass_default: Option<bool>,
-) -> Result<HashMap<String, String>> {
-    let app_path = get_app_env(app_name, bypass_default)?;
+pub fn load_app_env(options: AppEnvOptions) -> Result<HashMap<String, String>> {
+    let app_path = get_app_env(options)?;
 
     let mut env = HashMap::new();
     env.extend(read_env_file(app_path)?);
@@ -66,27 +101,45 @@ pub fn load_app_env(
     Ok(env)
 }
 
-pub fn load_app_string_env(app_name: &str) -> Result<Vec<String>> {
-    Ok(load_app_env(app_name, None)?
+pub fn load_app_string_env(options: AppEnvOptions) -> Result<Vec<String>> {
+    Ok(load_app_env(options)?
         .iter()
         .map(|(key, val)| format!("{}={}", key, val))
         .collect())
 }
 
-pub fn add_app_env(
-    app_name: &str,
-    bypass_default: Option<bool>,
-    key: String,
-    value: String,
-) -> Result<()> {
-    let mut env = load_app_env(app_name, bypass_default)?;
+pub fn add_app_env(key: String, value: String, options: AppEnvOptions) -> Result<()> {
+    let mut env = load_app_env(options.clone())?;
 
     env.insert(key, value);
 
-    let path = get_app_env(app_name, bypass_default).context("failed to resolve env file path")?;
+    let path = get_app_env(options).context("failed to resolve env file path")?;
     write_env_file(&path, &env)
         .with_context(|| format!("failed to write env file {}", path.display()))?;
 
+    Ok(())
+}
+
+#[derive(Clone)]
+pub struct TlsOptions {
+    pub project: String,
+    pub app: Option<String>,
+}
+
+pub fn get_tls_file(ty: TlsType, options: TlsOptions) -> Result<PathBuf> {
+    let file_dir_name = match options.app {
+        Some(app) => format!("projects/{}/{app}", &options.project),
+        None => options.project,
+    };
+
+    let path = AgentPath::ProjectTlsDir(format!("{file_dir_name}/{}", ty.get_file())).ensure()?;
+
+    Ok(path)
+}
+
+pub fn write_tls_file(content: &[u8], ty: TlsType, options: TlsOptions) -> Result<()> {
+    let path = get_tls_file(ty, options)?;
+    std::fs::write(path, content)?;
     Ok(())
 }
 
@@ -178,33 +231,6 @@ fn write_env_file(path: impl AsRef<Path>, env: &HashMap<String, String>) -> Resu
     Ok(())
 }
 
-pub fn get_tls_file(project_name: &str, t: TlsType, is_project: Option<bool>) -> Result<PathBuf> {
-    let file_dir_name = match is_project {
-        Some(_) => format!("projects/{project_name}"),
-        None => project_name.to_string(),
-    };
-
-    let file_name = match t {
-        TlsType::Cert => "cert.pem",
-        TlsType::Key => "key.pem",
-    };
-
-    let path = AgentPath::ProjectTlsDir(format!("{file_dir_name}/{file_name}")).ensure()?;
-
-    Ok(path)
-}
-
-pub fn write_tls_file(
-    project_name: &str,
-    content: &[u8],
-    t: TlsType,
-    is_project: Option<bool>,
-) -> Result<()> {
-    let path = get_tls_file(project_name, t, is_project)?;
-    std::fs::write(path, content)?;
-    Ok(())
-}
-
 fn dev_root() -> Option<PathBuf> {
     if cfg!(debug_assertions) {
         Some(PathBuf::from("./devroot"))
@@ -217,7 +243,7 @@ pub enum AgentPath {
     Data,
     Database,
     EnvDir,
-    AppEnv(String, bool),
+    AppEnv(String, Option<String>, Option<String>, bool),
     ProjectTlsDir(String),
     Socket,
     SystemdUnit(String),
@@ -253,11 +279,24 @@ impl AgentPath {
 
             AgentPath::EnvDir => base.join("etc").join("elevon").join("env"),
 
-            AgentPath::AppEnv(app, bypass_default) => {
-                if app == "default" && !*bypass_default && dev_root().is_none() {
+            AgentPath::AppEnv(project, app, deployment_id, bypass_default) => {
+                if project == "default" && !*bypass_default && dev_root().is_none() {
                     anyhow::bail!("App can't be named 'default'")
                 }
-                AgentPath::EnvDir.resolve()?.join(format!("{app}.env"))
+
+                let base = AgentPath::EnvDir.resolve()?;
+                let mut path = base.join(project);
+
+                if let Some(app) = app {
+                    path = path.join(app);
+                }
+
+                if let Some(deployment_id) = deployment_id {
+                    path = path.join(format!("dep-{deployment_id}"));
+                }
+
+                path.set_extension("env");
+                path
             }
 
             AgentPath::ProjectTlsDir(project) => {

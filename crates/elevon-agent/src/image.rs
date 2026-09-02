@@ -12,9 +12,10 @@ use bollard::{
 };
 use elevon_contracts::deploy::{
     AppPayload, AppRole, AppRollbackPayloadData, StreamEvent, StreamLogLevel, TlsType, WebApp,
-    resolve_app_env_name,
 };
-use elevon_fs::agent::{add_app_env, load_app_env, load_app_string_env, write_tls_file};
+use elevon_fs::agent::{
+    AppEnvOptions, TlsOptions, add_app_env, load_app_env, load_app_string_env, write_tls_file,
+};
 use futures::StreamExt;
 use tokio::sync::RwLock;
 
@@ -44,8 +45,8 @@ pub async fn pull_image(
     )
     .await;
 
-    let resolved_path = resolve_app_env_name(&app_config.project, "default");
-    let project_env = load_app_env(&resolved_path, None)?;
+    let env_options = AppEnvOptions::app_base(&app_config.project, "default");
+    let project_env = load_app_env(env_options)?;
 
     let (registry_server, registry_username, registry_password) = match (
         project_env.get("REGISTRY_SERVER"),
@@ -84,7 +85,8 @@ pub async fn pull_image(
 
     Ok(())
 }
-async fn run_image(
+
+async fn run_container(
     docker: &bollard::Docker,
     deployment: &Deployment,
     app_config: &AppPayload,
@@ -95,9 +97,15 @@ async fn run_image(
         .name(&container_name)
         .build();
 
-    let project_env = load_app_string_env(&resolve_app_env_name(&app_config.project, "default"))?;
-    let mut app_env =
-        load_app_string_env(&resolve_app_env_name(&app_config.project, &app_config.name))?;
+    let project_env_options = AppEnvOptions::app_base(&app_config.project, "default");
+    let app_env_options = AppEnvOptions::app(
+        &app_config.project,
+        &app_config.name,
+        &deployment.id.to_string(),
+    );
+
+    let project_env = load_app_string_env(project_env_options)?;
+    let mut app_env = load_app_string_env(app_env_options)?;
 
     app_env.extend(project_env);
 
@@ -165,15 +173,17 @@ async fn clear_port(port: &u16) {
 struct DeployAppOptions<'a> {
     port: u16,
     db: &'a mut toasty::Db,
+    db_app: &'a App,
     app_config: &'a AppPayload,
 }
 
+/// Creates Deployment, sets TLS files, sets Environment variables,
+/// and then runs the container. Afterwards updates Deployment's status.
 async fn deploy_app<'a>(
     tx: &StreamSender,
     docker: &bollard::Docker,
-    mut deployment: Deployment,
     options: DeployAppOptions<'a>,
-) -> Result<String> {
+) -> Result<(Deployment, String)> {
     emit(
         tx,
         StreamEvent::Log {
@@ -186,7 +196,43 @@ async fn deploy_app<'a>(
     )
     .await;
 
-    let container_id = run_image(docker, &deployment, options.app_config, options.port).await;
+    let inspect = docker.inspect_image(&options.app_config.image).await?;
+    let image_ref = inspect
+        .repo_digests
+        .and_then(|digests| digests.into_iter().next())
+        .or(inspect.id)
+        .ok_or_else(|| anyhow::anyhow!("no image reference found after pull"))?;
+
+    let mut deployment = toasty::create!(Deployment {
+        app_id: options.db_app.id,
+        image_digest: image_ref,
+        status: DeploymentStatus::Pending,
+        port: options.port
+    })
+    .exec(options.db)
+    .await?;
+
+    if let Some(tls) = options.app_config.tls.as_ref() {
+        let tls_options = TlsOptions {
+            project: options.app_config.project.clone(),
+            app: Some(options.app_config.name.clone()),
+        };
+
+        write_tls_file(tls.cert.as_bytes(), TlsType::Cert, tls_options.clone())?;
+        write_tls_file(tls.key.as_bytes(), TlsType::Key, tls_options)?;
+    }
+
+    let env_options = AppEnvOptions::app(
+        &options.app_config.project,
+        &options.app_config.name,
+        &deployment.id.to_string(),
+    );
+
+    for (key, value) in options.app_config.vars.clone() {
+        add_app_env(key.clone(), value.clone(), env_options.clone())?;
+    }
+
+    let container_id = run_container(docker, &deployment, options.app_config, options.port).await;
 
     match container_id {
         Err(err) => {
@@ -226,7 +272,7 @@ async fn deploy_app<'a>(
             .exec(options.db)
             .await?;
 
-            Ok(container_id)
+            Ok((deployment, container_id))
         }
     }
 }
@@ -272,48 +318,24 @@ pub async fn deploy_apps(
         let db_app = App::get_or_create(&mut db, &app).await?;
         let latest_deployment = Deployment::get_latest_deployment(&mut db, &db_app.id).await?;
 
-        let new_port = get_free_port().await?;
-        let new_deployment = toasty::create!(Deployment {
-            app_id: db_app.id,
-            status: DeploymentStatus::Pending,
-            port: new_port,
-            prev_deployment_id: latest_deployment.as_ref().map(|d| d.id),
-        })
-        .exec(&mut db)
-        .await?;
-
         pull_image(tx, &state.docker, &app).await.inspect_err(
             |err| tracing::error!(app = %app.name, error = %err, "failed to get or create app"),
         )?;
 
-        let resolved_path = resolve_app_env_name(&app.project, &app.name);
-
-        if let Some(tls) = app.tls.as_ref() {
-            write_tls_file(
-                &resolved_path,
-                tls.cert.as_bytes(),
-                TlsType::Cert,
-                Some(true),
-            )?;
-            write_tls_file(&resolved_path, tls.key.as_bytes(), TlsType::Key, Some(true))?;
-        }
-
-        for (key, value) in app.vars.clone() {
-            add_app_env(&resolved_path, None, key.clone(), value.clone())?;
-        }
+        let new_port = get_free_port().await?;
 
         let deploy_app_options = DeployAppOptions {
             port: new_port,
             db: &mut db,
+            db_app: &db_app,
             app_config: &app,
         };
 
-        let new_deployment_id = new_deployment.id.to_string();
-        let new_container_id =
-            deploy_app(tx, &state.docker, new_deployment, deploy_app_options).await?;
+        let (new_deployment, new_container_id) =
+            deploy_app(tx, &state.docker, deploy_app_options).await?;
 
         let app_data = DeployAppData {
-            id: new_deployment_id,
+            id: new_deployment.id.to_string(),
             project: app.project,
             name: app.name.clone(),
             container_id: new_container_id,
@@ -327,9 +349,9 @@ pub async fn deploy_apps(
             ..Default::default()
         };
 
-        // Currently this doesn't deploy Worker apps, doing so requires updating UpsertRoute in a way
-        // that it would be DeployApp or something, that would start the container and upsert as a route
-        // in case of it being a web app.
+        // Worker apps don't need proxy routing, but draining the previous deployment currently
+        // only happens in this Web-only branch too — worker containers from prior deployments
+        // are never drained/stopped.
         if AppRole::Web == app.options.role {
             // Marks the current deployment as draining, so no new requests will be handled by it,
             // and later the DrainJanitor service will terminate the container.

@@ -85,8 +85,9 @@ pub struct Deployment {
     pub app_id: uuid::Uuid,
 
     #[index]
-    pub prev_deployment_id: Option<uuid::Uuid>,
+    pub image_digest: String,
 
+    #[index]
     pub container_id: Option<String>,
 
     pub port: u16,
@@ -95,9 +96,6 @@ pub struct Deployment {
 
     #[belongs_to(key = app_id, references = id)]
     pub app: toasty::Deferred<App>,
-
-    #[belongs_to(key = prev_deployment_id, references = id)]
-    pub prev_deployment: toasty::Deferred<Option<Deployment>>,
 
     #[auto]
     pub created_at: jiff::Timestamp,
