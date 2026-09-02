@@ -314,11 +314,13 @@ async fn prune_old_releases(
     docker: &bollard::Docker,
     db: &mut toasty::Db,
     app: &App,
+    just_drained_id: Option<uuid::Uuid>,
 ) -> Result<()> {
-    let deployments = Deployment::list_by_app_id(db, &app.id, app.keep_releases as usize).await?;
+    let deployments =
+        Deployment::list_by_app_id(db, &app.id, app.keep_releases as usize + 1).await?;
 
     for old in deployments {
-        if old.status == DeploymentStatus::Active {
+        if old.status == DeploymentStatus::Active || Some(old.id) == just_drained_id {
             continue; // never prune the one currently serving
         }
 
@@ -423,6 +425,8 @@ pub async fn deploy_apps(
                 .await?;
         }
 
+        let latest_deployment_id = latest_deployment.as_ref().map(|d| d.id);
+
         // Marks the current deployment as draining, so no new requests will not be handled by it,
         // and later the DrainJanitor service will terminate the container.
         if let Some(latest_deployment) = latest_deployment
@@ -450,7 +454,9 @@ pub async fn deploy_apps(
             drain_app(&state, &mut db, latest_deployment, current_app_data).await?;
         }
 
-        if let Err(err) = prune_old_releases(&state.docker, &mut db, &db_app).await {
+        if let Err(err) =
+            prune_old_releases(&state.docker, &mut db, &db_app, latest_deployment_id).await
+        {
             emit(
                 tx,
                 StreamEvent::Log {

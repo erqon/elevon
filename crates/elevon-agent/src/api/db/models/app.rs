@@ -49,7 +49,15 @@ impl App {
             .exec(db)
             .await?;
 
-        if let Some(app) = app {
+        if let Some(mut app) = app {
+            if app.keep_releases != payload.keep_releases {
+                toasty::update!(app {
+                    keep_releases: payload.keep_releases,
+                })
+                .exec(db)
+                .await?;
+            }
+
             return Ok(app);
         }
 
@@ -159,6 +167,7 @@ impl Deployment {
     ) -> Result<Vec<Self>> {
         Ok(Deployment::filter_by_app_id(app_id)
             .latest_by(Deployment::fields().created_at())
+            .limit(i64::MAX as usize)
             .offset(keep)
             .exec(db)
             .await?)
