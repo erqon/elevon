@@ -69,12 +69,7 @@ impl AgentClient {
         tracing::Span::current().pb_set_message(&format!("deploying {}", config.name));
         tracing::info!("Deploying apps: {:?}", app_names);
 
-        let mut project_vars = config
-            .env
-            .as_ref()
-            .map_or_else(|| Ok(HashMap::default()), |env| env.resolved_credentials())?;
-
-        project_vars.extend(registry_config.vars());
+        let project_vars = config.prepare_project_env_vars(registry_config)?;
 
         let apps_payload: Vec<AppPayload> = apps
             .iter()
@@ -123,6 +118,9 @@ impl AgentClient {
                         COMMIT_SHA,
                     ),
                     name: name.to_string(),
+                    keep_releases: config
+                        .keep_releases
+                        .unwrap_or_else(|| Config::default_keep_releases().unwrap()),
                     options,
                     vars,
                     tls: tls_with_credentials,

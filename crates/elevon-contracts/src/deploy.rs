@@ -143,6 +143,7 @@ pub struct AppPayload {
     pub project: String,
     pub image: String,
     pub name: String,
+    pub keep_releases: u8,
     pub options: AppOptions,
     pub vars: HashMap<String, String>,
     pub tls: Option<TlsConfig>,

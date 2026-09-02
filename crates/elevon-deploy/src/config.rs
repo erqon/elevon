@@ -52,16 +52,13 @@ impl Default for BuildOptions {
     }
 }
 
-fn default_keep_releases() -> Option<u8> {
-    Some(5)
-}
-
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 pub struct Config {
     pub name: String,
     pub image: String,
-    #[serde(default = "default_keep_releases")]
+
+    #[serde(default = "Config::default_keep_releases")]
     pub keep_releases: Option<u8>,
 
     pub elevon: elevon::ElevonConfig,
@@ -80,6 +77,24 @@ pub struct Config {
 impl ElevonConfig for Config {}
 
 impl Config {
+    pub fn default_keep_releases() -> Option<u8> {
+        Some(5)
+    }
+
+    pub fn prepare_project_env_vars(
+        &self,
+        registry_config: RegistryConfig,
+    ) -> Result<HashMap<String, String>> {
+        let mut vars = self
+            .env
+            .as_ref()
+            .map_or_else(|| Ok(HashMap::default()), |env| env.resolved_credentials())?;
+
+        vars.extend(registry_config.vars());
+
+        Ok(vars)
+    }
+
     pub async fn run_build(&self, config_path: &str, push: bool) -> Result<()> {
         crate::image::build_image(&self.image, &self.registry.server, &self.build, config_path)
             .await?;

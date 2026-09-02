@@ -16,6 +16,9 @@ pub struct App {
 
     pub domain: Option<String>,
 
+    #[default(5)]
+    pub keep_releases: u8,
+
     #[has_many]
     pub deployments: toasty::Deferred<Vec<Deployment>>,
 
@@ -58,7 +61,8 @@ impl App {
         let app = toasty::create!(App {
             name: payload.name.to_string(),
             project: payload.project.to_string(),
-            domain
+            domain,
+            keep_releases: payload.keep_releases
         })
         .exec(db)
         .await?;
@@ -67,7 +71,7 @@ impl App {
     }
 }
 
-#[derive(Debug, toasty::Embed)]
+#[derive(Debug, toasty::Embed, PartialEq, Eq)]
 pub enum DeploymentStatus {
     Pending,
     Active,
@@ -146,5 +150,17 @@ impl Deployment {
         let deployment =
             Deployment::_get_by_app_id(db, app_id, DeploymentStatus::Active, false).await?;
         Ok(deployment)
+    }
+
+    pub async fn list_by_app_id(
+        db: &mut toasty::Db,
+        app_id: &uuid::Uuid,
+        keep: usize,
+    ) -> Result<Vec<Self>> {
+        Ok(Deployment::filter_by_app_id(app_id)
+            .latest_by(Deployment::fields().created_at())
+            .offset(keep)
+            .exec(db)
+            .await?)
     }
 }

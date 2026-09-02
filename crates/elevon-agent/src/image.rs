@@ -8,7 +8,9 @@ use anyhow::Result;
 use bollard::{
     auth::DockerCredentials,
     plugin::{ContainerCreateBody, HostConfig, PortBinding, PortMap, RestartPolicy},
-    query_parameters::{CreateContainerOptionsBuilder, CreateImageOptionsBuilder},
+    query_parameters::{
+        CreateContainerOptionsBuilder, CreateImageOptionsBuilder, RemoveImageOptions,
+    },
 };
 use elevon_contracts::deploy::{
     AppDeployPayload, AppPayload, AppRole, AppRollbackPayloadData, StreamEvent, StreamLogLevel,
@@ -308,6 +310,55 @@ async fn drain_app(
     Ok(())
 }
 
+async fn prune_old_releases(
+    docker: &bollard::Docker,
+    db: &mut toasty::Db,
+    app: &App,
+) -> Result<()> {
+    let deployments = Deployment::list_by_app_id(db, &app.id, app.keep_releases as usize).await?;
+
+    for old in deployments {
+        if old.status == DeploymentStatus::Active {
+            continue; // never prune the one currently serving
+        }
+
+        if let Some(container_id) = &old.container_id {
+            // best-effort, DrainJanitor may have already reaped it
+            let _ = docker.remove_container(container_id, None).await;
+        }
+
+        let env_options = AppEnvOptions::app(&app.project, &app.name, &old.id.to_string());
+        let _ = std::fs::remove_file(elevon_fs::agent::get_app_env(env_options)?);
+
+        if let Some(digest) = &old.image_digest {
+            let still_referenced = Deployment::filter(
+                Deployment::fields()
+                    .image_digest()
+                    .eq(digest)
+                    .and(Deployment::fields().id().ne(old.id)),
+            )
+            .first()
+            .exec(db)
+            .await?
+            .is_some();
+
+            if !still_referenced {
+                let remove_options = RemoveImageOptions::default();
+                if let Err(err) = docker
+                    .remove_image(digest, Some(remove_options), None)
+                    .await
+                {
+                    tracing::warn!(%digest, %err, "failed to remove unreferenced image");
+                }
+            }
+        }
+
+        Deployment::delete_by_id(db, old.id).await?;
+    }
+
+    Ok(())
+}
+
 pub async fn deploy_apps(
     tx: &StreamSender,
     state: Arc<AppState>,
@@ -397,6 +448,17 @@ pub async fn deploy_apps(
             };
 
             drain_app(&state, &mut db, latest_deployment, current_app_data).await?;
+        }
+
+        if let Err(err) = prune_old_releases(&state.docker, &mut db, &db_app).await {
+            emit(
+                tx,
+                StreamEvent::Log {
+                    level: StreamLogLevel::Error,
+                    message: format!("[{}] Failed to prune old releases: {}", app.name, err),
+                },
+            )
+            .await;
         }
     }
 
