@@ -1,4 +1,3 @@
-pub mod env;
 pub mod init;
 
 use clap::{
@@ -60,15 +59,6 @@ pub enum Commands {
 
     #[command(about = "Deploy applications")]
     Deploy(AppArgs),
-
-    #[command(about = "Env specific commands")]
-    Env {
-        #[command(flatten)]
-        args: AppArgs,
-
-        #[command(subcommand)]
-        subcommand: env::EnvCommands,
-    },
 
     #[command(about = "Checks for deployment needed assets")]
     Check,

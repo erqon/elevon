@@ -85,7 +85,7 @@ pub struct Deployment {
     pub app_id: uuid::Uuid,
 
     #[index]
-    pub image_digest: String,
+    pub image_digest: Option<String>,
 
     #[index]
     pub container_id: Option<String>,

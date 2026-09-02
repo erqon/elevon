@@ -12,7 +12,10 @@ use reqwest::{
 };
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
-use crate::image::progress::{print_success, print_success_compact};
+use crate::{
+    config::registry::RegistryConfig,
+    image::progress::{print_success, print_success_compact},
+};
 use crate::{
     config::{Config, app::AppConfig},
     util::COMMIT_SHA,
@@ -136,7 +139,12 @@ impl AgentClient {
     }
 
     #[tracing::instrument(name = "deploy", skip_all)]
-    pub async fn push_deploy(&self, config: &Config, apps: Vec<(String, AppConfig)>) -> Result<()> {
+    pub async fn push_deploy(
+        &self,
+        config: &Config,
+        apps: Vec<(String, AppConfig)>,
+        registry_config: RegistryConfig,
+    ) -> Result<()> {
         let url = self.absolute_url("/deploy");
         let headers = self.headers();
 
@@ -144,9 +152,31 @@ impl AgentClient {
         tracing::Span::current().pb_set_message(&format!("deploying {}", config.name));
         tracing::info!("Deploying apps: {:?}", app_names);
 
+        let mut project_vars = config
+            .env
+            .as_ref()
+            .map_or_else(|| Ok(HashMap::default()), |env| env.resolved_credentials())?;
+
+        if let Some(env) = &config.env {
+            project_vars.extend(env.resolved_credentials()?);
+        }
+
+        project_vars.extend(registry_config.vars());
+
         let apps_payload: Vec<AppPayload> = apps
             .iter()
-            .map(|(name, cfg)| {
+            .map(|(name, cfg)| -> Result<Option<AppPayload>> {
+                let vars = cfg
+                    .env
+                    .as_ref()
+                    .map_or_else(|| Ok(HashMap::default()), |env| env.resolved_credentials())?;
+
+                let tls_with_credentials = cfg
+                    .tls
+                    .as_ref()
+                    .map(|tls| tls.resolved_credentials())
+                    .transpose()?;
+
                 let web_app: Option<WebApp> = match &cfg.role {
                     AppRole::Web => Some(WebApp {
                         domain: config.routing.domain.clone(),
@@ -170,7 +200,7 @@ impl AgentClient {
                     ..Default::default()
                 };
 
-                AppPayload {
+                Ok(Some(AppPayload {
                     project: config.name.clone(),
                     image: crate::image::util::full_image_name(
                         &config.registry.server,
@@ -179,12 +209,20 @@ impl AgentClient {
                     ),
                     name: name.to_string(),
                     options,
+                    vars,
+                    tls: tls_with_credentials,
                     web_app,
-                }
+                }))
             })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
             .collect();
 
-        let payload = serde_json::json!(AppDeployPayload { apps: apps_payload });
+        let payload = serde_json::json!(AppDeployPayload {
+            project_vars,
+            apps: apps_payload
+        });
 
         let event_stream = self
             .client

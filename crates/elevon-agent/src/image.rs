@@ -11,7 +11,8 @@ use bollard::{
     query_parameters::{CreateContainerOptionsBuilder, CreateImageOptionsBuilder},
 };
 use elevon_contracts::deploy::{
-    AppPayload, AppRole, AppRollbackPayloadData, StreamEvent, StreamLogLevel, TlsType, WebApp,
+    AppDeployPayload, AppPayload, AppRole, AppRollbackPayloadData, StreamEvent, StreamLogLevel,
+    TlsType, WebApp,
 };
 use elevon_fs::agent::{
     AppEnvOptions, TlsOptions, add_app_env, load_app_env, load_app_string_env, write_tls_file,
@@ -170,6 +171,16 @@ async fn clear_port(port: &u16) {
     ports.remove(port);
 }
 
+fn prepare_env_variables(app_config: &AppPayload, deployment_id: &str) -> Result<()> {
+    let env_options = AppEnvOptions::app(&app_config.project, &app_config.name, deployment_id);
+
+    for (key, value) in &app_config.vars {
+        add_app_env(key.clone(), value.clone(), env_options.clone())?;
+    }
+
+    Ok(())
+}
+
 struct DeployAppOptions<'a> {
     port: u16,
     db: &'a mut toasty::Db,
@@ -196,21 +207,28 @@ async fn deploy_app<'a>(
     )
     .await;
 
+    let mut db_tx = options.db.transaction().await?;
+
+    let mut deployment = toasty::create!(Deployment {
+        app_id: options.db_app.id,
+        status: DeploymentStatus::Pending,
+        port: options.port
+    })
+    .exec(&mut db_tx)
+    .await?;
+
+    prepare_env_variables(options.app_config, &deployment.id.to_string())?;
+
+    pull_image(tx, docker, options.app_config).await.inspect_err(
+        |err| tracing::error!(app = %options.app_config.name, error = %err, "failed to get or create app"),
+    )?;
+
     let inspect = docker.inspect_image(&options.app_config.image).await?;
     let image_ref = inspect
         .repo_digests
         .and_then(|digests| digests.into_iter().next())
         .or(inspect.id)
         .ok_or_else(|| anyhow::anyhow!("no image reference found after pull"))?;
-
-    let mut deployment = toasty::create!(Deployment {
-        app_id: options.db_app.id,
-        image_digest: image_ref,
-        status: DeploymentStatus::Pending,
-        port: options.port
-    })
-    .exec(options.db)
-    .await?;
 
     if let Some(tls) = options.app_config.tls.as_ref() {
         let tls_options = TlsOptions {
@@ -222,19 +240,9 @@ async fn deploy_app<'a>(
         write_tls_file(tls.key.as_bytes(), TlsType::Key, tls_options)?;
     }
 
-    let env_options = AppEnvOptions::app(
-        &options.app_config.project,
-        &options.app_config.name,
-        &deployment.id.to_string(),
-    );
-
-    for (key, value) in options.app_config.vars.clone() {
-        add_app_env(key.clone(), value.clone(), env_options.clone())?;
-    }
-
     let container_id = run_container(docker, &deployment, options.app_config, options.port).await;
 
-    match container_id {
+    let res = match container_id {
         Err(err) => {
             clear_port(&options.port).await;
 
@@ -248,9 +256,10 @@ async fn deploy_app<'a>(
             .await;
 
             toasty::update!(deployment {
+                image_digest: Some(image_ref),
                 status: DeploymentStatus::Failed
             })
-            .exec(options.db)
+            .exec(&mut db_tx)
             .await?;
 
             Err(err)
@@ -266,15 +275,20 @@ async fn deploy_app<'a>(
             .await;
 
             toasty::update!(deployment {
+                image_digest: Some(image_ref),
                 container_id: container_id.clone(),
                 status: DeploymentStatus::Active
             })
-            .exec(options.db)
+            .exec(&mut db_tx)
             .await?;
 
             Ok((deployment, container_id))
         }
-    }
+    }?;
+
+    db_tx.commit().await?;
+
+    Ok(res)
 }
 
 async fn drain_app(
@@ -301,11 +315,18 @@ async fn drain_app(
 pub async fn deploy_apps(
     tx: &StreamSender,
     state: Arc<AppState>,
-    apps: Vec<AppPayload>,
+    payload: AppDeployPayload,
 ) -> Result<()> {
     let mut db = state.agent_db.db.clone();
 
-    for app in apps {
+    if let Some(first) = payload.apps.first() {
+        let env_options = AppEnvOptions::app_base(&first.project, "default");
+        for (key, value) in payload.project_vars {
+            add_app_env(key, value, env_options.clone())?;
+        }
+    }
+
+    for app in payload.apps {
         emit(
             tx,
             StreamEvent::Log {
@@ -317,10 +338,6 @@ pub async fn deploy_apps(
 
         let db_app = App::get_or_create(&mut db, &app).await?;
         let latest_deployment = Deployment::get_latest_deployment(&mut db, &db_app.id).await?;
-
-        pull_image(tx, &state.docker, &app).await.inspect_err(
-            |err| tracing::error!(app = %app.name, error = %err, "failed to get or create app"),
-        )?;
 
         let new_port = get_free_port().await?;
 

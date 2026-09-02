@@ -48,7 +48,7 @@ async fn deploy(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<AppDeployPayload>,
 ) -> StreamResponse {
-    spawn_streaming_task(move |tx| async move { deploy_apps(&tx, state, payload.apps).await })
+    spawn_streaming_task(move |tx| async move { deploy_apps(&tx, state, payload).await })
 }
 
 async fn rollback(

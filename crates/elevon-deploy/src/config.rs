@@ -12,7 +12,7 @@ use serde::Deserialize;
 
 use crate::{
     agent::AgentClient,
-    config::{app::AppConfig, env::EnvConfig},
+    config::{app::AppConfig, env::EnvConfig, registry::RegistryConfig},
 };
 
 #[derive(Debug, Default, Deserialize)]
@@ -145,9 +145,16 @@ impl Config {
             .collect()
     }
 
-    pub async fn run_deploy(&self, agent_client: &AgentClient, app_names: &[String]) -> Result<()> {
+    pub async fn run_deploy(
+        &self,
+        agent_client: &AgentClient,
+        app_names: &[String],
+        registry_config: RegistryConfig,
+    ) -> Result<()> {
         let selected = self.get_selected_apps(app_names)?;
-        agent_client.push_deploy(self, selected).await?;
+        agent_client
+            .push_deploy(self, selected, registry_config)
+            .await?;
         Ok(())
     }
 }
