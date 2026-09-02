@@ -250,7 +250,7 @@ impl ProxyState {
         }
     }
 
-    pub fn ready_to_terminate(&self, grace_period: Duration) -> Vec<(String, u16)> {
+    pub fn ready_to_terminate(&self, grace_period: Duration) -> Vec<String> {
         self.runtime
             .iter()
             .filter_map(|r| {
@@ -259,7 +259,9 @@ impl ProxyState {
                     return None;
                 }
 
-                let route = runtime.route.as_ref()?;
+                let Some(route) = runtime.route.as_ref() else {
+                    return Some(r.key().clone());
+                };
 
                 let inflight = route.inflight.load(std::sync::atomic::Ordering::Relaxed);
                 let past_grace = route
@@ -267,7 +269,7 @@ impl ProxyState {
                     .is_some_and(|t| t.elapsed() >= grace_period);
 
                 if inflight == 0 || past_grace {
-                    Some((r.key().clone(), route.port))
+                    Some(r.key().clone())
                 } else {
                     None
                 }
@@ -276,33 +278,39 @@ impl ProxyState {
     }
 
     pub fn remove_backend(&self, container_id: &str) {
-        self.runtime.remove(container_id);
+        let backend_runtime = self.runtime.remove(container_id);
 
-        let domains: Vec<String> = self
-            .routes
-            .load()
-            .iter()
-            .filter(|(_, routes)| {
-                routes
-                    .iter()
-                    .any(|route| route.container_id == container_id)
-            })
-            .map(|(domain, _)| domain.clone())
-            .collect();
-
-        self.routes.rcu(|current| {
-            let mut next = current.as_ref().clone();
-
-            for backends in next.values_mut() {
-                backends.retain(|backend| backend.container_id != container_id);
+        if let Some((_, backend_runtime)) = backend_runtime {
+            if backend_runtime.route.is_none() {
+                return;
             }
 
-            next.retain(|_, backends| !backends.is_empty());
-            next
-        });
+            let domains: Vec<String> = self
+                .routes
+                .load()
+                .iter()
+                .filter(|(_, routes)| {
+                    routes
+                        .iter()
+                        .any(|route| route.container_id == container_id)
+                })
+                .map(|(domain, _)| domain.clone())
+                .collect();
 
-        for domain in domains {
-            self.rebuild_load_balancer(domain);
+            self.routes.rcu(|current| {
+                let mut next = current.as_ref().clone();
+
+                for backends in next.values_mut() {
+                    backends.retain(|backend| backend.container_id != container_id);
+                }
+
+                next.retain(|_, backends| !backends.is_empty());
+                next
+            });
+
+            for domain in domains {
+                self.rebuild_load_balancer(domain);
+            }
         }
     }
 

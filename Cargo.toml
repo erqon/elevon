@@ -38,7 +38,7 @@ toasty = { version = "0.10.0", default-features = false, features = [
 ] }
 toasty-cli = "0.10.0"
 toasty-driver-turso = "0.10.0"
-tower-http = { version = "0.7.0", features = ["trace"] }
+tower-http = { version = "0.7.1", features = ["trace"] }
 tracing = "0.1.44"
 tracing-indicatif = "0.3.14"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }

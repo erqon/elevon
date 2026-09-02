@@ -349,37 +349,7 @@ pub async fn deploy_apps(
             ..Default::default()
         };
 
-        // Worker apps don't need proxy routing, but draining the previous deployment currently
-        // only happens in this Web-only branch too — worker containers from prior deployments
-        // are never drained/stopped.
         if AppRole::Web == app.options.role {
-            // Marks the current deployment as draining, so no new requests will be handled by it,
-            // and later the DrainJanitor service will terminate the container.
-            if let Some(latest_deployment) = latest_deployment {
-                emit(
-                    tx,
-                    StreamEvent::Log {
-                        level: StreamLogLevel::Info,
-                        message: format!(
-                            "[{}] Found previously released container, draining it...",
-                            app.name,
-                        ),
-                    },
-                )
-                .await;
-
-                if let Some(container_id) = latest_deployment.container_id.clone() {
-                    let current_app_data = DeployAppData {
-                        id: latest_deployment.id.to_string(),
-                        container_id,
-                        state: DeployAppState::Draining,
-                        ..app_data.clone()
-                    };
-
-                    drain_app(&state, &mut db, latest_deployment, current_app_data).await?;
-                }
-            }
-
             emit(
                 tx,
                 StreamEvent::Log {
@@ -392,8 +362,35 @@ pub async fn deploy_apps(
             let upsert_stream = state.socket_client.connect().await?;
             state
                 .socket_client
-                .send(upsert_stream, AgentEvent::UpsertRoute(app_data))
+                .send(upsert_stream, AgentEvent::UpsertRoute(app_data.clone()))
                 .await?;
+        }
+
+        // Marks the current deployment as draining, so no new requests will not be handled by it,
+        // and later the DrainJanitor service will terminate the container.
+        if let Some(latest_deployment) = latest_deployment
+            && let Some(container_id) = latest_deployment.container_id.clone()
+        {
+            emit(
+                tx,
+                StreamEvent::Log {
+                    level: StreamLogLevel::Info,
+                    message: format!(
+                        "[{}] Found previously released container, draining it...",
+                        app.name,
+                    ),
+                },
+            )
+            .await;
+
+            let current_app_data = DeployAppData {
+                id: latest_deployment.id.to_string(),
+                container_id,
+                state: DeployAppState::Draining,
+                ..app_data
+            };
+
+            drain_app(&state, &mut db, latest_deployment, current_app_data).await?;
         }
     }
 
