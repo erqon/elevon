@@ -82,19 +82,6 @@ where
     Ok(())
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct AppEnvPayload {
-    pub project: String,
-    pub name: String,
-    pub vars: HashMap<String, String>,
-    pub tls: Option<TlsConfig>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct AppEnvSetPayload {
-    pub apps: Vec<AppEnvPayload>,
-}
-
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum AppRole {
@@ -168,15 +155,4 @@ impl TlsType {
             TlsType::Key => "key.pem",
         }
     }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct AppRollbackPayloadData {
-    pub project: String,
-    pub name: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct AppRollbackPayload {
-    pub apps: Vec<AppRollbackPayloadData>,
 }

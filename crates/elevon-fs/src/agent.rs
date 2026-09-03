@@ -48,7 +48,7 @@ pub struct AppEnvOptions {
 impl AppEnvOptions {
     pub fn elevon() -> Self {
         Self {
-            project: "default".to_string(),
+            project: "agent".to_string(),
             app: None,
             deployment_id: None,
             bypass_default: Some(true),

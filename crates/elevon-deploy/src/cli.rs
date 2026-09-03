@@ -51,6 +51,9 @@ pub enum Commands {
     #[command(about = "Initialize a configuration file template")]
     Init,
 
+    #[command(about = "Checks for deployment needed assets")]
+    Check,
+
     #[command(about = "Build container images from the deploy config")]
     Build(BuildArgs),
 
@@ -60,8 +63,8 @@ pub enum Commands {
     #[command(about = "Deploy applications")]
     Deploy(AppArgs),
 
-    #[command(about = "Checks for deployment needed assets")]
-    Check,
+    #[command(about = "Rollback applications to previous deployment")]
+    Rollback(RollbackArgs),
 }
 
 #[derive(Debug, Args)]
@@ -81,4 +84,10 @@ pub struct AppArgs {
         help = "Build and push the image before deploying"
     )]
     pub build: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct RollbackArgs {
+    #[arg(long = "app", help = "Limit the operation to the specified app(s)")]
+    pub apps: Vec<String>,
 }

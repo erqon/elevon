@@ -23,6 +23,9 @@ pub async fn run_deploy_cli(arg: DeployArgs, command: Commands) -> anyhow::Resul
 
     match command {
         Commands::Init => unreachable!(),
+        Commands::Check => {
+            tracing::info!("Successfully passed config file check {}", &arg.config);
+        }
         Commands::Build(args) => {
             config.run_build(&arg.config, args.push).await?;
         }
@@ -40,9 +43,7 @@ pub async fn run_deploy_cli(arg: DeployArgs, command: Commands) -> anyhow::Resul
                 .run_deploy(&agent_client, &args.apps, registry_credentials)
                 .await?;
         }
-        Commands::Check => {
-            tracing::info!("Successfully passed config file check {}", &arg.config);
-        }
+        Commands::Rollback(args) => {}
     }
 
     Ok(())

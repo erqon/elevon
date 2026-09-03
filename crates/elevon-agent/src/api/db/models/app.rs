@@ -79,8 +79,9 @@ impl App {
     }
 }
 
-#[derive(Debug, toasty::Embed, PartialEq, Eq)]
+#[derive(Debug, Default, toasty::Embed, PartialEq, Eq)]
 pub enum DeploymentStatus {
+    #[default]
     Pending,
     Active,
     Drained,
@@ -105,6 +106,9 @@ pub struct Deployment {
     pub port: u16,
 
     pub status: DeploymentStatus,
+
+    #[has_one]
+    pub options: toasty::Deferred<Option<DeploymentOption>>,
 
     #[belongs_to(key = app_id, references = id)]
     pub app: toasty::Deferred<App>,
@@ -131,7 +135,7 @@ impl Deployment {
                 .and(Deployment::fields().status().eq(status)),
         )
         .include(Deployment::fields().app())
-        .latest_by(Deployment::fields().created_at());
+        .latest_by(Deployment::fields().updated_at());
 
         if !latest {
             query = query.offset(1).limit(1);
@@ -166,10 +170,23 @@ impl Deployment {
         keep: usize,
     ) -> Result<Vec<Self>> {
         Ok(Deployment::filter_by_app_id(app_id)
-            .latest_by(Deployment::fields().created_at())
+            .latest_by(Deployment::fields().updated_at())
             .limit(i64::MAX as usize)
             .offset(keep)
             .exec(db)
             .await?)
     }
+}
+
+#[derive(Debug, toasty::Model)]
+pub struct DeploymentOption {
+    #[key]
+    #[auto]
+    pub id: uuid::Uuid,
+
+    #[index]
+    pub deployment_id: uuid::Uuid,
+
+    #[belongs_to(key = deployment_id, references = id)]
+    pub deployment: toasty::Deferred<Deployment>,
 }

@@ -13,13 +13,12 @@ use bollard::{
     },
 };
 use elevon_contracts::deploy::{
-    AppDeployPayload, AppPayload, AppRole, AppRollbackPayloadData, StreamEvent, StreamLogLevel,
-    TlsType, WebApp,
+    AppDeployPayload, AppPayload, AppRole, StreamEvent, StreamLogLevel, TlsType, WebApp,
 };
 use elevon_fs::agent::{
     AppEnvOptions, TlsOptions, add_app_env, load_app_env, load_app_string_env, write_tls_file,
 };
-use futures::StreamExt;
+use futures::TryStreamExt;
 use tokio::sync::RwLock;
 
 use crate::{
@@ -34,22 +33,29 @@ use crate::{
 static ALLOCATED_PORTS: LazyLock<RwLock<HashSet<u16>>> =
     LazyLock::new(|| RwLock::new(HashSet::new()));
 
-pub async fn pull_image(
+struct PullImageOptions<'cfg, 'dep> {
+    pub project: &'cfg str,
+    pub name: &'cfg str,
+    pub image_rep: &'cfg str,
+    pub image_digest: Option<&'dep str>,
+    pub deployment_id: &'dep str,
+}
+
+async fn pull_image<'cfg, 'dep>(
     tx: &StreamSender,
     docker: &bollard::Docker,
-    app_config: &AppPayload,
-    deployment_id: &str,
+    options: PullImageOptions<'cfg, 'dep>,
 ) -> Result<()> {
     emit(
         tx,
         StreamEvent::Log {
             level: StreamLogLevel::Info,
-            message: format!("[{}] Pulling the image from registry", app_config.name),
+            message: format!("[{}] Pulling the image from registry", options.name),
         },
     )
     .await;
 
-    let env_options = AppEnvOptions::app(&app_config.project, &app_config.name, deployment_id);
+    let env_options = AppEnvOptions::app(options.project, options.name, options.deployment_id);
     let project_env = load_app_env(env_options)?;
 
     let (registry_server, registry_username, registry_password) = match (
@@ -61,9 +67,12 @@ pub async fn pull_image(
         _ => (None, None, None),
     };
 
-    let options = CreateImageOptionsBuilder::new()
-        .from_image(&app_config.image)
-        .build();
+    let image = match options.image_digest {
+        Some(dig) => &format!("{}@{}", options.image_rep, dig),
+        None => options.image_rep,
+    };
+
+    let image_options = CreateImageOptionsBuilder::new().from_image(image).build();
 
     let credentials = Some(DockerCredentials {
         username: registry_username,
@@ -72,17 +81,16 @@ pub async fn pull_image(
         ..Default::default()
     });
 
-    let mut stream = docker.create_image(Some(options), None, credentials);
-    while let Some(result) = stream.next().await {
-        // TODO: Stream progress back to deploy
-        result?;
-    }
+    docker
+        .create_image(Some(image_options), None, credentials)
+        .try_collect::<Vec<_>>()
+        .await?;
 
     emit(
         tx,
         StreamEvent::Log {
             level: StreamLogLevel::Info,
-            message: format!("[{}] Image was pulled", app_config.name),
+            message: format!("[{}] Image was pulled", options.name),
         },
     )
     .await;
@@ -179,45 +187,33 @@ fn prepare_env_variables(app_config: &AppPayload, deployment_id: &str) -> Result
     Ok(())
 }
 
-struct DeployAppOptions<'a> {
+struct DeployAppOptions<'cfg, 'tx> {
+    db_tx: &'tx mut toasty::Transaction<'cfg>,
     port: u16,
-    db: &'a mut toasty::Db,
-    db_app: &'a App,
-    app_config: &'a AppPayload,
+    app_config: &'cfg AppPayload,
 }
 
 /// Creates Deployment, sets TLS files, sets Environment variables,
 /// and then runs the container. Afterwards updates Deployment's status.
-async fn deploy_app<'a>(
+async fn _deploy_app<'cfg, 'tx>(
     tx: &StreamSender,
     docker: &bollard::Docker,
-    options: DeployAppOptions<'a>,
+    mut deployment: Deployment,
+    options: DeployAppOptions<'cfg, 'tx>,
 ) -> Result<(Deployment, String)> {
-    emit(
-        tx,
-        StreamEvent::Log {
-            level: StreamLogLevel::Info,
-            message: format!(
-                "[{}] Starting running a container on port {}",
-                options.app_config.name, options.port
-            ),
-        },
-    )
-    .await;
-
-    let mut db_tx = options.db.transaction().await?;
-
-    let mut deployment = toasty::create!(Deployment {
-        app_id: options.db_app.id,
-        status: DeploymentStatus::Pending,
-        port: options.port
-    })
-    .exec(&mut db_tx)
-    .await?;
-
     prepare_env_variables(options.app_config, &deployment.id.to_string())?;
 
-    pull_image(tx, docker, options.app_config, &deployment.id.to_string()).await.inspect_err(
+    // TODO: options.app_config needs to be dynamic too so rollbacks can deploy previous deployments
+
+    let pull_image_options = PullImageOptions {
+        project: &options.app_config.project,
+        name: &options.app_config.name,
+        image_rep: &options.app_config.image,
+        image_digest: deployment.image_digest.as_deref(),
+        deployment_id: &deployment.id.to_string(),
+    };
+
+    pull_image(tx, docker, pull_image_options).await.inspect_err(
         |err| tracing::error!(app = %options.app_config.name, error = %err, "failed to get or create app"),
     )?;
 
@@ -253,12 +249,12 @@ async fn deploy_app<'a>(
             )
             .await;
 
-            toasty::update!(deployment {
-                image_digest: Some(image_ref),
-                status: DeploymentStatus::Failed
-            })
-            .exec(&mut db_tx)
-            .await?;
+            deployment
+                .update()
+                .image_digest(Some(image_ref))
+                .status(DeploymentStatus::Failed)
+                .exec(options.db_tx)
+                .await?;
 
             Err(err)
         }
@@ -272,20 +268,17 @@ async fn deploy_app<'a>(
             )
             .await;
 
-            toasty::update!(deployment {
-                image_digest: Some(image_ref),
-                container_id: container_id.clone(),
-                status: DeploymentStatus::Active
-            })
-            .exec(&mut db_tx)
-            .await?;
+            deployment
+                .update()
+                .image_digest(Some(image_ref))
+                .container_id(container_id.clone())
+                .status(DeploymentStatus::Active)
+                .exec(options.db_tx)
+                .await?;
 
             Ok((deployment, container_id))
         }
     }?;
-
-    db_tx.commit().await?;
-
     Ok(res)
 }
 
@@ -361,111 +354,156 @@ async fn prune_old_releases(
     Ok(())
 }
 
+async fn deploy_app(
+    tx: &StreamSender,
+    state: Arc<AppState>,
+    app_config: AppPayload,
+    deployment_to_run: Option<Deployment>,
+    deployment_to_drain: Option<Deployment>,
+) -> Result<()> {
+    let mut db = state.agent_db.db.clone();
+
+    emit(
+        tx,
+        StreamEvent::Log {
+            level: StreamLogLevel::Info,
+            message: format!("[{}] Deploying...", app_config.name),
+        },
+    )
+    .await;
+
+    let port = get_free_port().await?;
+
+    emit(
+        tx,
+        StreamEvent::Log {
+            level: StreamLogLevel::Info,
+            message: format!(
+                "[{}] Starting running a container on port {}",
+                app_config.name, port
+            ),
+        },
+    )
+    .await;
+
+    let db_app = App::get_or_create(&mut db, &app_config).await?;
+
+    let mut db_tx = db.transaction().await?;
+
+    let deployment = match deployment_to_run {
+        Some(v) => v,
+        None => {
+            toasty::create!(Deployment {
+                app_id: db_app.id,
+                port: port
+            })
+            .exec(&mut db_tx)
+            .await?
+        }
+    };
+
+    let deploy_app_options = DeployAppOptions {
+        db_tx: &mut db_tx,
+        port,
+        app_config: &app_config,
+    };
+
+    let (new_deployment, new_container_id) =
+        _deploy_app(tx, &state.docker, deployment, deploy_app_options).await?;
+
+    db_tx.commit().await?;
+
+    let app_data = DeployAppData {
+        id: new_deployment.id.to_string(),
+        project: app_config.project.clone(),
+        name: app_config.name.clone(),
+        container_id: new_container_id,
+        web_app: match (&app_config.options.role, &app_config.web_app) {
+            (AppRole::Web, Some(web_app)) => Some(WebApp {
+                port,
+                domain: web_app.domain.clone(),
+            }),
+            _ => None,
+        },
+        ..Default::default()
+    };
+
+    if AppRole::Web == app_config.options.role {
+        emit(
+            tx,
+            StreamEvent::Log {
+                level: StreamLogLevel::Info,
+                message: format!("[{}] Updating proxy routing for traffic", app_config.name),
+            },
+        )
+        .await;
+
+        let upsert_stream = state.socket_client.connect().await?;
+        state
+            .socket_client
+            .send(upsert_stream, AgentEvent::UpsertRoute(app_data.clone()))
+            .await?;
+    }
+
+    let deployment_to_drain = match deployment_to_drain {
+        Some(v) => Some(v),
+        None => Deployment::get_latest_deployment(&mut db, &db_app.id).await?,
+    };
+    let deployment_to_drain_id = deployment_to_drain.as_ref().map(|d| d.id);
+
+    // Marks the current deployment as draining, so no new requests will not be handled by it,
+    // and later the DrainJanitor service will terminate the container.
+    if let Some(deployment_to_drain) = deployment_to_drain
+        && let Some(container_id) = deployment_to_drain.container_id.clone()
+    {
+        emit(
+            tx,
+            StreamEvent::Log {
+                level: StreamLogLevel::Info,
+                message: format!(
+                    "[{}] Found previously released container, draining it...",
+                    app_config.name,
+                ),
+            },
+        )
+        .await;
+
+        let current_app_data = DeployAppData {
+            id: deployment_to_drain.id.to_string(),
+            container_id,
+            state: DeployAppState::Draining,
+            ..app_data
+        };
+
+        drain_app(&state, &mut db, deployment_to_drain, current_app_data).await?;
+    }
+
+    if let Err(err) =
+        prune_old_releases(&state.docker, &mut db, &db_app, deployment_to_drain_id).await
+    {
+        emit(
+            tx,
+            StreamEvent::Log {
+                level: StreamLogLevel::Warn,
+                message: format!(
+                    "[{}] Failed to prune old releases: {}",
+                    app_config.name, err
+                ),
+            },
+        )
+        .await;
+    }
+
+    Ok(())
+}
+
 pub async fn deploy_apps(
     tx: &StreamSender,
     state: Arc<AppState>,
     payload: AppDeployPayload,
 ) -> Result<()> {
-    let mut db = state.agent_db.db.clone();
-
     for app in payload.apps {
-        emit(
-            tx,
-            StreamEvent::Log {
-                level: StreamLogLevel::Info,
-                message: format!("[{}] Deploying...", app.name),
-            },
-        )
-        .await;
-
-        let db_app = App::get_or_create(&mut db, &app).await?;
-        let latest_deployment = Deployment::get_latest_deployment(&mut db, &db_app.id).await?;
-
-        let new_port = get_free_port().await?;
-
-        let deploy_app_options = DeployAppOptions {
-            port: new_port,
-            db: &mut db,
-            db_app: &db_app,
-            app_config: &app,
-        };
-
-        let (new_deployment, new_container_id) =
-            deploy_app(tx, &state.docker, deploy_app_options).await?;
-
-        let app_data = DeployAppData {
-            id: new_deployment.id.to_string(),
-            project: app.project,
-            name: app.name.clone(),
-            container_id: new_container_id,
-            web_app: match (&app.options.role, &app.web_app) {
-                (AppRole::Web, Some(web_app)) => Some(WebApp {
-                    port: new_port,
-                    domain: web_app.domain.clone(),
-                }),
-                _ => None,
-            },
-            ..Default::default()
-        };
-
-        if AppRole::Web == app.options.role {
-            emit(
-                tx,
-                StreamEvent::Log {
-                    level: StreamLogLevel::Info,
-                    message: format!("[{}] Updating proxy routing for traffic", app.name),
-                },
-            )
-            .await;
-
-            let upsert_stream = state.socket_client.connect().await?;
-            state
-                .socket_client
-                .send(upsert_stream, AgentEvent::UpsertRoute(app_data.clone()))
-                .await?;
-        }
-
-        let latest_deployment_id = latest_deployment.as_ref().map(|d| d.id);
-
-        // Marks the current deployment as draining, so no new requests will not be handled by it,
-        // and later the DrainJanitor service will terminate the container.
-        if let Some(latest_deployment) = latest_deployment
-            && let Some(container_id) = latest_deployment.container_id.clone()
-        {
-            emit(
-                tx,
-                StreamEvent::Log {
-                    level: StreamLogLevel::Info,
-                    message: format!(
-                        "[{}] Found previously released container, draining it...",
-                        app.name,
-                    ),
-                },
-            )
-            .await;
-
-            let current_app_data = DeployAppData {
-                id: latest_deployment.id.to_string(),
-                container_id,
-                state: DeployAppState::Draining,
-                ..app_data
-            };
-
-            drain_app(&state, &mut db, latest_deployment, current_app_data).await?;
-        }
-
-        if let Err(err) =
-            prune_old_releases(&state.docker, &mut db, &db_app, latest_deployment_id).await
-        {
-            emit(
-                tx,
-                StreamEvent::Log {
-                    level: StreamLogLevel::Error,
-                    message: format!("[{}] Failed to prune old releases: {}", app.name, err),
-                },
-            )
-            .await;
-        }
+        deploy_app(tx, state.clone(), app, None, None).await?;
     }
 
     Ok(())
@@ -474,15 +512,11 @@ pub async fn deploy_apps(
 pub async fn rollback_apps(
     tx: &StreamSender,
     state: Arc<AppState>,
-    apps: Vec<AppRollbackPayloadData>,
+    payload: AppDeployPayload,
 ) -> Result<()> {
     let mut db = state.agent_db.db.clone();
 
-    // TODO: During rollback previous app's image might be usinig different env variables
-    // since it might have been updated afterwards.
-    // So some kind of env backups would be a nice feature for future, but for now this should be ok.
-
-    for app in apps {
+    for app in payload.apps {
         let db_app = App::get_by_project_and_name(&mut db, &app.project, &app.name).await?;
 
         let Some(db_app) = db_app else {
@@ -490,7 +524,7 @@ pub async fn rollback_apps(
                 tx,
                 StreamEvent::Log {
                     level: StreamLogLevel::Info,
-                    message: format!("[{}] App not found, skipping...", app.name,),
+                    message: format!("[{}] App not found, skipping...", app.name),
                 },
             )
             .await;
@@ -499,32 +533,36 @@ pub async fn rollback_apps(
         };
 
         let previous_deployment = Deployment::get_previous_deployment(&mut db, &db_app.id).await?;
-        let _latest_deployment = Deployment::get_latest_deployment(&mut db, &db_app.id).await?;
 
         // Prevous deployment must exist since what are you trying to rollback to, right?
         // Also current deployment might not be active because of a failure or something,
         // so rollback can still happen.
-        let Some(_previous_deployment) = previous_deployment else {
+        let Some(previous_deployment) = previous_deployment else {
+            emit(
+                tx,
+                StreamEvent::Log {
+                    level: StreamLogLevel::Info,
+                    message: format!(
+                        "[{}] Previous deployment doesn't exist, skipping...",
+                        app.name
+                    ),
+                },
+            )
+            .await;
+
             continue;
         };
 
-        let _prev_app_data = DeployAppData {
-            ..Default::default()
-        };
+        let deployment_to_drain = Deployment::get_latest_deployment(&mut db, &db_app.id).await?;
 
-        // if let (Some(domain), Some(container_id)) =
-        //     (db_app.domain, previous_deployment.container_id)
-        // {
-        //     // let route_config = RouteConfig {
-        //     //     id: previous_deployment.id.to_string(),
-        //     //     project: app.project,
-        //     //     name: app.name,
-        //     //     domain,
-        //     //     port: previous_deployment.port,
-        //     //     state: RouteState::Active,
-        //     //     container_id,
-        //     // };
-        // }
+        deploy_app(
+            tx,
+            state.clone(),
+            app,
+            Some(previous_deployment),
+            deployment_to_drain,
+        )
+        .await?;
     }
 
     Ok(())
