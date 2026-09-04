@@ -367,6 +367,7 @@ async fn deploy_app(
     deployment_to_drain: Option<Deployment>,
 ) -> Result<()> {
     let mut db = state.agent_db.db.clone();
+    let mut cloned_db = db.clone();
 
     emit(
         tx,
@@ -393,7 +394,7 @@ async fn deploy_app(
 
     let db_app = App::get_or_create(&mut db, &app_config).await?;
 
-    let mut db_tx = db.transaction().await?;
+    let mut db_tx = cloned_db.transaction().await?;
 
     let deployment = match deployment_to_run {
         Some(v) => v,
@@ -427,8 +428,6 @@ async fn deploy_app(
 
     let (new_deployment, new_container_id) =
         _deploy_app(tx, &state.docker, deployment, deploy_app_options).await?;
-
-    db_tx.commit().await?;
 
     let app_data = DeployAppData {
         id: new_deployment.id.to_string(),
@@ -510,6 +509,8 @@ async fn deploy_app(
         )
         .await;
     }
+
+    db_tx.commit().await?;
 
     Ok(())
 }

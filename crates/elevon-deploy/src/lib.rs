@@ -43,7 +43,9 @@ pub async fn run_deploy_cli(arg: DeployArgs, command: Commands) -> anyhow::Resul
                 .run_deploy(&agent_client, &args.apps, registry_credentials)
                 .await?;
         }
-        Commands::Rollback(_args) => {}
+        Commands::Rollback(args) => {
+            config.run_rollback(&agent_client, &args.apps).await?;
+        }
     }
 
     Ok(())

@@ -81,9 +81,8 @@ impl App {
     }
 }
 
-#[derive(Debug, Default, toasty::Embed, PartialEq, Eq)]
+#[derive(Debug, toasty::Embed, PartialEq, Eq)]
 pub enum DeploymentStatus {
-    #[default]
     Pending,
     Active,
     Drained,
@@ -110,6 +109,7 @@ pub struct Deployment {
 
     pub port: u16,
 
+    #[default(DeploymentStatus::Pending)]
     pub status: DeploymentStatus,
 
     #[belongs_to(key = app_id, references = id)]

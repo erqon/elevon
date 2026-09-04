@@ -79,6 +79,7 @@ pub struct AppArgs {
     pub apps: Vec<String>,
 
     #[arg(
+        short,
         long,
         default_value_t = false,
         help = "Build and push the image before deploying"

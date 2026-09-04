@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use anyhow::Result;
 use elevon_config::ResolveEnvCredentials;
 use elevon_contracts::deploy::{
-    AppDeployPayload, AppPayload, AppRole, AppRuntimeOptions, WebApp, log_stream_events,
+    AppDeployPayload, AppPayload, AppRole, AppRollback, AppRollbackPayload, AppRuntimeOptions,
+    WebApp, log_stream_events,
 };
 use reqwest::{
     Client, Url,
@@ -146,6 +147,44 @@ impl AgentClient {
         log_stream_events(event_stream).await?;
 
         print_success(&format!("Deployed {}", config.name));
+
+        Ok(())
+    }
+
+    pub async fn push_rollback(
+        &self,
+        config: &Config,
+        apps: Vec<(String, AppConfig)>,
+    ) -> Result<()> {
+        let url = self.absolute_url("/deploy/rollback");
+        let headers = self.headers();
+
+        let app_names: Vec<_> = apps.iter().map(|(key, _)| key).collect();
+        tracing::Span::current().pb_set_message(&format!("rolling back {}", config.name));
+        tracing::info!("Rolling back apps: {:?}", app_names);
+
+        let apps_payload: Vec<AppRollback> = apps
+            .iter()
+            .map(|(name, _)| AppRollback {
+                project: config.name.clone(),
+                name: name.clone(),
+            })
+            .collect::<Vec<_>>();
+
+        let payload = serde_json::json!(AppRollbackPayload { apps: apps_payload });
+
+        let event_stream = self
+            .client
+            .post(url)
+            .headers(headers)
+            .json(&payload)
+            .send()
+            .await?
+            .bytes_stream();
+
+        log_stream_events(event_stream).await?;
+
+        print_success(&format!("Rolled back {}", config.name));
 
         Ok(())
     }
