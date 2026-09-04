@@ -1,3 +1,4 @@
+use core::fmt;
 use std::collections::HashMap;
 
 use anyhow::Result;
@@ -90,10 +91,45 @@ pub enum AppRole {
     Worker,
 }
 
+impl fmt::Display for AppRole {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AppRole::Web => write!(f, "web"),
+            AppRole::Worker => write!(f, "worker"),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct ParseAppRoleError;
+
+impl std::str::FromStr for AppRole {
+    type Err = ParseAppRoleError;
+
+    fn from_str(s: &str) -> std::prelude::v1::Result<Self, Self::Err> {
+        match s {
+            "web" => Ok(AppRole::Web),
+            "worker" => Ok(AppRole::Worker),
+            _ => Err(ParseAppRoleError),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebApp {
     pub port: u16,
     pub domain: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AppRuntimeOptions {
+    pub role: AppRole,
+    pub cmd: Option<Vec<String>>,
+    pub restart: Option<RestartPolicyNameEnum>,
+    pub memory_limit: Option<i64>,
+    pub cpu_limit: Option<i64>,
+    pub network: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,24 +151,13 @@ impl ResolveEnvCredentials for TlsConfig {
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
-pub struct AppOptions {
-    pub role: AppRole,
-    pub cmd: Option<Vec<String>>,
-    pub restart: Option<RestartPolicyNameEnum>,
-    pub memory_limit: Option<i64>,
-    pub cpu_limit: Option<i64>,
-    pub network: Option<String>,
-}
-
-#[derive(Debug, Default, Serialize, Deserialize)]
-#[serde(default)]
 pub struct AppPayload {
     pub project: String,
     pub image: String,
     pub name: String,
     pub keep_releases: u8,
-    pub options: AppOptions,
-    pub vars: HashMap<String, String>,
+    pub runtime_options: AppRuntimeOptions,
+    pub vars: Option<HashMap<String, String>>,
     pub tls: Option<TlsConfig>,
     pub web_app: Option<WebApp>,
 }
@@ -140,6 +165,17 @@ pub struct AppPayload {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AppDeployPayload {
     pub apps: Vec<AppPayload>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AppRollback {
+    pub project: String,
+    pub name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AppRollbackPayload {
+    pub apps: Vec<AppRollback>,
 }
 
 #[derive(Clone, PartialEq, Eq)]

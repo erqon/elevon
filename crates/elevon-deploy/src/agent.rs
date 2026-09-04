@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use elevon_config::ResolveEnvCredentials;
 use elevon_contracts::deploy::{
-    AppDeployPayload, AppOptions, AppPayload, AppRole, WebApp, log_stream_events,
+    AppDeployPayload, AppPayload, AppRole, AppRuntimeOptions, WebApp, log_stream_events,
 };
 use reqwest::{
     Client, Url,
@@ -101,7 +101,7 @@ impl AgentClient {
                     None => (None, None, None),
                 };
 
-                let options = AppOptions {
+                let runtime_options = AppRuntimeOptions {
                     role: cfg.role.clone(),
                     cmd,
                     cpu_limit: cpu.as_ref().map(|c| c.nano_cpus()),
@@ -121,8 +121,8 @@ impl AgentClient {
                     keep_releases: config
                         .keep_releases
                         .unwrap_or_else(|| Config::default_keep_releases().unwrap()),
-                    options,
-                    vars,
+                    runtime_options,
+                    vars: Some(vars),
                     tls: tls_with_credentials,
                     web_app,
                 }))

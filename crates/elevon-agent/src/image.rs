@@ -13,7 +13,8 @@ use bollard::{
     },
 };
 use elevon_contracts::deploy::{
-    AppDeployPayload, AppPayload, AppRole, StreamEvent, StreamLogLevel, TlsType, WebApp,
+    AppDeployPayload, AppPayload, AppRole, AppRollbackPayload, AppRuntimeOptions, StreamEvent,
+    StreamLogLevel, TlsType, WebApp,
 };
 use elevon_fs::agent::{
     AppEnvOptions, TlsOptions, add_app_env, load_app_env, load_app_string_env, write_tls_file,
@@ -23,7 +24,9 @@ use tokio::sync::RwLock;
 
 use crate::{
     api::{
-        db::models::{App, Deployment, DeploymentStatus},
+        db::models::{
+            App, Deployment, DeploymentRuntimeOption, DeploymentRuntimeOptions, DeploymentStatus,
+        },
         state::AppState,
         stream::{StreamSender, emit},
     },
@@ -41,10 +44,10 @@ struct PullImageOptions<'cfg, 'dep> {
     pub deployment_id: &'dep str,
 }
 
-async fn pull_image<'cfg, 'dep>(
+async fn pull_image(
     tx: &StreamSender,
     docker: &bollard::Docker,
-    options: PullImageOptions<'cfg, 'dep>,
+    options: PullImageOptions<'_, '_>,
 ) -> Result<()> {
     emit(
         tx,
@@ -130,19 +133,19 @@ async fn run_container(
 
     let host_config = Some(HostConfig {
         restart_policy: Some(RestartPolicy {
-            name: app_config.options.restart,
+            name: app_config.runtime_options.restart,
             ..Default::default()
         }),
-        nano_cpus: app_config.options.cpu_limit,
-        memory: app_config.options.memory_limit,
-        network_mode: app_config.options.network.clone(),
+        nano_cpus: app_config.runtime_options.cpu_limit,
+        memory: app_config.runtime_options.memory_limit,
+        network_mode: app_config.runtime_options.network.clone(),
         port_bindings: Some(port_bindings),
         ..Default::default()
     });
 
     let config = ContainerCreateBody {
         image: Some(app_config.image.clone()),
-        cmd: app_config.options.cmd.clone(),
+        cmd: app_config.runtime_options.cmd.clone(),
         env: Some(app_env),
         host_config,
         ..Default::default()
@@ -180,14 +183,16 @@ async fn clear_port(port: &u16) {
 fn prepare_env_variables(app_config: &AppPayload, deployment_id: &str) -> Result<()> {
     let env_options = AppEnvOptions::app(&app_config.project, &app_config.name, deployment_id);
 
-    for (key, value) in &app_config.vars {
-        add_app_env(key.clone(), value.clone(), env_options.clone())?;
+    if let Some(vars) = &app_config.vars {
+        for (key, value) in vars {
+            add_app_env(key.clone(), value.clone(), env_options.clone())?;
+        }
     }
 
     Ok(())
 }
 
-struct DeployAppOptions<'cfg, 'tx> {
+struct _DeployAppOptions<'cfg, 'tx> {
     db_tx: &'tx mut toasty::Transaction<'cfg>,
     port: u16,
     app_config: &'cfg AppPayload,
@@ -195,15 +200,13 @@ struct DeployAppOptions<'cfg, 'tx> {
 
 /// Creates Deployment, sets TLS files, sets Environment variables,
 /// and then runs the container. Afterwards updates Deployment's status.
-async fn _deploy_app<'cfg, 'tx>(
+async fn _deploy_app(
     tx: &StreamSender,
     docker: &bollard::Docker,
     mut deployment: Deployment,
-    options: DeployAppOptions<'cfg, 'tx>,
+    options: _DeployAppOptions<'_, '_>,
 ) -> Result<(Deployment, String)> {
     prepare_env_variables(options.app_config, &deployment.id.to_string())?;
-
-    // TODO: options.app_config needs to be dynamic too so rollbacks can deploy previous deployments
 
     let pull_image_options = PullImageOptions {
         project: &options.app_config.project,
@@ -224,6 +227,8 @@ async fn _deploy_app<'cfg, 'tx>(
         .or(inspect.id)
         .ok_or_else(|| anyhow::anyhow!("no image reference found after pull"))?;
 
+    // TODO: During rollbacks previous deployment might have been running on a different
+    // domain, with different certificates, so the requests will fail due to the certs missmatch.
     if let Some(tls) = options.app_config.tls.as_ref() {
         let tls_options = TlsOptions {
             project: options.app_config.project.clone(),
@@ -393,16 +398,28 @@ async fn deploy_app(
     let deployment = match deployment_to_run {
         Some(v) => v,
         None => {
-            toasty::create!(Deployment {
+            let deployment = toasty::create!(Deployment {
                 app_id: db_app.id,
                 port: port
             })
             .exec(&mut db_tx)
-            .await?
+            .await?;
+
+            let deployment_runtime_options =
+                DeploymentRuntimeOptions::from(&app_config.runtime_options);
+
+            toasty::create!(DeploymentRuntimeOption {
+                deployment_id: deployment.id.clone(),
+                options: deployment_runtime_options
+            })
+            .exec(&mut db_tx)
+            .await?;
+
+            deployment
         }
     };
 
-    let deploy_app_options = DeployAppOptions {
+    let deploy_app_options = _DeployAppOptions {
         db_tx: &mut db_tx,
         port,
         app_config: &app_config,
@@ -415,10 +432,10 @@ async fn deploy_app(
 
     let app_data = DeployAppData {
         id: new_deployment.id.to_string(),
-        project: app_config.project.clone(),
-        name: app_config.name.clone(),
+        project: app_config.project.to_string(),
+        name: app_config.name.to_string(),
         container_id: new_container_id,
-        web_app: match (&app_config.options.role, &app_config.web_app) {
+        web_app: match (&app_config.runtime_options.role, &app_config.web_app) {
             (AppRole::Web, Some(web_app)) => Some(WebApp {
                 port,
                 domain: web_app.domain.clone(),
@@ -428,7 +445,7 @@ async fn deploy_app(
         ..Default::default()
     };
 
-    if AppRole::Web == app_config.options.role {
+    if AppRole::Web == app_config.runtime_options.role {
         emit(
             tx,
             StreamEvent::Log {
@@ -512,7 +529,7 @@ pub async fn deploy_apps(
 pub async fn rollback_apps(
     tx: &StreamSender,
     state: Arc<AppState>,
-    payload: AppDeployPayload,
+    payload: AppRollbackPayload,
 ) -> Result<()> {
     let mut db = state.agent_db.db.clone();
 
@@ -553,12 +570,48 @@ pub async fn rollback_apps(
             continue;
         };
 
+        let (Some(image_repository), Some(runtime_options)) = (
+            &previous_deployment.image_repository,
+            &previous_deployment.runtime_options.get(),
+        ) else {
+            emit(
+                tx,
+                StreamEvent::Log {
+                    level: StreamLogLevel::Info,
+                    message: format!(
+                        "[{}] Previous deployment doesn't have image properties, skipping...",
+                        app.name
+                    ),
+                },
+            )
+            .await;
+
+            continue;
+        };
+
+        let runtime_options = AppRuntimeOptions::from(&runtime_options.options);
         let deployment_to_drain = Deployment::get_latest_deployment(&mut db, &db_app.id).await?;
+
+        let app_payload = AppPayload {
+            project: app.project.clone(),
+            name: app.name.clone(),
+            image: image_repository.to_string(),
+            keep_releases: previous_deployment.app.get().keep_releases,
+            runtime_options: runtime_options.clone(),
+            web_app: match (&runtime_options.role, &previous_deployment.app.get().domain) {
+                (AppRole::Web, Some(domain)) => Some(WebApp {
+                    port: 0,
+                    domain: domain.clone(),
+                }),
+                _ => None,
+            },
+            ..Default::default()
+        };
 
         deploy_app(
             tx,
             state.clone(),
-            app,
+            app_payload,
             Some(previous_deployment),
             deployment_to_drain,
         )

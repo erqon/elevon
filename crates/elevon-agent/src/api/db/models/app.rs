@@ -1,5 +1,8 @@
+use std::str::FromStr;
+
 use anyhow::Result;
-use elevon_contracts::deploy::AppPayload;
+use bollard::plugin::RestartPolicyNameEnum;
+use elevon_contracts::deploy::{AppPayload, AppRole, AppRuntimeOptions};
 
 #[derive(Debug, toasty::Model)]
 pub struct App {
@@ -51,11 +54,10 @@ impl App {
 
         if let Some(mut app) = app {
             if app.keep_releases != payload.keep_releases {
-                toasty::update!(app {
-                    keep_releases: payload.keep_releases,
-                })
-                .exec(db)
-                .await?;
+                app.update()
+                    .keep_releases(payload.keep_releases)
+                    .exec(db)
+                    .await?;
             }
 
             return Ok(app);
@@ -98,6 +100,9 @@ pub struct Deployment {
     pub app_id: uuid::Uuid,
 
     #[index]
+    pub image_repository: Option<String>,
+
+    #[index]
     pub image_digest: Option<String>,
 
     #[index]
@@ -107,11 +112,11 @@ pub struct Deployment {
 
     pub status: DeploymentStatus,
 
-    #[has_one]
-    pub options: toasty::Deferred<Option<DeploymentOption>>,
-
     #[belongs_to(key = app_id, references = id)]
     pub app: toasty::Deferred<App>,
+
+    #[has_one]
+    pub runtime_options: toasty::Deferred<Option<DeploymentRuntimeOption>>,
 
     #[auto]
     pub created_at: jiff::Timestamp,
@@ -135,6 +140,7 @@ impl Deployment {
                 .and(Deployment::fields().status().eq(status)),
         )
         .include(Deployment::fields().app())
+        .include(Deployment::fields().runtime_options())
         .latest_by(Deployment::fields().updated_at());
 
         if !latest {
@@ -178,14 +184,59 @@ impl Deployment {
     }
 }
 
+#[derive(Debug, toasty::Embed)]
+pub struct DeploymentRuntimeOptions {
+    pub role: String,
+    /// Comma separated string
+    pub cmd: Option<String>,
+    pub restart: Option<String>,
+    pub memory_limit: Option<i64>,
+    pub cpu_limit: Option<i64>,
+    pub network: Option<String>,
+}
+
+impl From<&AppRuntimeOptions> for DeploymentRuntimeOptions {
+    fn from(value: &AppRuntimeOptions) -> Self {
+        Self {
+            role: value.role.to_string(),
+            cmd: value.cmd.clone().map(|c| c.join(",")),
+            restart: value.restart.as_ref().map(ToString::to_string),
+            memory_limit: value.memory_limit,
+            cpu_limit: value.cpu_limit,
+            network: value.network.clone(),
+        }
+    }
+}
+
+impl From<&DeploymentRuntimeOptions> for AppRuntimeOptions {
+    fn from(value: &DeploymentRuntimeOptions) -> Self {
+        Self {
+            role: AppRole::from_str(&value.role).unwrap(),
+            cmd: value
+                .cmd
+                .clone()
+                .map(|s| s.split(',').map(|item| item.trim().to_string()).collect()),
+            restart: value
+                .restart
+                .clone()
+                .map(|r| RestartPolicyNameEnum::from_str(&r).unwrap()),
+            memory_limit: value.memory_limit,
+            cpu_limit: value.cpu_limit,
+            network: value.network.clone(),
+        }
+    }
+}
+
 #[derive(Debug, toasty::Model)]
-pub struct DeploymentOption {
+pub struct DeploymentRuntimeOption {
     #[key]
     #[auto]
     pub id: uuid::Uuid,
 
-    #[index]
+    #[unique]
     pub deployment_id: uuid::Uuid,
+
+    pub options: DeploymentRuntimeOptions,
 
     #[belongs_to(key = deployment_id, references = id)]
     pub deployment: toasty::Deferred<Deployment>,
