@@ -144,7 +144,7 @@ impl Deployment {
         .latest_by(Deployment::fields().updated_at());
 
         if !latest {
-            query = query.offset(1).limit(1);
+            query = query.limit(1).offset(1);
         }
 
         let deployment = query.first().exec(db).await?;
