@@ -137,9 +137,7 @@ impl ProxyState {
             .into_iter()
             .flatten()
             .filter_map(|route| {
-                let Some(web_app) = route.web_app.clone() else {
-                    return None;
-                };
+                let web_app = route.web_app.clone()?;
 
                 if route.state != DeployAppState::Active {
                     return None;

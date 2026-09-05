@@ -114,7 +114,6 @@ impl AgentClient {
                     cpu_limit: cpu.as_ref().map(|c| c.nano_cpus()),
                     memory_limit: memory.as_ref().map(|m| m.bytes()),
                     network,
-                    ..Default::default()
                 };
 
                 Ok(Some(AppPayload {

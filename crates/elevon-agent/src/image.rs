@@ -408,7 +408,7 @@ async fn deploy_app(
             };
 
             toasty::create!(DeploymentRuntimeOption {
-                deployment_id: deployment.id.clone(),
+                deployment_id: deployment.id,
                 options
             })
             .exec(&mut db_tx)
@@ -604,7 +604,7 @@ pub async fn rollback_apps(
                 &previous_deployment.app.get().domain,
             ) {
                 (AppRole::Web, Some(port), Some(domain)) => Some(WebApp {
-                    port: port.clone(),
+                    port: *port,
                     domain: domain.clone(),
                 }),
                 _ => None,
