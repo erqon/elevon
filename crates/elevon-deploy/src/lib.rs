@@ -27,7 +27,10 @@ pub async fn run_deploy_cli(arg: DeployArgs, command: Commands) -> anyhow::Resul
             tracing::info!("Successfully passed config file check {}", &arg.config);
         }
         Commands::Build(args) => {
-            config.run_build(&arg.config, args.push).await?;
+            let registry_credentials = config.registry.resolved_credentials()?;
+            config
+                .run_build(&registry_credentials, &arg.config, args.push)
+                .await?;
         }
         Commands::Push => {
             config.run_push().await?;
@@ -36,7 +39,9 @@ pub async fn run_deploy_cli(arg: DeployArgs, command: Commands) -> anyhow::Resul
             let registry_credentials = config.registry.resolved_credentials()?;
 
             if args.build {
-                config.run_build(&arg.config, true).await?;
+                config
+                    .run_build(&registry_credentials, &arg.config, true)
+                    .await?;
             }
 
             config

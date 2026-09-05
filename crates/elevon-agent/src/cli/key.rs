@@ -53,7 +53,7 @@ pub async fn create(name: impl Into<String>) -> Result<String> {
     .exec(&mut agent_db.db)
     .await?;
 
-    tracing::info!("API Key was created, make sure to save it: {}", &api_key);
+    tracing::info!("Save your API Key: {}", &api_key);
 
     Ok(api_key)
 }

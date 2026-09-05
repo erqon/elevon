@@ -39,8 +39,7 @@ static ALLOCATED_PORTS: LazyLock<RwLock<HashSet<u16>>> =
 struct PullImageOptions<'cfg, 'dep> {
     pub project: &'cfg str,
     pub name: &'cfg str,
-    pub image_rep: &'cfg str,
-    pub image_digest: Option<&'dep str>,
+    pub image_ref: &'cfg str,
     pub deployment_id: &'dep str,
 }
 
@@ -70,12 +69,9 @@ async fn pull_image(
         _ => (None, None, None),
     };
 
-    let image = match options.image_digest {
-        Some(dig) => &format!("{}@{}", options.image_rep, dig),
-        None => options.image_rep,
-    };
-
-    let image_options = CreateImageOptionsBuilder::new().from_image(image).build();
+    let image_options = CreateImageOptionsBuilder::new()
+        .from_image(options.image_ref)
+        .build();
 
     let credentials = Some(DockerCredentials {
         username: registry_username,
@@ -117,6 +113,9 @@ async fn run_container(
         &app_config.name,
         &deployment.id.to_string(),
     );
+
+    // TODO: Currently it laods everything from the file but it should be fixed in a way like,
+    // saving env keys in db and loading them up.
     let app_env = load_app_string_env(app_env_options)?;
 
     let mut port_bindings = PortMap::new();
@@ -144,7 +143,7 @@ async fn run_container(
     });
 
     let config = ContainerCreateBody {
-        image: Some(app_config.image.clone()),
+        image: Some(app_config.image_ref.clone()),
         cmd: app_config.runtime_options.cmd.clone(),
         env: Some(app_env),
         host_config,
@@ -211,21 +210,13 @@ async fn _deploy_app(
     let pull_image_options = PullImageOptions {
         project: &options.app_config.project,
         name: &options.app_config.name,
-        image_rep: &options.app_config.image,
-        image_digest: deployment.image_digest.as_deref(),
+        image_ref: &options.app_config.image_ref,
         deployment_id: &deployment.id.to_string(),
     };
 
     pull_image(tx, docker, pull_image_options).await.inspect_err(
         |err| tracing::error!(app = %options.app_config.name, error = %err, "failed to get or create app"),
     )?;
-
-    let inspect = docker.inspect_image(&options.app_config.image).await?;
-    let image_ref = inspect
-        .repo_digests
-        .and_then(|digests| digests.into_iter().next())
-        .or(inspect.id)
-        .ok_or_else(|| anyhow::anyhow!("no image reference found after pull"))?;
 
     // TODO: During rollbacks previous deployment might have been running on a different
     // domain, with different certificates, so the requests will fail due to the certs missmatch.
@@ -256,7 +247,7 @@ async fn _deploy_app(
 
             deployment
                 .update()
-                .image_digest(Some(image_ref))
+                .image_ref(Some(options.app_config.image_ref.clone()))
                 .status(DeploymentStatus::Failed)
                 .exec(options.db_tx)
                 .await?;
@@ -275,7 +266,7 @@ async fn _deploy_app(
 
             deployment
                 .update()
-                .image_digest(Some(image_ref))
+                .image_ref(Some(options.app_config.image_ref.clone()))
                 .container_id(container_id.clone())
                 .status(DeploymentStatus::Active)
                 .exec(options.db_tx)
@@ -314,8 +305,7 @@ async fn prune_old_releases(
     app: &App,
     just_drained_id: Option<uuid::Uuid>,
 ) -> Result<()> {
-    let deployments =
-        Deployment::list_by_app_id(db, &app.id, app.keep_releases as usize + 1).await?;
+    let deployments = Deployment::list_by_app_id(db, &app.id, app.keep_releases as usize).await?;
 
     for old in deployments {
         if old.status == DeploymentStatus::Active || Some(old.id) == just_drained_id {
@@ -330,11 +320,11 @@ async fn prune_old_releases(
         let env_options = AppEnvOptions::app(&app.project, &app.name, &old.id.to_string());
         let _ = std::fs::remove_file(elevon_fs::agent::get_app_env(env_options)?);
 
-        if let Some(digest) = &old.image_digest {
+        if let Some(image_ref) = &old.image_ref {
             let still_referenced = Deployment::filter(
                 Deployment::fields()
-                    .image_digest()
-                    .eq(digest)
+                    .image_ref()
+                    .eq(image_ref)
                     .and(Deployment::fields().id().ne(old.id)),
             )
             .first()
@@ -345,10 +335,10 @@ async fn prune_old_releases(
             if !still_referenced {
                 let remove_options = RemoveImageOptions::default();
                 if let Err(err) = docker
-                    .remove_image(digest, Some(remove_options), None)
+                    .remove_image(image_ref, Some(remove_options), None)
                     .await
                 {
-                    tracing::warn!(%digest, %err, "failed to remove unreferenced image");
+                    tracing::warn!(%image_ref, %err, "failed to remove unreferenced image");
                 }
             }
         }
@@ -363,11 +353,14 @@ async fn deploy_app(
     tx: &StreamSender,
     state: Arc<AppState>,
     app_config: AppPayload,
+    // this present = rollback
     deployment_to_run: Option<Deployment>,
     deployment_to_drain: Option<Deployment>,
 ) -> Result<()> {
     let mut db = state.agent_db.db.clone();
     let mut cloned_db = db.clone();
+
+    let is_rollback = deployment_to_run.is_some();
 
     emit(
         tx,
@@ -409,9 +402,14 @@ async fn deploy_app(
             let deployment_runtime_options =
                 DeploymentRuntimeOptions::from(&app_config.runtime_options);
 
+            let options = DeploymentRuntimeOptions {
+                port: app_config.web_app.as_ref().map(|w| w.port),
+                ..deployment_runtime_options
+            };
+
             toasty::create!(DeploymentRuntimeOption {
                 deployment_id: deployment.id.clone(),
-                options: deployment_runtime_options
+                options
             })
             .exec(&mut db_tx)
             .await?;
@@ -494,8 +492,9 @@ async fn deploy_app(
         drain_app(&state, &mut db, deployment_to_drain, current_app_data).await?;
     }
 
-    if let Err(err) =
-        prune_old_releases(&state.docker, &mut db, &db_app, deployment_to_drain_id).await
+    if !is_rollback
+        && let Err(err) =
+            prune_old_releases(&state.docker, &mut db, &db_app, deployment_to_drain_id).await
     {
         emit(
             tx,
@@ -571,8 +570,8 @@ pub async fn rollback_apps(
             continue;
         };
 
-        let (Some(image_repository), Some(runtime_options)) = (
-            &previous_deployment.image_repository,
+        let (Some(image_ref), Some(deployment_runtime_options)) = (
+            &previous_deployment.image_ref,
             &previous_deployment.runtime_options.get(),
         ) else {
             emit(
@@ -590,18 +589,22 @@ pub async fn rollback_apps(
             continue;
         };
 
-        let runtime_options = AppRuntimeOptions::from(&runtime_options.options);
+        let runtime_options = AppRuntimeOptions::from(&deployment_runtime_options.options);
         let deployment_to_drain = Deployment::get_latest_deployment(&mut db, &db_app.id).await?;
 
         let app_payload = AppPayload {
             project: app.project.clone(),
             name: app.name.clone(),
-            image: image_repository.to_string(),
+            image_ref: image_ref.to_string(),
             keep_releases: previous_deployment.app.get().keep_releases,
             runtime_options: runtime_options.clone(),
-            web_app: match (&runtime_options.role, &previous_deployment.app.get().domain) {
-                (AppRole::Web, Some(domain)) => Some(WebApp {
-                    port: 0,
+            web_app: match (
+                &runtime_options.role,
+                &deployment_runtime_options.options.port,
+                &previous_deployment.app.get().domain,
+            ) {
+                (AppRole::Web, Some(port), Some(domain)) => Some(WebApp {
+                    port: port.clone(),
                     domain: domain.clone(),
                 }),
                 _ => None,

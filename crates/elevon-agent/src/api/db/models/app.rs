@@ -99,10 +99,7 @@ pub struct Deployment {
     pub app_id: uuid::Uuid,
 
     #[index]
-    pub image_repository: Option<String>,
-
-    #[index]
-    pub image_digest: Option<String>,
+    pub image_ref: Option<String>,
 
     #[index]
     pub container_id: Option<String>,
@@ -131,9 +128,8 @@ impl Deployment {
         db: &mut toasty::Db,
         app_id: &uuid::Uuid,
         status: DeploymentStatus,
-        latest: bool,
     ) -> Result<Option<Self>> {
-        let mut query = Deployment::filter(
+        let deployment = Deployment::filter(
             Deployment::fields()
                 .app_id()
                 .eq(app_id)
@@ -141,13 +137,10 @@ impl Deployment {
         )
         .include(Deployment::fields().app())
         .include(Deployment::fields().runtime_options())
-        .latest_by(Deployment::fields().updated_at());
-
-        if !latest {
-            query = query.limit(1).offset(1);
-        }
-
-        let deployment = query.first().exec(db).await?;
+        .latest_by(Deployment::fields().updated_at())
+        .first()
+        .exec(db)
+        .await?;
 
         Ok(deployment)
     }
@@ -156,8 +149,7 @@ impl Deployment {
         db: &mut toasty::Db,
         app_id: &uuid::Uuid,
     ) -> Result<Option<Deployment>> {
-        let deployment =
-            Deployment::_get_by_app_id(db, app_id, DeploymentStatus::Active, true).await?;
+        let deployment = Deployment::_get_by_app_id(db, app_id, DeploymentStatus::Active).await?;
         Ok(deployment)
     }
 
@@ -165,8 +157,7 @@ impl Deployment {
         db: &mut toasty::Db,
         app_id: &uuid::Uuid,
     ) -> Result<Option<Deployment>> {
-        let deployment =
-            Deployment::_get_by_app_id(db, app_id, DeploymentStatus::Active, false).await?;
+        let deployment = Deployment::_get_by_app_id(db, app_id, DeploymentStatus::Drained).await?;
         Ok(deployment)
     }
 
@@ -184,9 +175,10 @@ impl Deployment {
     }
 }
 
-#[derive(Debug, toasty::Embed)]
+#[derive(Debug, Default, toasty::Embed)]
 pub struct DeploymentRuntimeOptions {
     pub role: String,
+    pub port: Option<u16>,
     /// Comma separated string
     pub cmd: Option<String>,
     pub restart: Option<String>,
@@ -204,6 +196,7 @@ impl From<&AppRuntimeOptions> for DeploymentRuntimeOptions {
             memory_limit: value.memory_limit,
             cpu_limit: value.cpu_limit,
             network: value.network.clone(),
+            ..Default::default()
         }
     }
 }

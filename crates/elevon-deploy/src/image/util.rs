@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use crate::config::{BuildConfig, BuildOptions};
 
-pub fn full_image_name(registry_server: &str, image_name: &str, tag: &str) -> String {
+pub fn image_reference(registry_server: &str, image_name: &str, tag: &str) -> String {
     format!(
         "{}/{}:{}",
         registry_server.trim_end_matches('/'),

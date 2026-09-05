@@ -95,21 +95,28 @@ impl Config {
         Ok(vars)
     }
 
-    pub async fn run_build(&self, config_path: &str, push: bool) -> Result<()> {
-        crate::image::build_image(&self.image, &self.registry.server, &self.build, config_path)
-            .await?;
+    pub async fn run_build(
+        &self,
+        registry_config: &RegistryConfig,
+        config_path: &str,
+        push: bool,
+    ) -> Result<Option<String>> {
+        let built =
+            crate::image::build_image(registry_config, &self.build, &self.image, config_path)
+                .await?;
 
-        if push {
-            self.run_push().await?;
+        if built && push {
+            let image_digest = self.run_push().await?;
+            return Ok(Some(image_digest));
         }
 
-        Ok(())
+        Ok(None)
     }
 
-    pub async fn run_push(&self) -> Result<()> {
+    pub async fn run_push(&self) -> Result<String> {
         let registry_credentials = self.registry.resolved_credentials()?;
-        crate::image::push_image(&self.image, registry_credentials).await?;
-        Ok(())
+        let image_digest = crate::image::push_image(&self.image, registry_credentials).await?;
+        Ok(image_digest)
     }
 
     pub fn get_selected_apps(&self, arg_apps: &[String]) -> Result<Vec<(String, AppConfig)>> {

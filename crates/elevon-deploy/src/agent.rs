@@ -15,7 +15,7 @@ use tracing_indicatif::span_ext::IndicatifSpanExt;
 use crate::{config::registry::RegistryConfig, image::progress::print_success};
 use crate::{
     config::{Config, app::AppConfig},
-    util::COMMIT_SHA,
+    util::get_image_tag,
 };
 
 pub struct AgentClient {
@@ -97,14 +97,20 @@ impl AgentClient {
                 };
 
                 let cmd = cfg.cmd.as_ref().and_then(|c| shlex::split(c));
-                let (cpu, memory, network) = match cfg.runtime.clone() {
-                    Some(runtime) => (runtime.cpu, runtime.memory, runtime.network),
-                    None => (None, None, None),
+                let (restart, cpu, memory, network) = match cfg.runtime.clone() {
+                    Some(runtime) => (
+                        runtime.restart,
+                        runtime.cpu,
+                        runtime.memory,
+                        runtime.network,
+                    ),
+                    None => (None, None, None, None),
                 };
 
                 let runtime_options = AppRuntimeOptions {
                     role: cfg.role.clone(),
                     cmd,
+                    restart,
                     cpu_limit: cpu.as_ref().map(|c| c.nano_cpus()),
                     memory_limit: memory.as_ref().map(|m| m.bytes()),
                     network,
@@ -112,12 +118,12 @@ impl AgentClient {
                 };
 
                 Ok(Some(AppPayload {
-                    project: config.name.clone(),
-                    image: crate::image::util::full_image_name(
+                    image_ref: crate::image::util::image_reference(
                         &config.registry.server,
                         &config.image,
-                        COMMIT_SHA,
+                        &get_image_tag()?,
                     ),
+                    project: config.name.clone(),
                     name: name.to_string(),
                     keep_releases: config
                         .keep_releases

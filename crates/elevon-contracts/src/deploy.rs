@@ -52,6 +52,8 @@ where
                 continue;
             }
 
+            println!("line: {}", line);
+
             if let Some(payload) = line.strip_prefix("data: ") {
                 if payload == "[DONE]" {
                     tracing::debug!("Stream sent [DONE] payload");
@@ -152,8 +154,8 @@ impl ResolveEnvCredentials for TlsConfig {
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppPayload {
+    pub image_ref: String,
     pub project: String,
-    pub image: String,
     pub name: String,
     pub keep_releases: u8,
     pub runtime_options: AppRuntimeOptions,
