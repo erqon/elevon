@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use bollard::query_parameters::InspectContainerOptionsBuilder;
+use elevon_contracts::deploy::WebApp;
 use elevon_fs::agent::get_socket_path;
 use tokio::io::AsyncWriteExt;
 use tokio::net::UnixStream;
@@ -11,7 +12,7 @@ use uuid::Uuid;
 use crate::api::db::AgentDb;
 use crate::api::db::models::{Deployment, DeploymentStatus};
 use crate::env::ElevonEnv;
-use crate::proxy::types::{AgentEvent, RouteConfig, RouteState};
+use crate::proxy::types::{AgentEvent, DeployAppData, DeployAppState};
 
 pub struct AppState {
     pub agent_db: AgentDb,
@@ -64,7 +65,7 @@ impl AppState {
         Ok(())
     }
 
-    pub async fn get_running_route_containers(&self) -> Result<Vec<RouteConfig>> {
+    pub async fn get_running_route_containers(&self) -> Result<Vec<DeployAppData>> {
         let mut db = self.agent_db.db.clone();
 
         let deployments =
@@ -73,7 +74,7 @@ impl AppState {
                 .exec(&mut db)
                 .await?;
 
-        let mut routes: Vec<RouteConfig> = Vec::new();
+        let mut routes: Vec<DeployAppData> = Vec::new();
 
         for mut deployment in deployments {
             let app = deployment.app.get();
@@ -111,26 +112,30 @@ impl AppState {
             if let Some(container) = container {
                 let Some(state) = container.state.and_then(|s| s.running).map(|running| {
                     if running {
-                        RouteState::Active
+                        DeployAppState::Active
                     } else {
-                        RouteState::Draining
+                        DeployAppState::Draining
                     }
                 }) else {
                     continue;
                 };
 
-                if state == RouteState::Draining {
+                if state == DeployAppState::Draining {
                     continue;
                 }
 
-                let route_config = RouteConfig {
+                let web_app = Some(WebApp {
+                    domain,
+                    port: deployment.port,
+                });
+
+                let route_config = DeployAppData {
                     id: deployment.id.to_string(),
                     project: project_name,
                     name: app_name,
-                    domain,
-                    port: deployment.port,
                     state,
                     container_id,
+                    web_app,
                 };
                 routes.push(route_config);
             } else {

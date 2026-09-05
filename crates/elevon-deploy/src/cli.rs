@@ -1,4 +1,3 @@
-pub mod env;
 pub mod init;
 
 use clap::{
@@ -52,6 +51,9 @@ pub enum Commands {
     #[command(about = "Initialize a configuration file template")]
     Init,
 
+    #[command(about = "Checks for deployment needed assets")]
+    Check,
+
     #[command(about = "Build container images from the deploy config")]
     Build(BuildArgs),
 
@@ -61,17 +63,8 @@ pub enum Commands {
     #[command(about = "Deploy applications")]
     Deploy(AppArgs),
 
-    #[command(about = "Env specific commands")]
-    Env {
-        #[command(flatten)]
-        args: AppArgs,
-
-        #[command(subcommand)]
-        subcommand: env::EnvCommands,
-    },
-
-    #[command(about = "Checks for deployment needed assets")]
-    Check,
+    #[command(about = "Rollback applications to previous deployment")]
+    Rollback(RollbackArgs),
 }
 
 #[derive(Debug, Args)]
@@ -82,6 +75,20 @@ pub struct BuildArgs {
 
 #[derive(Debug, Args)]
 pub struct AppArgs {
+    #[arg(long = "app", help = "Limit the operation to the specified app(s)")]
+    pub apps: Vec<String>,
+
+    #[arg(
+        short,
+        long,
+        default_value_t = false,
+        help = "Build and push the image before deploying"
+    )]
+    pub build: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct RollbackArgs {
     #[arg(long = "app", help = "Limit the operation to the specified app(s)")]
     pub apps: Vec<String>,
 }

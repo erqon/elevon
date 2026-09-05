@@ -1,6 +1,9 @@
 name: project-name
 image: project/project-name
 
+# Number of previous releases to keep for rollback (defaults to 5 if unset).
+# keep_releases: 5
+
 # Config values below can be read from environment variables marked with $VALUE_NAME:
 # - agent.url
 # - agent.key

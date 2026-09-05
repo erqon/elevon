@@ -1,5 +1,4 @@
 mod deploy;
-mod env;
 mod proxy;
 
 use std::sync::Arc;
@@ -13,7 +12,6 @@ use crate::api::state::AppState;
 pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/health", get(health))
-        .nest("/env", env::router())
         .nest("/deploy", deploy::router())
         .nest("/proxy", proxy::router())
         .with_state(state)

@@ -6,7 +6,7 @@ use elevon_http::error::AppError;
 
 use crate::{
     api::{middleware::local_only, state::AppState},
-    proxy::types::RouteConfig,
+    proxy::types::DeployAppData,
 };
 
 pub fn router() -> Router<Arc<AppState>> {
@@ -17,7 +17,7 @@ pub fn router() -> Router<Arc<AppState>> {
 
 async fn get_running_containers(
     State(state): State<Arc<AppState>>,
-) -> Result<Json<Vec<RouteConfig>>, AppError> {
+) -> Result<Json<Vec<DeployAppData>>, AppError> {
     let containers = state.get_running_route_containers().await?;
     Ok(Json(containers))
 }

@@ -12,7 +12,7 @@ use serde::Deserialize;
 
 use crate::{
     agent::AgentClient,
-    config::{app::AppConfig, env::EnvConfig},
+    config::{app::AppConfig, env::EnvConfig, registry::RegistryConfig},
 };
 
 #[derive(Debug, Default, Deserialize)]
@@ -58,6 +58,9 @@ pub struct Config {
     pub name: String,
     pub image: String,
 
+    #[serde(default = "Config::default_keep_releases")]
+    pub keep_releases: Option<u8>,
+
     pub elevon: elevon::ElevonConfig,
 
     pub registry: registry::RegistryConfig,
@@ -74,21 +77,46 @@ pub struct Config {
 impl ElevonConfig for Config {}
 
 impl Config {
-    pub async fn run_build(&self, config_path: &str, push: bool) -> Result<()> {
-        crate::image::build_image(&self.image, &self.registry.server, &self.build, config_path)
-            .await?;
-
-        if push {
-            self.run_push().await?;
-        }
-
-        Ok(())
+    pub fn default_keep_releases() -> Option<u8> {
+        Some(5)
     }
 
-    pub async fn run_push(&self) -> Result<()> {
+    pub fn prepare_project_env_vars(
+        &self,
+        registry_config: RegistryConfig,
+    ) -> Result<HashMap<String, String>> {
+        let mut vars = self
+            .env
+            .as_ref()
+            .map_or_else(|| Ok(HashMap::default()), |env| env.resolved_credentials())?;
+
+        vars.extend(registry_config.vars());
+
+        Ok(vars)
+    }
+
+    pub async fn run_build(
+        &self,
+        registry_config: &RegistryConfig,
+        config_path: &str,
+        push: bool,
+    ) -> Result<Option<String>> {
+        let built =
+            crate::image::build_image(registry_config, &self.build, &self.image, config_path)
+                .await?;
+
+        if built && push {
+            let image_digest = self.run_push().await?;
+            return Ok(Some(image_digest));
+        }
+
+        Ok(None)
+    }
+
+    pub async fn run_push(&self) -> Result<String> {
         let registry_credentials = self.registry.resolved_credentials()?;
-        crate::image::push_image(&self.image, registry_credentials).await?;
-        Ok(())
+        let image_digest = crate::image::push_image(&self.image, registry_credentials).await?;
+        Ok(image_digest)
     }
 
     pub fn get_selected_apps(&self, arg_apps: &[String]) -> Result<Vec<(String, AppConfig)>> {
@@ -139,9 +167,26 @@ impl Config {
             .collect()
     }
 
-    pub async fn run_deploy(&self, agent_client: &AgentClient, app_names: &[String]) -> Result<()> {
+    pub async fn run_deploy(
+        &self,
+        agent_client: &AgentClient,
+        app_names: &[String],
+        registry_config: RegistryConfig,
+    ) -> Result<()> {
         let selected = self.get_selected_apps(app_names)?;
-        agent_client.push_deploy(self, selected).await?;
+        agent_client
+            .push_deploy(self, selected, registry_config)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn run_rollback(
+        &self,
+        agent_client: &AgentClient,
+        app_names: &[String],
+    ) -> Result<()> {
+        let selected = self.get_selected_apps(app_names)?;
+        agent_client.push_rollback(self, selected).await?;
         Ok(())
     }
 }

@@ -77,6 +77,7 @@ impl ProxyHttp for Proxy {
             SocketAddr::Inet(addr) => Some(addr.port()),
             _ => None,
         };
+
         if let Some(port) = selected_port {
             let selected = self.state.get_backend_by_port(port);
             if let Some(backend) = selected {
@@ -146,7 +147,14 @@ impl BackgroundService for DrainJanitor {
                 _ = shutdown.changed() => break,
                 _ = tick.tick() => {
                     let grace = Duration::from_secs(30);
-                    for (container_id, _port) in self.state.ready_to_terminate(grace) {
+                    for container_id in self.state.ready_to_terminate(grace) {
+                        // A scenario where this container is a worker, that is working on a task
+                        // that takes 60s to finish, `stop_container` will forcefully kill the container,
+                        // since Docker first sends SIGTERM, wait for ~10 seconds and then if the container,
+                        // doesn't exit automatically Docker sends SIGKILL and forcefully kills the container.
+                        // Meaning the worker might not have finished the task it was working on.
+                        //
+                        // A solution to this would be having a configurable timeout option in `apps.runtime` settings.
                         if let Err(err) = self.state.docker
                             .stop_container(&container_id, None)
                             .await

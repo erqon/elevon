@@ -1,6 +1,8 @@
 name: project-name
 image: project/project-name
 
+keep_releases: 5
+
 elevon:
   dashboard: https://dash.example.com
   project: my-app
