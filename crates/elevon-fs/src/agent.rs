@@ -252,14 +252,27 @@ impl AgentPath {
                 if dev_root().is_some() {
                     base.join("var").join("lib").join("elevon")
                 } else {
-                    // XDG_DATA_HOME logic kept as before
-                    let base = std::env::var_os("XDG_DATA_HOME")
-                        .map(PathBuf::from)
-                        .unwrap_or_else(|| {
-                            let home = std::env::var_os("HOME").expect("HOME not set");
-                            PathBuf::from(home).join(".local/share")
-                        });
-                    base.join("elevon")
+                    // Check XDG_DATA_HOME first if set
+                    if let Some(xdg) = std::env::var_os("XDG_DATA_HOME") {
+                        return Ok(PathBuf::from(xdg).join("elevon"));
+                    }
+
+                    // Determine target home directory
+                    let home = if let Some(sudo_user) = std::env::var_os("SUDO_USER") {
+                        let user_str = sudo_user.to_string_lossy();
+                        if user_str == "root" {
+                            PathBuf::from("/root")
+                        } else {
+                            let base = PathBuf::from("/home");
+                            base.join(user_str.as_ref())
+                        }
+                    } else {
+                        PathBuf::from(
+                            std::env::var_os("HOME").expect("HOME environment variable not set"),
+                        )
+                    };
+
+                    home.join(".local/share/elevon")
                 }
             }
 

@@ -82,7 +82,7 @@ pub async fn build_image(
     skip_all,
     fields(image = %image_name, registry = %creds.server)
 )]
-pub async fn push_image(image_name: &str, creds: RegistryConfig) -> Result<String> {
+pub async fn push_image(image_name: &str, creds: RegistryConfig) -> Result<()> {
     let docker = Docker::connect_with_local_defaults()?;
 
     let image_tag = get_image_tag()?;
@@ -103,14 +103,7 @@ pub async fn push_image(image_name: &str, creds: RegistryConfig) -> Result<Strin
     let stream = docker.push_image(&image_reference, Some(options), Some(credentials));
     drain_progress_stream(stream, ProgressMode::Push, "push").await?;
 
-    let inspect = docker.inspect_image(&image_reference).await?;
-    let image_digest = inspect
-        .repo_digests
-        .and_then(|digests| digests.into_iter().next())
-        .or(inspect.id)
-        .ok_or_else(|| anyhow::anyhow!("no image reference found after push"))?;
-
     print_success(&format!("Pushed {image_reference}"));
 
-    Ok(image_digest)
+    Ok(())
 }

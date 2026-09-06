@@ -64,7 +64,7 @@ pub enum Commands {
     Deploy(AppArgs),
 
     #[command(about = "Rollback applications to previous deployment")]
-    Rollback(RollbackArgs),
+    Rollback(AppArgs),
 }
 
 #[derive(Debug, Args)]
@@ -75,20 +75,6 @@ pub struct BuildArgs {
 
 #[derive(Debug, Args)]
 pub struct AppArgs {
-    #[arg(long = "app", help = "Limit the operation to the specified app(s)")]
-    pub apps: Vec<String>,
-
-    #[arg(
-        short,
-        long,
-        default_value_t = false,
-        help = "Build and push the image before deploying"
-    )]
-    pub build: bool,
-}
-
-#[derive(Debug, Args)]
-pub struct RollbackArgs {
     #[arg(long = "app", help = "Limit the operation to the specified app(s)")]
     pub apps: Vec<String>,
 }

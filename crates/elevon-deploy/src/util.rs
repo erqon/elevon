@@ -4,6 +4,8 @@ use std::process::Command;
 /// Returns an image tag with the following style:
 /// {image_repository}:{git_commit_sha}-{Option<{git diff sha}>}
 pub fn get_image_tag() -> std::io::Result<String> {
+    // TODO: Handle non git directories
+
     let sha_output = Command::new("git")
         .args(["rev-parse", "--short", "HEAD"])
         .output()?;
