@@ -18,17 +18,12 @@ Markers for features before the release
 - [ ] Fix/restrict file permissions, file access, users etc.
 - [ ] Restrict db calls to API only. Move internall calls over UNIX socket instead of TCP (for both the proxy and the cli).
 
-~~ - [ ] Streaming application logs **(M)** ~~
-
-~~ - [ ] Metrics pipeline (CPU, mem, req latency, error rate) **(M)** ~~
-
-~~ - [ ] Running infrastructure Docker services (Postgres, Redis, etc.) **(N)** ~~
-
-~~ - [ ] Deployment history and audit trail ~~
-
-~~ - [ ] Multi-environment support (dev/stage/prod) ~~
-
-~~ - [ ] Hooks system (pre/post deploy scripts) **(N)** ~~
+<s>- [ ] Streaming application logs **(M)**</s>
+<s>- [ ] Metrics pipeline (CPU, mem, req latency, error rate) **(M)**</s>
+<s>- [ ] Running infrastructure Docker services (Postgres, Redis, etc.) **(N)**</s>
+<s>- [ ] Deployment history and audit trail</s>
+<s>- [ ] Multi-environment support (dev/stage/prod)</s>
+<s>- [ ] Hooks system (pre/post deploy scripts) **(N)**</s>
 
 ### Elevon Deploy
 
