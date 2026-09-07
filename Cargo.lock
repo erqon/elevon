@@ -1604,7 +1604,6 @@ dependencies = [
  "anyhow",
  "dotenvy",
  "elevon-contracts",
- "whoami",
 ]
 
 [[package]]

@@ -8,14 +8,6 @@ use std::{
 use anyhow::{Context, Ok, Result};
 use elevon_contracts::deploy::TlsType;
 
-pub fn get_elevon_data_path() -> Result<PathBuf> {
-    let path = AgentPath::Data.ensure()?;
-    if dev_root().is_none() {
-        set_permissions(&path, std::fs::Permissions::from_mode(0o700))?;
-    }
-    Ok(path)
-}
-
 pub fn get_database_path() -> Result<PathBuf> {
     let db_path = AgentPath::Database.ensure()?;
 
@@ -27,14 +19,6 @@ pub fn get_database_path() -> Result<PathBuf> {
         .open(&db_path)?;
 
     Ok(db_path)
-}
-
-pub fn get_env_path() -> Result<PathBuf> {
-    let p = AgentPath::EnvDir.ensure()?;
-    if dev_root().is_none() {
-        set_permissions(&p, std::fs::Permissions::from_mode(0o700))?;
-    }
-    Ok(p)
 }
 
 #[derive(Clone)]
@@ -149,14 +133,18 @@ pub fn get_proxy_systemd_content(exec: &str) -> String {
         "
         [Unit]
         Description=Elevon Agent Proxy
-        After=network.target
+        After=network.target elevon-agent-api.service
         Wants=elevon-agent-api.service
         
         [Service]
-        User=root
+        DynamicUser=yes
         ExecStart={exec} proxy
         Restart=on-failure
-        RuntimeDirectory=elevon-agent
+        
+        AmbientCapabilities=CAP_NET_BIND_SERVICE
+        CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+        StateDirectory=elevon-agent
         
         [Install]
         WantedBy=multi-user.target
@@ -165,20 +153,20 @@ pub fn get_proxy_systemd_content(exec: &str) -> String {
 }
 
 pub fn get_api_systemd_content(exec: &str) -> String {
-    let home = std::env::var("HOME").expect("HOME not set");
-    let user = whoami::username().expect("User not found");
-
     format!(
         "
         [Unit]
-        Description=Elevon Agent HTTP Control API
-        After=network.target
+        Description=Elevon Agent API
+        After=network.target docker.socket
+        Wants=docker.socket
         
         [Service]
-        User={user}
-        Environment=HOME={home}
+        DynamicUser=yes
         ExecStart={exec} api
-        Restart=on-failure
+        StateDirectory=elevon-agent
+
+        SupplementaryGroups=docker
+        ReadWritePaths=/run/docker.sock
         
         [Install]
         WantedBy=multi-user.target
@@ -231,9 +219,9 @@ fn dev_root() -> Option<PathBuf> {
 }
 
 pub enum AgentPath {
-    Data,
+    StateDir,
+    UploadsDir,
     Database,
-    EnvDir,
     AppEnv(String, Option<String>, Option<String>, bool),
     ProjectTlsDir(String),
     Socket,
@@ -248,48 +236,25 @@ impl AgentPath {
         };
 
         let p = match self {
-            AgentPath::Data => {
-                if dev_root().is_some() {
-                    base.join("var").join("lib").join("elevon")
-                } else {
-                    // Check XDG_DATA_HOME first if set
-                    if let Some(xdg) = std::env::var_os("XDG_DATA_HOME") {
-                        return Ok(PathBuf::from(xdg).join("elevon"));
-                    }
+            AgentPath::StateDir => base.join("var").join("lib").join("elevon-agent"),
 
-                    // Determine target home directory
-                    let home = if let Some(sudo_user) = std::env::var_os("SUDO_USER") {
-                        let user_str = sudo_user.to_string_lossy();
-                        if user_str == "root" {
-                            PathBuf::from("/root")
-                        } else {
-                            let base = PathBuf::from("/home");
-                            base.join(user_str.as_ref())
-                        }
-                    } else {
-                        PathBuf::from(
-                            std::env::var_os("HOME").expect("HOME environment variable not set"),
-                        )
-                    };
-
-                    home.join(".local/share/elevon")
-                }
+            AgentPath::UploadsDir => {
+                let dir = AgentPath::StateDir.resolve()?;
+                dir.join("uploads")
             }
 
             AgentPath::Database => {
-                let data = AgentPath::Data.resolve()?;
-                data.join("elevon.db")
+                let dir = AgentPath::StateDir.resolve()?;
+                dir.join("db").join("agent.db")
             }
-
-            AgentPath::EnvDir => base.join("etc").join("elevon").join("env"),
 
             AgentPath::AppEnv(project, app, deployment_id, bypass_default) => {
                 if project == "default" && !*bypass_default && dev_root().is_none() {
                     anyhow::bail!("App can't be named 'default'")
                 }
 
-                let base = AgentPath::EnvDir.resolve()?;
-                let mut path = base.join(project);
+                let dir = AgentPath::UploadsDir.resolve()?;
+                let mut path = dir.join("env").join(project);
 
                 if let Some(app) = app {
                     path = path.join(app);
@@ -304,7 +269,8 @@ impl AgentPath {
             }
 
             AgentPath::ProjectTlsDir(project) => {
-                base.join("etc").join("elevon").join("tls").join(project)
+                let dir = AgentPath::UploadsDir.resolve()?;
+                dir.join("tls").join(project)
             }
 
             AgentPath::Socket => base.join("run").join("elevon-agent.sock"),
@@ -330,39 +296,5 @@ impl AgentPath {
         let p = self.resolve()?;
         create_dir_all(p.clone())?;
         Ok(p)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::path::PathBuf;
-
-    fn resolve_base_path(is_prod: bool) -> PathBuf {
-        match is_prod {
-            true => PathBuf::from("/"),
-            false => PathBuf::from("./devroot"),
-        }
-    }
-
-    fn get_systemd_unit_path(base: PathBuf, name: String) -> PathBuf {
-        base.join("etc").join("systemd").join("system").join(name)
-    }
-
-    #[test]
-    fn test_base_path() {
-        let dev_base = resolve_base_path(false);
-        let prod_base = resolve_base_path(true);
-
-        let dev_systemd_unit_path = get_systemd_unit_path(dev_base, "test".to_string());
-        let prod_systemd_unit_path = get_systemd_unit_path(prod_base, "test".to_string());
-
-        assert_eq!(
-            dev_systemd_unit_path,
-            PathBuf::from("./devroot/etc/systemd/system/test")
-        );
-        assert_eq!(
-            prod_systemd_unit_path,
-            PathBuf::from("/etc/systemd/system/test")
-        );
     }
 }
