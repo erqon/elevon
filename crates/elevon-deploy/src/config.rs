@@ -100,26 +100,26 @@ impl Config {
         registry_config: &RegistryConfig,
         config_path: &str,
         push: bool,
-    ) -> Result<Option<String>> {
+    ) -> Result<()> {
         let built =
             crate::image::build_image(registry_config, &self.build, &self.image, config_path)
                 .await?;
 
         if built && push {
-            let image_digest = self.run_push().await?;
-            return Ok(Some(image_digest));
+            self.run_push().await?;
+            return Ok(());
         }
 
-        Ok(None)
+        Ok(())
     }
 
-    pub async fn run_push(&self) -> Result<String> {
+    pub async fn run_push(&self) -> Result<()> {
         let registry_credentials = self.registry.resolved_credentials()?;
-        let image_digest = crate::image::push_image(&self.image, registry_credentials).await?;
-        Ok(image_digest)
+        crate::image::push_image(&self.image, registry_credentials).await?;
+        Ok(())
     }
 
-    pub fn get_selected_apps(&self, arg_apps: &[String]) -> Result<Vec<(String, AppConfig)>> {
+    fn get_selected_apps(&self, arg_apps: &[String]) -> Result<Vec<(String, AppConfig)>> {
         if arg_apps.is_empty() {
             if !self.apps.is_empty() {
                 return Ok(self
@@ -172,11 +172,16 @@ impl Config {
         agent_client: &AgentClient,
         app_names: &[String],
         registry_config: RegistryConfig,
+        config_path: &str,
     ) -> Result<()> {
         let selected = self.get_selected_apps(app_names)?;
+
+        self.run_build(&registry_config, config_path, true).await?;
+
         agent_client
             .push_deploy(self, selected, registry_config)
             .await?;
+
         Ok(())
     }
 

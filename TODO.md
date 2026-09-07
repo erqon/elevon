@@ -16,7 +16,7 @@ Markers for features before the release
 - [ ] Streaming application logs **(M)**
 - [ ] Metrics pipeline (CPU, mem, req latency, error rate) **(M)**
 - [ ] Running infrastructure Docker services (Postgres, Redis, etc.) **(N)**
-- [ ] Zero-downtime rollback
+- [x] Zero-downtime rollback
 - [ ] Deployment history and audit trail
 - [ ] Multi-environment support (dev/stage/prod)
 - [ ] Hooks system (pre/post deploy scripts) **(N)**
@@ -27,7 +27,7 @@ Markers for features before the release
 - [x] Init command **(M)**
 - [ ] Fix/add install script **(N/P)**
 - [x] App runtime configuration **(M)**
-- [ ] Deploy rollback command **(M)**
+- [x] Deploy rollback command **(M)**
 - [ ] Interactive rollback selector (choose previous release) **(N)**
 - [ ] Release snapshot export/import (images + env + runtime config) **(M)**
 - [ ] Dry-run mode (validate config and rollout plan without deploying) **(M)**

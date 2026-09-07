@@ -37,15 +37,8 @@ pub async fn run_deploy_cli(arg: DeployArgs, command: Commands) -> anyhow::Resul
         }
         Commands::Deploy(args) => {
             let registry_credentials = config.registry.resolved_credentials()?;
-
-            if args.build {
-                config
-                    .run_build(&registry_credentials, &arg.config, true)
-                    .await?;
-            }
-
             config
-                .run_deploy(&agent_client, &args.apps, registry_credentials)
+                .run_deploy(&agent_client, &args.apps, registry_credentials, &arg.config)
                 .await?;
         }
         Commands::Rollback(args) => {

@@ -1,4 +1,4 @@
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, bail};
 use elevon_config::ElevonConfig;
@@ -11,18 +11,64 @@ use crate::{
     env::ElevonEnv,
 };
 
-fn ensure_systemd_writable() -> Result<()> {
-    let dir = "/etc/systemd/system";
-    let metadata =
-        std::fs::metadata(dir).with_context(|| format!("systemd dir not found: {dir}"))?;
+fn check_before_installation() -> Result<()> {
+    let docker_version_output = Command::new("docker")
+        .arg("--version")
+        .output()
+        .context("failed to execute `docker --version`")?;
 
-    if !metadata.is_dir() {
-        bail!("{dir} is not a directory");
+    if !docker_version_output.status.success() {
+        bail!(
+            "`docker --version` failed with {}",
+            docker_version_output.status
+        );
     }
 
-    let probe = std::path::Path::new(dir).join(".elevon-write-test");
-    std::fs::write(&probe, b"").with_context(|| format!("permission denied writing to {dir}"))?;
-    std::fs::remove_file(&probe)?;
+    Ok(())
+}
+
+fn create_elevon_agent_user() -> Result<()> {
+    let user_exists = Command::new("getent")
+        .args(["passwd", "elevon-agent"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .context("failed to execute `getent passwd elevon-agent`")?
+        .success();
+
+    if user_exists {
+        return Ok(());
+    }
+
+    let status = Command::new("useradd")
+        .args([
+            "--system",
+            "--home-dir",
+            "/var/lib/elevon-agent",
+            "--no-create-home",
+            "--shell",
+            "/usr/sbin/nologin",
+            "elevon-agent",
+        ])
+        .status()
+        .context("failed to execute `useradd elevon-agent`")?;
+
+    if !status.success() {
+        bail!("`useradd elevon-agent` failed with {status}");
+    }
+
+    Ok(())
+}
+
+fn ensure_agent_state_ownership() -> Result<()> {
+    let status = Command::new("chown")
+        .args(["-R", "elevon-agent:elevon-agent", "/var/lib/elevon-agent"])
+        .status()
+        .context("failed to assign ownership of /var/lib/elevon-agent")?;
+
+    if !status.success() {
+        bail!("failed to assign ownership of /var/lib/elevon-agent: {status}");
+    }
 
     Ok(())
 }
@@ -39,9 +85,16 @@ fn run_systemctl(args: &[&str]) -> Result<()> {
     Ok(())
 }
 
+// create elevon-agent user
+// initialize config/database/files
+// chown /var/lib/elevon-agent to elevon-agent
+// write units
+// daemon-reload
+// start services
 pub async fn run(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
-    if !cfg!(debug_assertions) {
-        ensure_systemd_writable()?;
+    if !args.no_systemd {
+        check_before_installation()?;
+        create_elevon_agent_user()?;
     }
 
     let config = Config::from_file(cli_args.config).context("failed to load config")?;
@@ -53,6 +106,8 @@ pub async fn run(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
     let mut agent_db = AgentDb::new(None)
         .await
         .context("failed to initialize the agent database")?;
+
+    ensure_agent_state_ownership()?;
 
     let auth_keys = AuthKey::all().exec(&mut agent_db.db).await?;
 
