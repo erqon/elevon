@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use bollard::query_parameters::InspectContainerOptionsBuilder;
 use elevon_contracts::deploy::WebApp;
 use elevon_fs::agent::get_socket_path;
@@ -160,8 +160,14 @@ impl SocketClient {
     }
 
     pub async fn connect(&self) -> Result<UnixStream> {
-        let stream = UnixStream::connect(&self.socket_path).await?;
-        Ok(stream)
+        UnixStream::connect(&self.socket_path)
+            .await
+            .with_context(|| {
+                format!(
+                    "failed to connect to agent socket {}",
+                    self.socket_path.display()
+                )
+            })
     }
 
     pub async fn send(&self, mut stream: UnixStream, event: AgentEvent) -> Result<()> {

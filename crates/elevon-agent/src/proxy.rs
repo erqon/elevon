@@ -14,7 +14,7 @@ use pingora::{
     listeners::tls::TlsSettings,
     protocols::l4::socket::SocketAddr,
     proxy::{ProxyHttp, Session, http_proxy_service},
-    server::{RunArgs, Server, ShutdownWatch},
+    server::{RunArgs, Server, ShutdownWatch, configuration::ServerConf},
     services::background::{BackgroundService, background_service},
     upstreams::peer::HttpPeer,
 };
@@ -181,7 +181,11 @@ impl BackgroundService for DrainJanitor {
 pub fn run_proxy(env: &ElevonEnv) -> anyhow::Result<()> {
     let proxy_state = ProxyState::new(env)?;
 
-    let mut server = Server::new(None).unwrap();
+    let mut config = ServerConf::default();
+    config.grace_period_seconds = Some(30);
+    config.graceful_shutdown_timeout_seconds = Some(5);
+
+    let mut server = Server::new_with_opt_and_conf(None, config);
     server.bootstrap();
 
     let mut lb = http_proxy_service(

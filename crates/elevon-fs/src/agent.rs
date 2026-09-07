@@ -121,7 +121,7 @@ pub fn write_tls_file(content: &[u8], ty: TlsType, options: TlsOptions) -> Resul
 pub fn get_socket_path(delete: bool) -> PathBuf {
     let path = AgentPath::Socket
         .ensure()
-        .unwrap_or_else(|_| PathBuf::from("/run/elevon-agent.sock"));
+        .unwrap_or_else(|_| PathBuf::from("/run/elevon-agent/agent.sock"));
     if delete && path.exists() {
         let _ = std::fs::remove_file(&path);
     }
@@ -137,14 +137,22 @@ pub fn get_proxy_systemd_content(exec: &str) -> String {
         Wants=elevon-agent-api.service
         
         [Service]
-        DynamicUser=yes
+        User=elevon-agent
+        Group=elevon-agent
         ExecStart={exec} proxy
+
+        TimeoutStopSec=40
+        KillSignal=SIGTERM
         Restart=on-failure
         
         AmbientCapabilities=CAP_NET_BIND_SERVICE
         CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 
+        SupplementaryGroups=docker
         StateDirectory=elevon-agent
+        RuntimeDirectory=elevon-agent
+        RuntimeDirectoryMode=0750
+        UMask=0007
         
         [Install]
         WantedBy=multi-user.target
@@ -161,13 +169,15 @@ pub fn get_api_systemd_content(exec: &str) -> String {
         Wants=docker.socket
         
         [Service]
-        DynamicUser=yes
+        User=elevon-agent
+        Group=elevon-agent
+
         ExecStart={exec} api
-        StateDirectory=elevon-agent
 
         SupplementaryGroups=docker
-        ReadWritePaths=/run/docker.sock
-        
+        StateDirectory=elevon-agent
+        UMask=0007
+
         [Install]
         WantedBy=multi-user.target
         "
@@ -273,7 +283,7 @@ impl AgentPath {
                 dir.join("tls").join(project)
             }
 
-            AgentPath::Socket => base.join("run").join("elevon-agent.sock"),
+            AgentPath::Socket => base.join("run").join("elevon-agent").join("agent.sock"),
 
             AgentPath::SystemdUnit(name) => {
                 base.join("etc").join("systemd").join("system").join(name)

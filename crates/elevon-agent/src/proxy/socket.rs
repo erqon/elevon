@@ -1,3 +1,4 @@
+use std::os::unix::fs::PermissionsExt;
 use std::{error::Error, sync::Arc};
 
 use async_trait::async_trait;
@@ -25,6 +26,8 @@ async fn run_socket_listener(state: Arc<ProxyState>) -> Result<(), Box<dyn Error
     let socket = elevon_fs::agent::get_socket_path(true);
 
     let listener = UnixListener::bind(&socket)?;
+    std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o660))?;
+
     tracing::info!(path = %socket.display(), "socket listener ready");
 
     loop {
