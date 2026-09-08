@@ -34,7 +34,7 @@ fn run() -> Result<()> {
             elevon_agent::proxy::run_proxy(&env).context("proxy command failed")?;
         }
         Commands::Key { subcommand } => {
-            run_async(KeyCommands::run(&subcommand)).context("key command failed")?;
+            run_async(KeyCommands::run(subcommand)).context("key command failed")?;
         }
     }
 

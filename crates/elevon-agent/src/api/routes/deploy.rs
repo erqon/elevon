@@ -1,18 +1,16 @@
-use std::sync::Arc;
-
 use axum::{Json, Router, extract::State, routing::post};
 use elevon_contracts::deploy::{AppDeployPayload, AppRollbackPayload, StreamEvent};
 
 use crate::{
     api::{
         db::models::AuthKey,
-        state::AppState,
+        state::SharedApiState,
         stream::{StreamResponse, StreamSender, create_stream_channel, emit, stream_response},
     },
     image::{deploy_apps, rollback_apps},
 };
 
-pub fn router() -> Router<Arc<AppState>> {
+pub fn router() -> Router<SharedApiState> {
     Router::new()
         .route("/", post(deploy))
         .route("/rollback", post(rollback))
@@ -45,7 +43,7 @@ where
 
 async fn deploy(
     _: AuthKey,
-    State(state): State<Arc<AppState>>,
+    State(state): State<SharedApiState>,
     Json(payload): Json<AppDeployPayload>,
 ) -> StreamResponse {
     spawn_streaming_task(move |tx| async move { deploy_apps(&tx, state, payload).await })
@@ -53,7 +51,7 @@ async fn deploy(
 
 async fn rollback(
     _: AuthKey,
-    State(state): State<Arc<AppState>>,
+    State(state): State<SharedApiState>,
     Json(payload): Json<AppRollbackPayload>,
 ) -> StreamResponse {
     spawn_streaming_task(move |tx| async move { rollback_apps(&tx, state, payload).await })

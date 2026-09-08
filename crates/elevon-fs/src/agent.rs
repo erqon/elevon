@@ -1,15 +1,15 @@
 use std::collections::HashMap;
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::OpenOptionsExt;
 use std::{
-    fs::{OpenOptions, create_dir_all, set_permissions},
+    fs::{OpenOptions, create_dir_all},
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Ok, Result};
+use anyhow::{Context, Ok, Result, bail};
 use elevon_contracts::deploy::TlsType;
 
 pub fn get_database_path() -> Result<PathBuf> {
-    let db_path = AgentPath::Database.ensure()?;
+    let db_path = AgentPath::Database.ensure_parent_dir()?;
 
     OpenOptions::new()
         .create(true)
@@ -51,18 +51,22 @@ impl AppEnvOptions {
 
 pub fn get_app_env(options: AppEnvOptions) -> Result<PathBuf> {
     let bypass = options.bypass_default.unwrap_or(false);
+
     if options.project == "default" && !bypass && dev_root().is_none() {
-        anyhow::bail!("App can't be named 'default'");
+        bail!("App can't be named 'default'");
     }
 
-    let path =
-        AgentPath::AppEnv(options.project, options.app, options.deployment_id, bypass).ensure()?;
-    if !path.exists() {
-        std::fs::File::create(&path)?;
-    }
-    if dev_root().is_none() {
-        set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
-    }
+    let path = AgentPath::AppEnv(options.project, options.app, options.deployment_id)
+        .ensure_parent_dir()?;
+
+    let file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .mode(0o600)
+        .open(&path)?;
+
+    drop(file);
 
     Ok(path)
 }
@@ -107,7 +111,8 @@ pub fn get_tls_file(ty: TlsType, options: TlsOptions) -> Result<PathBuf> {
         None => options.project,
     };
 
-    let path = AgentPath::ProjectTlsDir(format!("{file_dir_name}/{}", ty.get_file())).ensure()?;
+    let path = AgentPath::ProjectTlsDir(format!("{file_dir_name}/{}", ty.get_file()))
+        .ensure_parent_dir()?;
 
     Ok(path)
 }
@@ -116,16 +121,6 @@ pub fn write_tls_file(content: &[u8], ty: TlsType, options: TlsOptions) -> Resul
     let path = get_tls_file(ty, options)?;
     std::fs::write(path, content)?;
     Ok(())
-}
-
-pub fn get_socket_path(delete: bool) -> PathBuf {
-    let path = AgentPath::Socket
-        .ensure()
-        .unwrap_or_else(|_| PathBuf::from("/run/elevon-agent/agent.sock"));
-    if delete && path.exists() {
-        let _ = std::fs::remove_file(&path);
-    }
-    path
 }
 
 pub fn get_proxy_systemd_content(exec: &str) -> String {
@@ -150,8 +145,6 @@ pub fn get_proxy_systemd_content(exec: &str) -> String {
 
         SupplementaryGroups=docker
         StateDirectory=elevon-agent
-        RuntimeDirectory=elevon-agent
-        RuntimeDirectoryMode=0750
         UMask=0007
         
         [Install]
@@ -186,14 +179,14 @@ pub fn get_api_systemd_content(exec: &str) -> String {
 
 pub fn install_proxy_unit(exec: &Path) -> Result<()> {
     let unit = get_proxy_systemd_content(&exec.display().to_string());
-    let dest = AgentPath::SystemdUnit("elevon-agent-proxy.service".into()).ensure()?;
+    let dest = AgentPath::SystemdUnit("elevon-agent-proxy.service".into()).ensure_parent_dir()?;
     std::fs::write(dest, unit)?;
     Ok(())
 }
 
 pub fn install_api_unit(exec: &Path) -> Result<()> {
     let unit = get_api_systemd_content(&exec.display().to_string());
-    let dest = AgentPath::SystemdUnit("elevon-agent-api.service".into()).ensure()?;
+    let dest = AgentPath::SystemdUnit("elevon-agent-api.service".into()).ensure_parent_dir()?;
     std::fs::write(dest, unit)?;
     Ok(())
 }
@@ -231,39 +224,39 @@ fn dev_root() -> Option<PathBuf> {
 pub enum AgentPath {
     StateDir,
     UploadsDir,
+    SocketDir,
     Database,
-    AppEnv(String, Option<String>, Option<String>, bool),
+    AppEnv(String, Option<String>, Option<String>),
     ProjectTlsDir(String),
-    Socket,
+    ProxySocket,
+    ApiSocket,
     SystemdUnit(String),
 }
 
 impl AgentPath {
-    pub fn resolve(&self) -> Result<PathBuf> {
+    pub fn resolve(&self) -> PathBuf {
         let base = match dev_root() {
             Some(root) => root,
             None => PathBuf::from("/"),
         };
 
-        let p = match self {
+        match self {
             AgentPath::StateDir => base.join("var").join("lib").join("elevon-agent"),
 
             AgentPath::UploadsDir => {
-                let dir = AgentPath::StateDir.resolve()?;
+                let dir = AgentPath::StateDir.resolve();
                 dir.join("uploads")
             }
 
+            AgentPath::SocketDir => base.join("run").join("elevon-agent"),
+
             AgentPath::Database => {
-                let dir = AgentPath::StateDir.resolve()?;
+                let dir = AgentPath::StateDir.resolve();
                 dir.join("db").join("agent.db")
             }
 
-            AgentPath::AppEnv(project, app, deployment_id, bypass_default) => {
-                if project == "default" && !*bypass_default && dev_root().is_none() {
-                    anyhow::bail!("App can't be named 'default'")
-                }
-
-                let dir = AgentPath::UploadsDir.resolve()?;
+            AgentPath::AppEnv(project, app, deployment_id) => {
+                let dir = AgentPath::UploadsDir.resolve();
                 let mut path = dir.join("env").join(project);
 
                 if let Some(app) = app {
@@ -279,32 +272,39 @@ impl AgentPath {
             }
 
             AgentPath::ProjectTlsDir(project) => {
-                let dir = AgentPath::UploadsDir.resolve()?;
+                let dir = AgentPath::UploadsDir.resolve();
                 dir.join("tls").join(project)
             }
 
-            AgentPath::Socket => base.join("run").join("elevon-agent").join("agent.sock"),
+            AgentPath::ProxySocket => {
+                let dir = AgentPath::SocketDir.resolve();
+                dir.join("proxy.sock")
+            }
+
+            AgentPath::ApiSocket => {
+                let dir = AgentPath::SocketDir.resolve();
+                dir.join("agent.sock")
+            }
 
             AgentPath::SystemdUnit(name) => {
                 base.join("etc").join("systemd").join("system").join(name)
             }
-        };
-
-        Ok(p)
-    }
-
-    /// Ensure parent dirs exist.
-    pub fn ensure(&self) -> Result<PathBuf> {
-        let p = self.resolve()?;
-        if let Some(parent) = p.parent() {
-            create_dir_all(parent)?;
         }
-        Ok(p)
     }
 
     pub fn ensure_dir(&self) -> Result<PathBuf> {
-        let p = self.resolve()?;
-        create_dir_all(p.clone())?;
-        Ok(p)
+        let path = self.resolve();
+        create_dir_all(&path)?;
+        Ok(path)
+    }
+
+    pub fn ensure_parent_dir(&self) -> Result<PathBuf> {
+        let path = self.resolve();
+
+        if let Some(parent) = path.parent() {
+            create_dir_all(parent)?;
+        }
+
+        Ok(path)
     }
 }

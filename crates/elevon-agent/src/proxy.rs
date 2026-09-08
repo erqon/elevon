@@ -5,9 +5,10 @@ pub mod types;
 
 use std::{sync::Arc, time::Duration};
 
+use anyhow::Context;
 use async_trait::async_trait;
 use elevon_http::runtime::run_async;
-use futures::stream::{self, StreamExt};
+use futures_util::{StreamExt, stream};
 use pingora::{
     Error, ErrorType, Result,
     http::ResponseHeader,
@@ -179,11 +180,13 @@ impl BackgroundService for DrainJanitor {
 }
 
 pub fn run_proxy(env: &ElevonEnv) -> anyhow::Result<()> {
-    let proxy_state = ProxyState::new(env)?;
+    let proxy_state = ProxyState::new(env).context("failed to create proxy state")?;
 
-    let mut config = ServerConf::default();
-    config.grace_period_seconds = Some(30);
-    config.graceful_shutdown_timeout_seconds = Some(5);
+    let config = ServerConf {
+        grace_period_seconds: Some(30),
+        graceful_shutdown_timeout_seconds: Some(5),
+        ..Default::default()
+    };
 
     let mut server = Server::new_with_opt_and_conf(None, config);
     server.bootstrap();
@@ -232,7 +235,8 @@ pub fn run_proxy(env: &ElevonEnv) -> anyhow::Result<()> {
     std::thread::spawn(move || {
         run_async(async move {
             if let Err(err) = cloned_state.load_conainters().await {
-                tracing::warn!("initial container load failed: {err}");
+                tracing::error!(%err, "initial container load failed");
+                std::process::exit(1);
             }
         })
     });

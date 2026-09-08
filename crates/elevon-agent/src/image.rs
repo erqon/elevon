@@ -1,8 +1,4 @@
-use std::{
-    collections::HashSet,
-    net::TcpListener,
-    sync::{Arc, LazyLock},
-};
+use std::{collections::HashSet, net::TcpListener, sync::LazyLock};
 
 use anyhow::Result;
 use bollard::{
@@ -19,7 +15,7 @@ use elevon_contracts::deploy::{
 use elevon_fs::agent::{
     AppEnvOptions, TlsOptions, add_app_env, load_app_env, load_app_string_env, write_tls_file,
 };
-use futures::TryStreamExt;
+use futures_util::TryStreamExt;
 use tokio::sync::RwLock;
 
 use crate::{
@@ -27,7 +23,7 @@ use crate::{
         db::models::{
             App, Deployment, DeploymentRuntimeOption, DeploymentRuntimeOptions, DeploymentStatus,
         },
-        state::AppState,
+        state::SharedApiState,
         stream::{StreamSender, emit},
     },
     proxy::types::{AgentEvent, DeployAppData, DeployAppState},
@@ -35,6 +31,40 @@ use crate::{
 
 static ALLOCATED_PORTS: LazyLock<RwLock<HashSet<u16>>> =
     LazyLock::new(|| RwLock::new(HashSet::new()));
+
+fn find_free_port() -> Option<u16> {
+    for port in 3334..=9998 {
+        match TcpListener::bind(("0.0.0.0", port)) {
+            Ok(_) => return Some(port),
+            Err(_) => continue,
+        }
+    }
+    None
+}
+
+async fn get_free_port() -> Result<u16> {
+    let mut ports = ALLOCATED_PORTS.write().await;
+    let port = find_free_port().ok_or_else(|| anyhow::anyhow!("No free port found"))?;
+    ports.insert(port);
+    Ok(port)
+}
+
+async fn clear_port(port: &u16) {
+    let mut ports = ALLOCATED_PORTS.write().await;
+    ports.remove(port);
+}
+
+fn prepare_env_variables(app_config: &AppPayload, deployment_id: &str) -> Result<()> {
+    let env_options = AppEnvOptions::app(&app_config.project, &app_config.name, deployment_id);
+
+    if let Some(vars) = &app_config.vars {
+        for (key, value) in vars {
+            add_app_env(key.clone(), value.clone(), env_options.clone())?;
+        }
+    }
+
+    Ok(())
+}
 
 struct PullImageOptions<'cfg, 'dep> {
     pub project: &'cfg str,
@@ -157,40 +187,6 @@ async fn run_container(
     Ok(container.id)
 }
 
-fn find_free_port() -> Option<u16> {
-    for port in 3334..=9998 {
-        match TcpListener::bind(("0.0.0.0", port)) {
-            Ok(_) => return Some(port),
-            Err(_) => continue,
-        }
-    }
-    None
-}
-
-async fn get_free_port() -> Result<u16> {
-    let mut ports = ALLOCATED_PORTS.write().await;
-    let port = find_free_port().ok_or_else(|| anyhow::anyhow!("No free port found"))?;
-    ports.insert(port);
-    Ok(port)
-}
-
-async fn clear_port(port: &u16) {
-    let mut ports = ALLOCATED_PORTS.write().await;
-    ports.remove(port);
-}
-
-fn prepare_env_variables(app_config: &AppPayload, deployment_id: &str) -> Result<()> {
-    let env_options = AppEnvOptions::app(&app_config.project, &app_config.name, deployment_id);
-
-    if let Some(vars) = &app_config.vars {
-        for (key, value) in vars {
-            add_app_env(key.clone(), value.clone(), env_options.clone())?;
-        }
-    }
-
-    Ok(())
-}
-
 struct _DeployAppOptions<'cfg, 'tx> {
     db_tx: &'tx mut toasty::Transaction<'cfg>,
     port: u16,
@@ -279,7 +275,7 @@ async fn _deploy_app(
 }
 
 async fn drain_app(
-    state: &AppState,
+    state: &SharedApiState,
     db: &mut toasty::Db,
     mut deployment: Deployment,
     app_data: DeployAppData,
@@ -290,10 +286,9 @@ async fn drain_app(
     .exec(db)
     .await?;
 
-    let drain_stream = state.socket_client.connect().await?;
     state
-        .socket_client
-        .send(drain_stream, AgentEvent::DrainApp(app_data))
+        .proxy_socket
+        .send(AgentEvent::DrainApp(app_data))
         .await?;
 
     Ok(())
@@ -351,13 +346,13 @@ async fn prune_old_releases(
 
 async fn deploy_app(
     tx: &StreamSender,
-    state: Arc<AppState>,
+    state: SharedApiState,
     app_config: AppPayload,
     // this present = rollback
     deployment_to_run: Option<Deployment>,
     deployment_to_drain: Option<Deployment>,
 ) -> Result<()> {
-    let mut db = state.agent_db.db.clone();
+    let mut db = state.db.get();
     let mut cloned_db = db.clone();
 
     let is_rollback = deployment_to_run.is_some();
@@ -452,10 +447,12 @@ async fn deploy_app(
         )
         .await;
 
-        let upsert_stream = state.socket_client.connect().await?;
+        // TODO: In case of any failure in here the container is kept running,
+        // need to be deleted.
+
         state
-            .socket_client
-            .send(upsert_stream, AgentEvent::UpsertRoute(app_data.clone()))
+            .proxy_socket
+            .send(AgentEvent::UpsertRoute(app_data.clone()))
             .await?;
     }
 
@@ -516,7 +513,7 @@ async fn deploy_app(
 
 pub async fn deploy_apps(
     tx: &StreamSender,
-    state: Arc<AppState>,
+    state: SharedApiState,
     payload: AppDeployPayload,
 ) -> Result<()> {
     for app in payload.apps {
@@ -528,10 +525,10 @@ pub async fn deploy_apps(
 
 pub async fn rollback_apps(
     tx: &StreamSender,
-    state: Arc<AppState>,
+    state: SharedApiState,
     payload: AppRollbackPayload,
 ) -> Result<()> {
-    let mut db = state.agent_db.db.clone();
+    let mut db = state.db.get();
 
     for app in payload.apps {
         let db_app = App::get_by_project_and_name(&mut db, &app.project, &app.name).await?;

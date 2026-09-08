@@ -73,6 +73,24 @@ fn ensure_agent_state_ownership() -> Result<()> {
     Ok(())
 }
 
+fn run_tmpfiles() -> Result<()> {
+    std::fs::write(
+        "/etc/tmpfiles.d/elevon-agent.conf",
+        "d /run/elevon-agent 0750 elevon-agent elevon-agent -\n",
+    )?;
+
+    let status = Command::new("systemd-tmpfiles")
+        .args(["--create", "/etc/tmpfiles.d/elevon-agent.conf"])
+        .status()
+        .context("failed to create agent runtime directory")?;
+
+    if !status.success() {
+        bail!("systemd-tmpfiles failed with {status}");
+    }
+
+    Ok(())
+}
+
 fn run_systemctl(args: &[&str]) -> Result<()> {
     let status = Command::new("systemctl")
         .args(args)
@@ -103,21 +121,22 @@ pub async fn run(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
     ElevonEnv::new(config.agent.domain, config.turso_remote_url)
         .context("failed to init agent env")?;
 
-    let mut agent_db = AgentDb::new(None)
+    let mut db = AgentDb::new(None)
         .await
-        .context("failed to initialize the agent database")?;
+        .context("failed to initialize the agent database")?
+        .get();
 
-    ensure_agent_state_ownership()?;
-
-    let auth_keys = AuthKey::all().exec(&mut agent_db.db).await?;
+    let auth_keys = AuthKey::all().exec(&mut db).await?;
 
     if !auth_keys.is_empty() {
         tracing::info!("Auth key already exist, run 'key list' to view the keys");
     } else {
-        crate::cli::key::create("Default").await?;
+        AuthKey::create_key(&mut db, "Default").await?;
     }
 
     if !args.no_systemd {
+        ensure_agent_state_ownership()?;
+
         let agent = std::env::current_exe().context("failed to resolve current executable")?;
 
         tracing::info!("Creating systemd units in /etc/systemd/system/ ...");
@@ -126,6 +145,8 @@ pub async fn run(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
         install_proxy_unit(&agent).context("failed to write elevon-agent-proxy.service")?;
 
         tracing::info!("Systemd units written");
+
+        run_tmpfiles()?;
 
         run_systemctl(&["daemon-reload"])?;
 
