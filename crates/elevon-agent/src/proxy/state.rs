@@ -73,8 +73,8 @@ impl ProxyState {
                 .await;
 
             match response {
-                Ok(Some(res)) => match res {
-                    ApiSocketEventResponse::RunningContainers(containers) => {
+                Ok(Some(res)) => {
+                    if let ApiSocketEventResponse::RunningContainers(containers) = res {
                         if containers.is_empty() {
                             return Ok(());
                         }
@@ -90,8 +90,7 @@ impl ProxyState {
 
                         return Ok(());
                     }
-                    _ => {}
-                },
+                }
                 Ok(None) => {}
                 Err(err) => {
                     tracing::warn!(%err, "proxy containers request error, retrying");

@@ -1529,7 +1529,6 @@ dependencies = [
  "futures-util",
  "jiff",
  "pingora",
- "reqwest",
  "serde",
  "serde_json",
  "tabled",

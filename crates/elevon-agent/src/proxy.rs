@@ -182,9 +182,11 @@ impl BackgroundService for DrainJanitor {
 pub fn run_proxy(env: &ElevonEnv) -> anyhow::Result<()> {
     let proxy_state = ProxyState::new(env).context("failed to create proxy state")?;
 
-    let mut config = ServerConf::default();
-    config.grace_period_seconds = Some(30);
-    config.graceful_shutdown_timeout_seconds = Some(5);
+    let config = ServerConf {
+        grace_period_seconds: Some(30),
+        graceful_shutdown_timeout_seconds: Some(5),
+        ..Default::default()
+    };
 
     let mut server = Server::new_with_opt_and_conf(None, config);
     server.bootstrap();

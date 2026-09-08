@@ -37,11 +37,8 @@ impl KeyCommands {
                     bail!("failed to create auth key for {}", name);
                 };
 
-                match response {
-                    ApiSocketEventResponse::KeyCreate(key) => {
-                        tracing::info!("save your API Key: {}", key);
-                    }
-                    _ => {}
+                if let ApiSocketEventResponse::KeyCreate(key) = response {
+                    tracing::info!("save your API Key: {}", key);
                 }
             }
             KeyCommands::List => {
