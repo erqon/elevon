@@ -18,6 +18,7 @@ use crate::{
         tls::DynamicCert,
         types::{BackendRuntime, DeployAppData, DeployAppState, RouteBackendRuntime},
     },
+    socket::{Socket, SocketType},
 };
 
 const API_BASE_URL: &str = "http://localhost:3000";
@@ -34,6 +35,7 @@ pub struct ProxyState {
     pub lbs: ArcSwap<HashMap<String, Arc<LoadBalancer<RoundRobin>>>>,
     pub runtime: DashMap<String, Arc<BackendRuntime>>,
     pub dynamic_cert: DynamicCert,
+    pub socket: Arc<Socket>,
     api_client: reqwest::Client,
 }
 
@@ -55,6 +57,7 @@ impl ProxyState {
             lbs: ArcSwap::from_pointee(HashMap::new()),
             runtime: DashMap::new(),
             dynamic_cert,
+            socket: Arc::new(Socket::new(SocketType::Proxy)),
             api_client: reqwest::Client::new(),
         }))
     }

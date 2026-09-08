@@ -19,7 +19,7 @@ use elevon_contracts::deploy::{
 use elevon_fs::agent::{
     AppEnvOptions, TlsOptions, add_app_env, load_app_env, load_app_string_env, write_tls_file,
 };
-use futures::TryStreamExt;
+use futures_util::TryStreamExt;
 use tokio::sync::RwLock;
 
 use crate::{
@@ -290,10 +290,9 @@ async fn drain_app(
     .exec(db)
     .await?;
 
-    let drain_stream = state.socket_client.connect().await?;
     state
-        .socket_client
-        .send(drain_stream, AgentEvent::DrainApp(app_data))
+        .proxy_socket
+        .send(AgentEvent::DrainApp(app_data))
         .await?;
 
     Ok(())
@@ -452,10 +451,9 @@ async fn deploy_app(
         )
         .await;
 
-        let upsert_stream = state.socket_client.connect().await?;
         state
-            .socket_client
-            .send(upsert_stream, AgentEvent::UpsertRoute(app_data.clone()))
+            .proxy_socket
+            .send(AgentEvent::UpsertRoute(app_data.clone()))
             .await?;
     }
 
