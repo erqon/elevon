@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 use bollard::query_parameters::InspectContainerOptionsBuilder;
 use elevon_contracts::deploy::WebApp;
@@ -10,29 +12,31 @@ use crate::env::ElevonEnv;
 use crate::proxy::types::{DeployAppData, DeployAppState};
 use crate::socket::{Socket, SocketType};
 
-pub struct AppState {
+pub type SharedApiState = Arc<ApiState>;
+
+pub struct ApiState {
     pub agent_db: AgentDb,
     pub docker: bollard::Docker,
     pub env: RwLock<ElevonEnv>,
-    pub proxy_socket: Socket,
-    pub agent_socket: Socket,
+    pub proxy_socket: Arc<Socket>,
+    pub api_socket: Arc<Socket>,
 }
 
-impl AppState {
+impl ApiState {
     pub async fn new(env: &ElevonEnv) -> Result<Self> {
         let agent_db = AgentDb::new(env.turso_remote_url.as_deref()).await?;
         let docker = bollard::Docker::connect_with_defaults()?;
         let env = RwLock::new(env.clone());
 
-        let proxy_socket = Socket::new(SocketType::Proxy)?;
-        let agent_socket = Socket::new(SocketType::Api)?;
+        let proxy_socket = Arc::new(Socket::new(SocketType::Proxy)?);
+        let api_socket = Arc::new(Socket::new(SocketType::Api)?);
 
         let state = Self {
             agent_db,
             docker,
             env,
             proxy_socket,
-            agent_socket,
+            api_socket,
         };
 
         state.check_running_containers().await?;
@@ -66,6 +70,7 @@ impl AppState {
         Ok(())
     }
 
+    // TODO: Fix it so it also returns non web app containers and puts them into `runtime`
     pub async fn get_running_route_containers(&self) -> Result<Vec<DeployAppData>> {
         let mut db = self.agent_db.db.clone();
 

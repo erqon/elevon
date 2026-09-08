@@ -11,7 +11,7 @@ async fn run_socket_listener(state: Arc<ProxyState>) -> Result<()> {
     tracing::info!("starting proxy socket listener");
 
     state
-        .socket
+        .proxy_socket
         .listener(state.clone(), |cloned_state, msg: AgentEvent| async move {
             match msg {
                 AgentEvent::UpsertRoute(route) => {
@@ -22,7 +22,7 @@ async fn run_socket_listener(state: Arc<ProxyState>) -> Result<()> {
                 }
             }
 
-            Ok(())
+            Ok(Option::<()>::None)
         })
         .await
         .context("proxy socket listener failed")?;

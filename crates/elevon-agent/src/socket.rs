@@ -7,7 +7,11 @@ use futures_util::{Future, SinkExt, StreamExt};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use tokio::net::{UnixListener, UnixStream};
-use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
+use tokio::task::JoinSet;
+use tokio_util::codec::{Framed, FramedWrite, LengthDelimitedCodec};
+
+use crate::api::state::SharedApiState;
+use crate::api::types::{ApiSocketEvent, ApiSocketEventResponse};
 
 pub enum SocketType {
     Proxy,
@@ -41,12 +45,33 @@ impl Socket {
         Ok(())
     }
 
-    pub async fn listener<M, S, F, Fut>(&self, state: S, action: F) -> Result<()>
+    pub async fn send_and_receive<M, R>(&self, msg: M) -> Result<Option<R>>
+    where
+        M: Serialize + Send + 'static,
+        R: DeserializeOwned,
+    {
+        let stream = UnixStream::connect(&self.path).await?;
+        let mut framed = Framed::new(stream, LengthDelimitedCodec::new());
+
+        let payload_bytes = serde_json::to_vec(&msg)?;
+        framed.send(payload_bytes.into()).await?;
+
+        match framed.next().await {
+            Some(Ok(frame)) => Ok(Some(serde_json::from_slice(&frame)?)),
+            Some(Err(err)) => Err(err.into()),
+            None => Ok(None),
+        }
+    }
+
+    pub async fn listener<M, R, S, F, Fut>(&self, state: S, action: F) -> Result<()>
     where
         M: DeserializeOwned + Send + 'static,
+        R: Serialize + Send + 'static,
         S: Clone + Send + Sync + 'static,
         F: Fn(S, M) -> Fut + Send + Sync + 'static,
-        Fut: Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + 'static,
+        Fut: Future<Output = Result<Option<R>, Box<dyn std::error::Error + Send + Sync>>>
+            + Send
+            + 'static,
     {
         match std::fs::remove_file(&self.path) {
             Ok(()) => {}
@@ -69,7 +94,8 @@ impl Socket {
                     let state = state.clone();
 
                     tokio::spawn(async move {
-                        let mut reader = FramedRead::new(stream, LengthDelimitedCodec::new());
+                        let (mut writer, mut reader) =
+                            Framed::new(stream, LengthDelimitedCodec::new()).split();
 
                         while let Some(result) = reader.next().await {
                             match result {
@@ -82,8 +108,24 @@ impl Socket {
                                         }
                                     };
 
-                                    if let Err(err) = action(state.clone(), message).await {
-                                        tracing::error!(%err, "Action execution failed");
+                                    match action(state.clone(), message).await {
+                                        Ok(Some(res)) => {
+                                            let payload = match serde_json::to_vec(&res) {
+                                                Ok(p) => p,
+                                                Err(err) => {
+                                                    tracing::error!(%err, "invalid response json");
+                                                    continue;
+                                                }
+                                            };
+                                            if let Err(err) = writer.send(payload.into()).await {
+                                                tracing::error!(%err, "failed to send response");
+                                                break;
+                                            }
+                                        }
+                                        Ok(_) => {}
+                                        Err(err) => {
+                                            tracing::error!(%err, "Action execution failed")
+                                        }
                                     }
                                 }
                                 Err(e) => {
@@ -100,5 +142,33 @@ impl Socket {
                 }
             }
         }
+    }
+
+    pub fn create_api_listener_handle(
+        set: &mut JoinSet<()>,
+        socket: Arc<Socket>,
+        state: SharedApiState,
+    ) {
+        set.spawn(async move {
+            match socket
+                .listener(state, |state, msg: ApiSocketEvent| async move {
+                    let response = match msg {
+                        ApiSocketEvent::RunningContainers => {
+                            ApiSocketEventResponse::RunningContainers(
+                                state.get_running_route_containers().await?,
+                            )
+                        }
+                    };
+
+                    Ok(Some(response))
+                })
+                .await
+            {
+                Ok(()) => {}
+                Err(err) => {
+                    tracing::error!(%err, "proxy socket listener failed");
+                }
+            }
+        });
     }
 }

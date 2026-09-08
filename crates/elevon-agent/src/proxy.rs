@@ -233,7 +233,8 @@ pub fn run_proxy(env: &ElevonEnv) -> anyhow::Result<()> {
     std::thread::spawn(move || {
         run_async(async move {
             if let Err(err) = cloned_state.load_conainters().await {
-                tracing::warn!("initial container load failed: {err}");
+                tracing::error!(%err, "initial container load failed");
+                std::process::exit(1);
             }
         })
     });

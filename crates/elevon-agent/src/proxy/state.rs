@@ -13,6 +13,7 @@ use dashmap::DashMap;
 use pingora::lb::{LoadBalancer, health_check::TcpHealthCheck, selection::RoundRobin};
 
 use crate::{
+    api::types::{ApiSocketEvent, ApiSocketEventResponse},
     env::ElevonEnv,
     proxy::{
         tls::DynamicCert,
@@ -20,8 +21,6 @@ use crate::{
     },
     socket::{Socket, SocketType},
 };
-
-const API_BASE_URL: &str = "http://localhost:3000";
 
 pub struct AgentState {
     pub domain: String,
@@ -35,8 +34,8 @@ pub struct ProxyState {
     pub lbs: ArcSwap<HashMap<String, Arc<LoadBalancer<RoundRobin>>>>,
     pub runtime: DashMap<String, Arc<BackendRuntime>>,
     pub dynamic_cert: DynamicCert,
-    pub socket: Arc<Socket>,
-    api_client: reqwest::Client,
+    pub proxy_socket: Arc<Socket>,
+    pub api_socket: Arc<Socket>,
 }
 
 impl ProxyState {
@@ -45,10 +44,14 @@ impl ProxyState {
 
         dynamic_cert.setup_agent_certs(&env.agent_domain)?;
 
+        // TODO: Make the port dynamic with the 3333 as default
         let agent_state = AgentState {
             domain: env.agent_domain.clone(),
             port: 3000,
         };
+
+        let proxy_socket = Socket::new(SocketType::Proxy)?;
+        let api_socket = Socket::new(SocketType::Api)?;
 
         Ok(Arc::new(ProxyState {
             agent: agent_state,
@@ -57,9 +60,47 @@ impl ProxyState {
             lbs: ArcSwap::from_pointee(HashMap::new()),
             runtime: DashMap::new(),
             dynamic_cert,
-            socket: Arc::new(Socket::new(SocketType::Proxy)?),
-            api_client: reqwest::Client::new(),
+            proxy_socket: Arc::new(proxy_socket),
+            api_socket: Arc::new(api_socket),
         }))
+    }
+
+    pub async fn load_conainters(&self) -> Result<()> {
+        for _ in 0..20 {
+            let response: Result<Option<ApiSocketEventResponse>> = self
+                .api_socket
+                .send_and_receive(ApiSocketEvent::RunningContainers)
+                .await;
+
+            match response {
+                Ok(Some(res)) => match res {
+                    ApiSocketEventResponse::RunningContainers(containers) => {
+                        if containers.is_empty() {
+                            return Ok(());
+                        }
+
+                        tracing::info!(
+                            "Found {} running containers, upserting them...",
+                            containers.len()
+                        );
+
+                        for container in containers {
+                            self.upsert_route(container);
+                        }
+
+                        return Ok(());
+                    }
+                },
+                Ok(None) => {}
+                Err(err) => {
+                    tracing::warn!(%err, "proxy containers request error, retrying");
+                }
+            }
+
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        }
+
+        anyhow::bail!("failed to load initial containers from API");
     }
 
     pub fn upsert_route(&self, route: DeployAppData) {
@@ -313,47 +354,5 @@ impl ProxyState {
                 self.rebuild_load_balancer(domain);
             }
         }
-    }
-
-    pub async fn load_conainters(&self) -> Result<()> {
-        for _ in 0..20 {
-            let response = self
-                .api_client
-                .get(format!("{API_BASE_URL}/proxy/containers"))
-                .send()
-                .await;
-
-            match response {
-                Ok(resp) if resp.status().is_success() => {
-                    let containers: Vec<DeployAppData> = resp.json().await?;
-                    if containers.is_empty() {
-                        return Ok(());
-                    }
-
-                    tracing::info!(
-                        "Found {} running containers, upserting them...",
-                        containers.len()
-                    );
-
-                    for container in containers {
-                        self.upsert_route(container);
-                    }
-
-                    return Ok(());
-                }
-                Ok(resp) => {
-                    let status = resp.status();
-                    let body = resp.text().await.unwrap_or_default();
-                    tracing::warn!(status = %status, body, "proxy containers request failed, retrying");
-                }
-                Err(err) => {
-                    tracing::warn!(%err, "proxy containers request error, retrying");
-                }
-            }
-
-            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-        }
-
-        anyhow::bail!("failed to load initial containers from API");
     }
 }

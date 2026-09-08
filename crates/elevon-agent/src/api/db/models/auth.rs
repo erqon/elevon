@@ -1,9 +1,7 @@
-use std::sync::Arc;
-
 use axum::extract::FromRequestParts;
 use elevon_http::{auth::get_auth_token, error::AppError, token::hash};
 
-use crate::api::state::AppState;
+use crate::api::state::SharedApiState;
 
 #[derive(Debug, toasty::Model)]
 pub struct AuthKey {
@@ -42,12 +40,12 @@ impl std::fmt::Display for AuthKey {
     }
 }
 
-impl FromRequestParts<Arc<AppState>> for AuthKey {
+impl FromRequestParts<SharedApiState> for AuthKey {
     type Rejection = AppError;
 
     async fn from_request_parts(
         parts: &mut axum::http::request::Parts,
-        state: &Arc<AppState>,
+        state: &SharedApiState,
     ) -> Result<Self, Self::Rejection> {
         let token = get_auth_token(&parts.headers)?;
 

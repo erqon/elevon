@@ -1,8 +1,4 @@
-use std::{
-    collections::HashSet,
-    net::TcpListener,
-    sync::{Arc, LazyLock},
-};
+use std::{collections::HashSet, net::TcpListener, sync::LazyLock};
 
 use anyhow::Result;
 use bollard::{
@@ -27,7 +23,7 @@ use crate::{
         db::models::{
             App, Deployment, DeploymentRuntimeOption, DeploymentRuntimeOptions, DeploymentStatus,
         },
-        state::AppState,
+        state::SharedApiState,
         stream::{StreamSender, emit},
     },
     proxy::types::{AgentEvent, DeployAppData, DeployAppState},
@@ -279,7 +275,7 @@ async fn _deploy_app(
 }
 
 async fn drain_app(
-    state: &AppState,
+    state: &SharedApiState,
     db: &mut toasty::Db,
     mut deployment: Deployment,
     app_data: DeployAppData,
@@ -350,7 +346,7 @@ async fn prune_old_releases(
 
 async fn deploy_app(
     tx: &StreamSender,
-    state: Arc<AppState>,
+    state: SharedApiState,
     app_config: AppPayload,
     // this present = rollback
     deployment_to_run: Option<Deployment>,
@@ -517,7 +513,7 @@ async fn deploy_app(
 
 pub async fn deploy_apps(
     tx: &StreamSender,
-    state: Arc<AppState>,
+    state: SharedApiState,
     payload: AppDeployPayload,
 ) -> Result<()> {
     for app in payload.apps {
@@ -529,7 +525,7 @@ pub async fn deploy_apps(
 
 pub async fn rollback_apps(
     tx: &StreamSender,
-    state: Arc<AppState>,
+    state: SharedApiState,
     payload: AppRollbackPayload,
 ) -> Result<()> {
     let mut db = state.agent_db.db.clone();
