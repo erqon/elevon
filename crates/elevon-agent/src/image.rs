@@ -32,6 +32,40 @@ use crate::{
 static ALLOCATED_PORTS: LazyLock<RwLock<HashSet<u16>>> =
     LazyLock::new(|| RwLock::new(HashSet::new()));
 
+fn find_free_port() -> Option<u16> {
+    for port in 3334..=9998 {
+        match TcpListener::bind(("0.0.0.0", port)) {
+            Ok(_) => return Some(port),
+            Err(_) => continue,
+        }
+    }
+    None
+}
+
+async fn get_free_port() -> Result<u16> {
+    let mut ports = ALLOCATED_PORTS.write().await;
+    let port = find_free_port().ok_or_else(|| anyhow::anyhow!("No free port found"))?;
+    ports.insert(port);
+    Ok(port)
+}
+
+async fn clear_port(port: &u16) {
+    let mut ports = ALLOCATED_PORTS.write().await;
+    ports.remove(port);
+}
+
+fn prepare_env_variables(app_config: &AppPayload, deployment_id: &str) -> Result<()> {
+    let env_options = AppEnvOptions::app(&app_config.project, &app_config.name, deployment_id);
+
+    if let Some(vars) = &app_config.vars {
+        for (key, value) in vars {
+            add_app_env(key.clone(), value.clone(), env_options.clone())?;
+        }
+    }
+
+    Ok(())
+}
+
 struct PullImageOptions<'cfg, 'dep> {
     pub project: &'cfg str,
     pub name: &'cfg str,
@@ -151,40 +185,6 @@ async fn run_container(
     docker.start_container(&container.id, None).await?;
 
     Ok(container.id)
-}
-
-fn find_free_port() -> Option<u16> {
-    for port in 3334..=9998 {
-        match TcpListener::bind(("0.0.0.0", port)) {
-            Ok(_) => return Some(port),
-            Err(_) => continue,
-        }
-    }
-    None
-}
-
-async fn get_free_port() -> Result<u16> {
-    let mut ports = ALLOCATED_PORTS.write().await;
-    let port = find_free_port().ok_or_else(|| anyhow::anyhow!("No free port found"))?;
-    ports.insert(port);
-    Ok(port)
-}
-
-async fn clear_port(port: &u16) {
-    let mut ports = ALLOCATED_PORTS.write().await;
-    ports.remove(port);
-}
-
-fn prepare_env_variables(app_config: &AppPayload, deployment_id: &str) -> Result<()> {
-    let env_options = AppEnvOptions::app(&app_config.project, &app_config.name, deployment_id);
-
-    if let Some(vars) = &app_config.vars {
-        for (key, value) in vars {
-            add_app_env(key.clone(), value.clone(), env_options.clone())?;
-        }
-    }
-
-    Ok(())
 }
 
 struct _DeployAppOptions<'cfg, 'tx> {
