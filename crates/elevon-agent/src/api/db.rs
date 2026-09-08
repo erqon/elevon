@@ -36,20 +36,22 @@ pub async fn get_db(turso_remote_url: Option<&str>) -> Result<toasty::Db> {
     Ok(db)
 }
 
-pub struct AgentDb {
-    pub db: toasty::Db,
-}
+pub struct AgentDb(pub toasty::Db);
 
 impl AgentDb {
+    pub fn get(&self) -> toasty::Db {
+        self.0.clone()
+    }
+
     pub async fn new(turso_remote_url: Option<&str>) -> Result<Self> {
         let db = get_db(turso_remote_url).await?;
 
         match db.push_schema().await {
-            Ok(()) => Ok(Self { db }),
+            Ok(()) => Ok(Self(db)),
             Err(err) => {
                 let msg = err.to_string().to_lowercase();
                 if msg.contains("already exists") || msg.contains("exist") {
-                    Ok(Self { db })
+                    Ok(Self(db))
                 } else {
                     Err(err.into())
                 }
@@ -60,7 +62,7 @@ impl AgentDb {
     pub async fn get_active_deployments(&mut self) -> Result<Vec<Deployment>> {
         let deployments =
             Deployment::filter(Deployment::fields().status().eq(DeploymentStatus::Active))
-                .exec(&mut self.db)
+                .exec(&mut self.0)
                 .await?;
 
         Ok(deployments)

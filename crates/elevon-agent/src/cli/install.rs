@@ -121,16 +121,17 @@ pub async fn run(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
     ElevonEnv::new(config.agent.domain, config.turso_remote_url)
         .context("failed to init agent env")?;
 
-    let mut agent_db = AgentDb::new(None)
+    let mut db = AgentDb::new(None)
         .await
-        .context("failed to initialize the agent database")?;
+        .context("failed to initialize the agent database")?
+        .get();
 
-    let auth_keys = AuthKey::all().exec(&mut agent_db.db).await?;
+    let auth_keys = AuthKey::all().exec(&mut db).await?;
 
     if !auth_keys.is_empty() {
         tracing::info!("Auth key already exist, run 'key list' to view the keys");
     } else {
-        crate::cli::key::create("Default").await?;
+        AuthKey::create_key(&mut db, "Default").await?;
     }
 
     if !args.no_systemd {

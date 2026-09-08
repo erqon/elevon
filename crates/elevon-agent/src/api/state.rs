@@ -15,7 +15,7 @@ use crate::socket::{Socket, SocketType};
 pub type SharedApiState = Arc<ApiState>;
 
 pub struct ApiState {
-    pub agent_db: AgentDb,
+    pub db: AgentDb,
     pub docker: bollard::Docker,
     pub env: RwLock<ElevonEnv>,
     pub proxy_socket: Arc<Socket>,
@@ -24,7 +24,7 @@ pub struct ApiState {
 
 impl ApiState {
     pub async fn new(env: &ElevonEnv) -> Result<Self> {
-        let agent_db = AgentDb::new(env.turso_remote_url.as_deref()).await?;
+        let db = AgentDb::new(env.turso_remote_url.as_deref()).await?;
         let docker = bollard::Docker::connect_with_defaults()?;
         let env = RwLock::new(env.clone());
 
@@ -32,7 +32,7 @@ impl ApiState {
         let api_socket = Arc::new(Socket::new(SocketType::Api)?);
 
         let state = Self {
-            agent_db,
+            db,
             docker,
             env,
             proxy_socket,
@@ -46,7 +46,7 @@ impl ApiState {
 
     async fn check_running_containers(&self) -> Result<()> {
         let db_active_containers = self.get_running_route_containers().await?;
-        let mut db = self.agent_db.db.clone();
+        let mut db = self.db.get();
 
         for active_container in db_active_containers {
             let docker_container = self
@@ -72,7 +72,7 @@ impl ApiState {
 
     // TODO: Fix it so it also returns non web app containers and puts them into `runtime`
     pub async fn get_running_route_containers(&self) -> Result<Vec<DeployAppData>> {
-        let mut db = self.agent_db.db.clone();
+        let mut db = self.db.get();
 
         let deployments =
             Deployment::filter(Deployment::fields().status().eq(DeploymentStatus::Active))

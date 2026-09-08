@@ -10,8 +10,8 @@ use tokio::net::{UnixListener, UnixStream};
 use tokio::task::JoinSet;
 use tokio_util::codec::{Framed, FramedWrite, LengthDelimitedCodec};
 
+use crate::api::event::ApiSocketEvent;
 use crate::api::state::SharedApiState;
-use crate::api::types::{ApiSocketEvent, ApiSocketEventResponse};
 
 pub enum SocketType {
     Proxy,
@@ -152,15 +152,7 @@ impl Socket {
         set.spawn(async move {
             match socket
                 .listener(state, |state, msg: ApiSocketEvent| async move {
-                    let response = match msg {
-                        ApiSocketEvent::RunningContainers => {
-                            ApiSocketEventResponse::RunningContainers(
-                                state.get_running_route_containers().await?,
-                            )
-                        }
-                    };
-
-                    Ok(Some(response))
+                    Ok(ApiSocketEvent::handle(msg, state).await?)
                 })
                 .await
             {

@@ -352,7 +352,7 @@ async fn deploy_app(
     deployment_to_run: Option<Deployment>,
     deployment_to_drain: Option<Deployment>,
 ) -> Result<()> {
-    let mut db = state.agent_db.db.clone();
+    let mut db = state.db.get();
     let mut cloned_db = db.clone();
 
     let is_rollback = deployment_to_run.is_some();
@@ -528,7 +528,7 @@ pub async fn rollback_apps(
     state: SharedApiState,
     payload: AppRollbackPayload,
 ) -> Result<()> {
-    let mut db = state.agent_db.db.clone();
+    let mut db = state.db.get();
 
     for app in payload.apps {
         let db_app = App::get_by_project_and_name(&mut db, &app.project, &app.name).await?;

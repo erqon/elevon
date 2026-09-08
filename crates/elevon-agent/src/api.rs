@@ -1,8 +1,8 @@
 pub mod db;
+pub mod event;
 mod routes;
 pub mod state;
 pub mod stream;
-pub mod types;
 
 use std::{net::SocketAddr, sync::Arc};
 

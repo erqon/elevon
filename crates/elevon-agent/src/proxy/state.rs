@@ -13,7 +13,7 @@ use dashmap::DashMap;
 use pingora::lb::{LoadBalancer, health_check::TcpHealthCheck, selection::RoundRobin};
 
 use crate::{
-    api::types::{ApiSocketEvent, ApiSocketEventResponse},
+    api::event::{ApiSocketEvent, ApiSocketEventResponse},
     env::ElevonEnv,
     proxy::{
         tls::DynamicCert,
@@ -90,6 +90,7 @@ impl ProxyState {
 
                         return Ok(());
                     }
+                    _ => {}
                 },
                 Ok(None) => {}
                 Err(err) => {
