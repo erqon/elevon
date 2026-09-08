@@ -451,6 +451,9 @@ async fn deploy_app(
         )
         .await;
 
+        // TODO: In case of any failure in here the container is kept running,
+        // need to be deleted.
+
         state
             .proxy_socket
             .send(AgentEvent::UpsertRoute(app_data.clone()))

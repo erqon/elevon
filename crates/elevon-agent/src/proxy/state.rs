@@ -57,7 +57,7 @@ impl ProxyState {
             lbs: ArcSwap::from_pointee(HashMap::new()),
             runtime: DashMap::new(),
             dynamic_cert,
-            socket: Arc::new(Socket::new(SocketType::Proxy)),
+            socket: Arc::new(Socket::new(SocketType::Proxy)?),
             api_client: reqwest::Client::new(),
         }))
     }

@@ -24,8 +24,8 @@ impl AppState {
         let docker = bollard::Docker::connect_with_defaults()?;
         let env = RwLock::new(env.clone());
 
-        let proxy_socket = Socket::new(SocketType::Proxy);
-        let agent_socket = Socket::new(SocketType::Api);
+        let proxy_socket = Socket::new(SocketType::Proxy)?;
+        let agent_socket = Socket::new(SocketType::Api)?;
 
         let state = Self {
             agent_db,
@@ -147,39 +147,3 @@ impl AppState {
         Ok(routes)
     }
 }
-
-// #[derive(Clone)]
-// pub struct SocketClient {
-//     pub socket_path: PathBuf,
-// }
-//
-// impl SocketClient {
-//     pub fn new() -> Self {
-//         Self {
-//             socket_path: get_socket_path(false),
-//         }
-//     }
-//
-//     pub async fn connect(&self) -> Result<UnixStream> {
-//         UnixStream::connect(&self.socket_path)
-//             .await
-//             .with_context(|| {
-//                 format!(
-//                     "failed to connect to agent socket {}",
-//                     self.socket_path.display()
-//                 )
-//             })
-//     }
-//
-//     pub async fn send(&self, mut stream: UnixStream, event: AgentEvent) -> Result<()> {
-//         let payload = serde_json::to_vec(&serde_json::json!(event))?;
-//         stream.write_all(&payload).await?;
-//         Ok(())
-//     }
-// }
-//
-// impl Default for SocketClient {
-//     fn default() -> Self {
-//         Self::new()
-//     }
-// }

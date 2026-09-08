@@ -1,7 +1,7 @@
 use std::os::unix::fs::PermissionsExt;
 use std::{path::PathBuf, sync::Arc};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use elevon_fs::agent::AgentPath;
 use futures_util::{Future, SinkExt, StreamExt};
 use serde::Serialize;
@@ -19,13 +19,13 @@ pub struct Socket {
 }
 
 impl Socket {
-    pub fn new(ty: SocketType) -> Self {
+    pub fn new(ty: SocketType) -> Result<Self> {
         let path = match ty {
-            SocketType::Proxy => AgentPath::ProxySocket.resolve(),
-            SocketType::Api => AgentPath::ApiSocket.resolve(),
+            SocketType::Proxy => AgentPath::ProxySocket.ensure_parent_dir()?,
+            SocketType::Api => AgentPath::ApiSocket.ensure_parent_dir()?,
         };
 
-        Self { path }
+        Ok(Self { path })
     }
 
     pub async fn send<M>(&self, msg: M) -> Result<()>
@@ -54,7 +54,9 @@ impl Socket {
             Err(err) => return Err(err.into()),
         }
 
-        let listener = UnixListener::bind(&self.path)?;
+        tracing::info!(path = %self.path.display(), "binding socket");
+        let listener = UnixListener::bind(&self.path)
+            .with_context(|| format!("failed to bind {}", self.path.display()))?;
 
         std::fs::set_permissions(&self.path, std::fs::Permissions::from_mode(0o660))?;
 

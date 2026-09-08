@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use pingora::{server::ShutdownWatch, services::background::BackgroundService};
 
@@ -25,6 +25,9 @@ async fn run_socket_listener(state: Arc<ProxyState>) -> Result<()> {
             Ok(())
         })
         .await
+        .context("proxy socket listener failed")?;
+
+    Ok(())
 }
 
 pub struct SocketControl {
