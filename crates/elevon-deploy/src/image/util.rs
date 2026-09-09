@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use anyhow::Context;
+
 use crate::config::{BuildConfig, BuildOptions};
 
 pub fn image_reference(registry_server: &str, image_name: &str, tag: &str) -> String {
@@ -34,37 +36,45 @@ pub fn get_build_context(
 }
 
 pub fn tar_context(dir: &Path) -> anyhow::Result<Vec<u8>> {
+    use ignore::WalkBuilder;
     use std::fs::File;
     use tar::{Builder, EntryType, Header, HeaderMode};
-    use walkdir::WalkDir;
 
     let root = dir.canonicalize()?;
+
     anyhow::ensure!(
         root.is_dir(),
         "build context not a directory: {}",
         root.display()
     );
 
+    let walker = WalkBuilder::new(&root)
+        .add_custom_ignore_filename(".dockerignore")
+        .build();
+
     let mut ar = Builder::new(Vec::new());
     ar.mode(HeaderMode::Deterministic);
 
-    for entry in WalkDir::new(&root).into_iter().filter_map(Result::ok) {
+    for result in walker {
+        let entry = result.context("failed to get entry")?;
         let path = entry.path();
-        let meta = entry.metadata()?;
-        if !meta.is_file() {
+        let metadata = entry
+            .metadata()
+            .with_context(|| format!("failed to read metadata for {}", path.display()))?;
+
+        if !metadata.is_file() {
             continue;
         }
 
-        let rel = path.strip_prefix(&root)?;
-        if rel.starts_with(".git") || rel == Path::new("elevon-deploy") {
-            continue;
-        }
+        let relative_path = path
+            .strip_prefix(&root)
+            .context("failed to make archive path relative")?;
 
         let mut header = Header::new_gnu();
         header.set_entry_type(EntryType::Regular);
         header.set_mode(0o644);
-        header.set_size(meta.len());
-        header.set_path(rel)?;
+        header.set_size(metadata.len());
+        header.set_path(relative_path)?;
         header.set_cksum();
         ar.append(&header, File::open(path)?)?;
     }
