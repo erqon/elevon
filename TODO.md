@@ -8,13 +8,13 @@ Markers for features before the release
 - **N** - Nice-to-Have
 - **P** - Post / Defer
 
-## Alpha release (14st Sep 2026)
+## Beta release (14st Sep 2026)
 
 ### Elevon Agent
 
 - [x] TLS termination with Let's Encrypt or user-provided certificates **(M) - (user provided at least)**
 - [x] Zero-downtime rollback
-- [ ] Fix/add install script **(N/P)**
+- [x] Fix/add install script **(N/P)**
 - [x] Fix/restrict file permissions, file access, users etc.
 - [x] Restrict db calls to API only. Move internall calls over UNIX socket instead of TCP (for both the proxy and the cli).
 - <s>[ ] Streaming application logs **(M)**</s>
@@ -27,7 +27,7 @@ Markers for features before the release
 ### Elevon Deploy
 
 - [x] Init command **(M)**
-- [ ] Fix/add install script **(N/P)**
+- [x] Fix/add install script **(N/P)**
 - [x] App runtime configuration **(M)**
 - [x] Deploy rollback command **(M)**
 - [ ] Deploy lock (allow only one deployment per app at a time) **(M)**

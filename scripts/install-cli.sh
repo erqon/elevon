@@ -5,9 +5,10 @@ VERSION="${1:-latest}"
 
 REPO_PATH="erqon/elevon"
 
-CRATE_NAME="elevon-agent"
-BIN_NAME="elevon-agent"
-INSTALL_DIR="${ELEVON_INSTALL_DIR:-/usr/local/bin}"
+CRATE_NAME="elevon-cli"
+BIN_NAME="elevon"
+INSTALL_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/elevon/bin"
+LINK_PATH="$HOME/.local/bin/$BIN_NAME"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -15,7 +16,6 @@ die() {
     echo "error: $*" >&2
     exit 1
 }
-
 need() {
     command -v "$1" >/dev/null || die "missing dependency: $1"
 }
@@ -29,7 +29,7 @@ resolve_version() {
     curl --fail --location --silent --show-error \
         "https://api.github.com/repos/${REPO_PATH}/releases/latest" |
         sed -n 's/^[[:space:]]*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' |
-        sed 's/^elevon-agent-v//' |
+        sed 's/^elevon-cli-v//' |
         head -n 1
 }
 
@@ -37,19 +37,17 @@ release_url() {
     local version="$1"
     local asset="$2"
 
-    echo "https://github.com/${REPO_PATH}/releases/download/elevon-agent-v${version}/${asset}"
+    echo "https://github.com/${REPO_PATH}/releases/download/elevon-cli-v${version}/${asset}"
 }
 
 main() {
-    [[ "$EUID" -eq 0 ]] || die "agent installation must be run as root (try: sudo $0)"
-
     need curl
     need tar
     need install
 
     local version asset url tmp_dir source
     version="$(resolve_version)"
-    [[ -n "$version" ]] || die "could not resolve the latest agent release"
+    [[ -n "$version" ]] || die "could not resolve the latest CLI release"
 
     asset="$(bash "$SCRIPT_DIR/resolve-release-archive.sh" "$CRATE_NAME" "$version")"
     url="$(release_url "$version" "$asset")"
@@ -63,8 +61,9 @@ main() {
     source="$(find "$tmp_dir" -type f -name "$BIN_NAME" -print -quit)"
     [[ -n "$source" ]] || die "binary '$BIN_NAME' not found in archive"
 
-    mkdir -p "$INSTALL_DIR"
+    mkdir -p "$INSTALL_DIR" "$(dirname "$LINK_PATH")"
     install -m 0755 "$source" "$INSTALL_DIR/$BIN_NAME"
+    ln -sfn "$INSTALL_DIR/$BIN_NAME" "$LINK_PATH"
 
     echo "Installed $INSTALL_DIR/$BIN_NAME"
     if command -v "$BIN_NAME" >/dev/null; then
