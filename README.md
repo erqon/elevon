@@ -145,9 +145,6 @@ sudo bash scripts/install-agent.sh
 bash scripts/install-cli.sh
 ```
 
-The installers accept an optional version, for example `v0.1.0`, and use
-`ELEVON_REPO` when installing from a fork or another repository.
-
 The current release artifacts are built for Linux `x86_64`. Other platform
 names are recognized by the archive resolver, but matching release artifacts
 must exist before those platforms are usable.
