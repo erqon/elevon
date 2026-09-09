@@ -67,7 +67,6 @@ pub async fn build_image(
         .rm(true)
         .build();
 
-    println!("context: {:?}", context);
     let tar = util::tar_context(&context)?;
     let stream = docker.build_image(options, None, Some(body_full(tar.into())));
 
