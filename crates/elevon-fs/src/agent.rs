@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::Write;
 use std::os::unix::fs::OpenOptionsExt;
 use std::{
     fs::{OpenOptions, create_dir_all},
@@ -123,7 +124,15 @@ pub fn get_tls_file(ty: TlsType, options: TlsOptions) -> Result<PathBuf> {
 
 pub fn write_tls_file(content: &[u8], ty: TlsType, options: TlsOptions) -> Result<()> {
     let path = get_tls_file(ty, options)?;
-    std::fs::write(path, content)?;
+
+    OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&path)?
+        .write_all(content)?;
+
     Ok(())
 }
 
