@@ -6,10 +6,12 @@ use elevon_fs::agent::{install_api_unit, install_proxy_unit};
 
 use crate::{
     api::db::{AgentDb, models::AuthKey},
-    cli::{CliArgs, InstallArgs},
+    cli::{CliArgs, InstallArgs, UninstallArgs},
     config::Config,
     env::ElevonEnv,
 };
+
+static TEMP_FILE_CONFIG: &str = "/etc/tmpfiles.d/elevon-agent.conf";
 
 fn check_before_installation() -> Result<()> {
     let docker_version_output = Command::new("docker")
@@ -75,12 +77,12 @@ fn ensure_agent_state_ownership() -> Result<()> {
 
 fn run_tmpfiles() -> Result<()> {
     std::fs::write(
-        "/etc/tmpfiles.d/elevon-agent.conf",
+        TEMP_FILE_CONFIG,
         "d /run/elevon-agent 0750 elevon-agent elevon-agent -\n",
     )?;
 
     let status = Command::new("systemd-tmpfiles")
-        .args(["--create", "/etc/tmpfiles.d/elevon-agent.conf"])
+        .args(["--create", TEMP_FILE_CONFIG])
         .status()
         .context("failed to create agent runtime directory")?;
 
@@ -131,7 +133,8 @@ pub async fn run(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
     if !auth_keys.is_empty() {
         tracing::info!("Auth key already exist, run 'key list' to view the keys");
     } else {
-        AuthKey::create_key(&mut db, "Default").await?;
+        let auth_key = AuthKey::create_key(&mut db, "Default").await?;
+        tracing::info!("save your API Key: {}", auth_key);
     }
 
     if !args.no_systemd {
@@ -166,4 +169,39 @@ pub async fn run(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+pub fn uninstall(args: UninstallArgs) -> Result<()> {
+    // TODO: Stop any running containers
+
+    println!("This will uninstall Elevon.");
+
+    if !args.keep_systemd {
+        println!("- systemd units");
+    }
+    if !args.keep_database {
+        println!("- database");
+    }
+    if !args.keep_env_files {
+        println!("- environment files");
+    }
+
+    if !args.yes {
+        println!("This will remove Elevon files and services. Continue? [y/N]");
+
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+
+        if !matches!(input.trim().to_lowercase().as_str(), "y" | "yes") {
+            println!("Cancelled.");
+            return Ok(());
+        }
+    }
+
+    elevon_fs::agent::remove_files(
+        args.keep_database,
+        args.keep_env_files,
+        args.keep_systemd,
+        TEMP_FILE_CONFIG,
+    )
 }

@@ -1,12 +1,17 @@
 use std::collections::HashMap;
+use std::io::Write;
 use std::os::unix::fs::OpenOptionsExt;
 use std::{
     fs::{OpenOptions, create_dir_all},
     path::{Path, PathBuf},
+    process::Command,
 };
 
 use anyhow::{Context, Ok, Result, bail};
 use elevon_contracts::deploy::TlsType;
+
+static API_SYSTEMD_SERVICE: &str = "elevon-agent-api.service";
+static PROXY_SYSTEMD_SERVICE: &str = "elevon-agent-proxy.service";
 
 pub fn get_database_path() -> Result<PathBuf> {
     let db_path = AgentPath::Database.ensure_parent_dir()?;
@@ -119,7 +124,15 @@ pub fn get_tls_file(ty: TlsType, options: TlsOptions) -> Result<PathBuf> {
 
 pub fn write_tls_file(content: &[u8], ty: TlsType, options: TlsOptions) -> Result<()> {
     let path = get_tls_file(ty, options)?;
-    std::fs::write(path, content)?;
+
+    OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&path)?
+        .write_all(content)?;
+
     Ok(())
 }
 
@@ -128,8 +141,8 @@ pub fn get_proxy_systemd_content(exec: &str) -> String {
         "
         [Unit]
         Description=Elevon Agent Proxy
-        After=network.target elevon-agent-api.service
-        Wants=elevon-agent-api.service
+        After=network.target {API_SYSTEMD_SERVICE}
+        Wants={API_SYSTEMD_SERVICE}
         
         [Service]
         User=elevon-agent
@@ -179,14 +192,14 @@ pub fn get_api_systemd_content(exec: &str) -> String {
 
 pub fn install_proxy_unit(exec: &Path) -> Result<()> {
     let unit = get_proxy_systemd_content(&exec.display().to_string());
-    let dest = AgentPath::SystemdUnit("elevon-agent-proxy.service".into()).ensure_parent_dir()?;
+    let dest = AgentPath::ProxySystemdPath.ensure_parent_dir()?;
     std::fs::write(dest, unit)?;
     Ok(())
 }
 
 pub fn install_api_unit(exec: &Path) -> Result<()> {
     let unit = get_api_systemd_content(&exec.display().to_string());
-    let dest = AgentPath::SystemdUnit("elevon-agent-api.service".into()).ensure_parent_dir()?;
+    let dest = AgentPath::ApiSystemdPath.ensure_parent_dir()?;
     std::fs::write(dest, unit)?;
     Ok(())
 }
@@ -225,12 +238,14 @@ pub enum AgentPath {
     StateDir,
     UploadsDir,
     SocketDir,
+    SystemdDir,
     Database,
     AppEnv(String, Option<String>, Option<String>),
     ProjectTlsDir(String),
     ProxySocket,
     ApiSocket,
-    SystemdUnit(String),
+    ApiSystemdPath,
+    ProxySystemdPath,
 }
 
 impl AgentPath {
@@ -249,6 +264,8 @@ impl AgentPath {
             }
 
             AgentPath::SocketDir => base.join("run").join("elevon-agent"),
+
+            AgentPath::SystemdDir => base.join("etc").join("systemd").join("system"),
 
             AgentPath::Database => {
                 let dir = AgentPath::StateDir.resolve();
@@ -286,8 +303,14 @@ impl AgentPath {
                 dir.join("agent.sock")
             }
 
-            AgentPath::SystemdUnit(name) => {
-                base.join("etc").join("systemd").join("system").join(name)
+            AgentPath::ApiSystemdPath => {
+                let dir = AgentPath::SystemdDir.resolve();
+                dir.join(API_SYSTEMD_SERVICE)
+            }
+
+            AgentPath::ProxySystemdPath => {
+                let dir = AgentPath::SystemdDir.resolve();
+                dir.join(PROXY_SYSTEMD_SERVICE)
             }
         }
     }
@@ -307,4 +330,102 @@ impl AgentPath {
 
         Ok(path)
     }
+}
+
+pub fn remove_files(
+    keep_database: bool,
+    keep_env_files: bool,
+    keep_systemd: bool,
+    temp_file_config: &str,
+) -> Result<()> {
+    let socket_dir = AgentPath::SocketDir.resolve();
+    let database_file_path = AgentPath::Database.resolve();
+    let uploads_dir = AgentPath::UploadsDir.resolve();
+
+    let api_systemd_path = AgentPath::ApiSystemdPath.resolve();
+    let proxy_systemd_path = AgentPath::ProxySystemdPath.resolve();
+
+    let mut services = Vec::new();
+    if api_systemd_path.exists() {
+        services.push(API_SYSTEMD_SERVICE);
+    }
+    if proxy_systemd_path.exists() {
+        services.push(PROXY_SYSTEMD_SERVICE);
+    }
+
+    if !services.is_empty() {
+        println!("Stopping Elevon services...");
+        let status = Command::new("systemctl")
+            .args(["stop"])
+            .args(&services)
+            .status()?;
+
+        if !status.success() {
+            bail!("failed to stop Elevon services: {status}");
+        }
+    }
+
+    if !keep_systemd {
+        println!("Removing systemd units...");
+        if !services.is_empty() {
+            let status = Command::new("systemctl")
+                .args(["disable"])
+                .args(&services)
+                .status()?;
+
+            if !status.success() {
+                bail!("failed to disable Elevon services: {status}");
+            }
+        }
+
+        if api_systemd_path.exists() {
+            std::fs::remove_file(&api_systemd_path)?;
+        }
+        if proxy_systemd_path.exists() {
+            std::fs::remove_file(&proxy_systemd_path)?;
+        }
+        if Path::new(temp_file_config).exists() {
+            std::fs::remove_file(temp_file_config)?;
+        }
+
+        let status = Command::new("systemctl").args(["daemon-reload"]).status()?;
+
+        if !status.success() {
+            bail!("failed to reload systemd services: {status}");
+        }
+    }
+
+    if !keep_systemd && socket_dir.exists() {
+        println!("Removing runtime sockets...");
+        std::fs::remove_dir_all(socket_dir)?;
+    }
+
+    if !keep_database {
+        println!("Removing database...");
+        if database_file_path.exists() {
+            std::fs::remove_file(&database_file_path)?;
+        }
+
+        if let Some(db_dir) = database_file_path.parent() {
+            let _ = std::fs::remove_dir(db_dir);
+        }
+    } else {
+        println!("Keeping database.");
+    }
+
+    if !keep_env_files && uploads_dir.exists() {
+        println!("Removing environment and TLS files...");
+        std::fs::remove_dir_all(uploads_dir)?;
+    } else if keep_env_files {
+        println!("Keeping environment and TLS files.");
+    }
+
+    if !keep_database && !keep_env_files {
+        println!("Removing remaining agent state...");
+        let state_dir = AgentPath::StateDir.resolve();
+        let _ = std::fs::remove_dir_all(state_dir);
+    }
+
+    println!("Elevon uninstalled.");
+    Ok(())
 }

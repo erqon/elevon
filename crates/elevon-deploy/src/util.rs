@@ -4,30 +4,37 @@ use std::process::Command;
 /// Returns an image tag with the following style:
 /// {image_repository}:{git_commit_sha}-{Option<{git diff sha}>}
 pub fn get_image_tag() -> std::io::Result<String> {
-    // TODO: Handle non git directories
+    // TODO: Handle non git and no git commit repos
 
-    let sha_output = Command::new("git")
+    let commit_sha = Command::new("git")
         .args(["rev-parse", "--short", "HEAD"])
-        .output()?;
+        .output()
+        .ok()
+        .filter(|out| out.status.success())
+        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
+        .unwrap_or_else(|| "0000000".to_string());
 
-    let mut commit_sha = String::from_utf8_lossy(&sha_output.stdout)
-        .trim()
-        .to_string();
+    let diff_bytes = Command::new("git")
+        .args(["diff", "HEAD"])
+        .output()
+        .map(|o| o.stdout)
+        .unwrap_or_default();
 
-    let diff_output = Command::new("git").args(["diff", "HEAD"]).output()?;
-    let untracked_output = Command::new("git")
+    let untracked_bytes = Command::new("git")
         .args(["ls-files", "--others", "--exclude-standard"])
-        .output()?;
+        .output()
+        .map(|o| o.stdout)
+        .unwrap_or_default();
 
-    let is_dirty = !diff_output.stdout.is_empty() || !untracked_output.stdout.is_empty();
+    let is_dirty = !diff_bytes.is_empty() || !untracked_bytes.is_empty();
 
     if !is_dirty {
         return Ok(commit_sha);
     }
 
     let mut hasher = Sha256::new();
-    hasher.update(&diff_output.stdout);
-    hasher.update(&untracked_output.stdout);
+    hasher.update(&diff_bytes);
+    hasher.update(&untracked_bytes);
     let hash_result = hasher.finalize();
 
     let diff_hash: String = hash_result
@@ -37,8 +44,9 @@ pub fn get_image_tag() -> std::io::Result<String> {
 
     let short_diff_hash = &diff_hash[..7];
 
-    commit_sha.push('-');
-    commit_sha.push_str(short_diff_hash);
-
-    Ok(commit_sha)
+    if commit_sha == "0000000" {
+        Ok(format!("0000000-{short_diff_hash}"))
+    } else {
+        Ok(format!("{commit_sha}-{short_diff_hash}"))
+    }
 }
