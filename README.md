@@ -66,9 +66,9 @@ Use `elevon --help` and `elevon <command> --help` for the current options.
 The agent provides the host-side lifecycle commands:
 
 ```text
-sudo elevon-agent init
+elevon-agent init
 sudo elevon-agent install --enable
-sudo elevon-agent key --help
+elevon-agent key --help
 sudo elevon-agent uninstall
 ```
 
