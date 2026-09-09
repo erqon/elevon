@@ -50,11 +50,19 @@ runs:
           echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
         fi
 
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: x86_64-unknown-linux-musl
+
+    - name: Install musl linker
+      shell: bash
+      run: sudo apt-get update && sudo apt-get install -y musl-tools
+
     - uses: Swatinem/rust-cache@v2
 
     - name: Build
       shell: bash
-      run: cargo build -p "${{ inputs.name }}" --release
+      run: cargo build -p "${{ inputs.name }}" --release --target x86_64-unknown-linux-musl
 
     - name: Resolve build archive
       id: resolve
@@ -82,5 +90,5 @@ runs:
         BIN="${{ steps.resolve.outputs.bin }}"
         BINARY_NAME="${{ inputs.binary != '' && inputs.binary || inputs.name }}"
 
-        cp "target/release/${BINARY_NAME}" "$BIN"
+        cp "target/x86_64-unknown-linux-musl/release/${BINARY_NAME}" "$BIN"
         tar -czf "$ARCHIVE" "$BIN"
