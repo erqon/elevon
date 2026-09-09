@@ -54,15 +54,19 @@ runs:
       with:
         targets: x86_64-unknown-linux-musl
 
-    - name: Install musl linker
+    - uses: mlugg/setup-zig@v2
+      with:
+        version: 0.13.0
+
+    - name: Install cargo-zigbuild
       shell: bash
-      run: sudo apt-get update && sudo apt-get install -y musl-tools
+      run: cargo install cargo-zigbuild
 
     - uses: Swatinem/rust-cache@v2
 
     - name: Build
       shell: bash
-      run: cargo build -p "${{ inputs.name }}" --release --target x86_64-unknown-linux-musl
+      run: cargo zigbuild -p "${{ inputs.name }}" --release --target x86_64-unknown-linux-musl
 
     - name: Resolve build archive
       id: resolve
