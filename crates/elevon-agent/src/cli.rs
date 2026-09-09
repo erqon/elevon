@@ -50,6 +50,9 @@ pub enum Commands {
     #[command(about = "Install agent as a systemd service")]
     Install(InstallArgs),
 
+    #[command(about = "Uninstall agent")]
+    Uninstall(UninstallArgs),
+
     #[command(about = "Run the reverse proxy for the agent")]
     Proxy,
 
@@ -78,4 +81,34 @@ pub struct InstallArgs {
         help = "Avoid creating systemd units"
     )]
     pub no_systemd: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct UninstallArgs {
+    #[arg(long, short = 'y')]
+    pub yes: bool,
+
+    #[arg(
+        long,
+        action = clap::ArgAction::SetTrue,
+        default_value_t = false,
+        help = "Keep systemd units"
+    )]
+    pub keep_systemd: bool,
+
+    #[arg(
+        long,
+        action = clap::ArgAction::SetTrue,
+        default_value_t = false,
+        help = "Keep the database"
+    )]
+    pub keep_database: bool,
+
+    #[arg(
+        long,
+        action = clap::ArgAction::SetTrue,
+        default_value_t = false,
+        help = "Keep the environment files"
+    )]
+    pub keep_env_files: bool,
 }

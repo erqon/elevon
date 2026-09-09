@@ -23,14 +23,17 @@ registry:
 routing:
   domain: app.example.com
   port: 3000
+  tls:
+    cert: $TLS_CERT
+    key: $TLS_KEY
 
 # Directly uses the Dockerfile at specified destination.
 # If it's in a custom path, you can use following:
-# 
+#
 # build:
 #   path: ./dev
 #   dockerfile: ./Dockerfile.dev
-# 
+#
 build: ../
 
 # Environment variables that will be available to the container at runtime.
@@ -46,7 +49,7 @@ env:
 # (Optional) By default, a single app named "web" will be created and routed to the configured domain.
 # You can define multiple apps that share the same container image.
 # Use the `worker` role to bypass domain routing and run as a standard background container.
-# 
+#
 # apps:
 #   api:
 #     role: web

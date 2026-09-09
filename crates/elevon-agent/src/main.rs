@@ -27,6 +27,9 @@ fn run() -> Result<()> {
             run_async(elevon_agent::cli::install::run(cli.args, args))
                 .context("install command failed")?;
         }
+        Commands::Uninstall(args) => {
+            elevon_agent::cli::install::uninstall(args).context("uninstall command failed")?;
+        }
         Commands::Api => {
             run_async(elevon_agent::api::run_api_server(&env)).context("api command failed")?;
         }

@@ -16,7 +16,7 @@ Markers for features before the release
 - [x] Zero-downtime rollback
 - [ ] Fix/add install script **(N/P)**
 - [ ] Fix/restrict file permissions, file access, users etc.
-- [ ] Restrict db calls to API only. Move internall calls over UNIX socket instead of TCP (for both the proxy and the cli).
+- [x] Restrict db calls to API only. Move internall calls over UNIX socket instead of TCP (for both the proxy and the cli).
 - <s>[ ] Streaming application logs **(M)**</s>
 - <s>[ ] Metrics pipeline (CPU, mem, req latency, error rate) **(M)**</s>
 - <s>[ ] Running infrastructure Docker services (Postgres, Redis, etc.) **(N)**</s>
