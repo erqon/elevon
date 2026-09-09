@@ -8,7 +8,7 @@ Markers for features before the release
 - **N** - Nice-to-Have
 - **P** - Post / Defer
 
-## Alpha release (14st Sep 2026)
+## Beta release (14st Sep 2026)
 
 ### Elevon Agent
 
