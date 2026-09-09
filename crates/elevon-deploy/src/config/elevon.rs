@@ -1,12 +1,12 @@
 use elevon_config::{ResolveEnvCredentials, resolve_env_or_literal};
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct ElevonConfig {
     pub agent: AgentConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct AgentConfig {
     pub url: String,
     pub key: String,

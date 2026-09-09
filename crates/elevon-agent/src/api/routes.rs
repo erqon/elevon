@@ -1,21 +1,15 @@
 mod deploy;
-mod env;
-mod proxy;
-
-use std::sync::Arc;
 
 use axum::{Router, http::StatusCode, middleware::from_fn, routing::get};
 use elevon_http::error::AppError;
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 
-use crate::api::state::AppState;
+use crate::api::state::SharedApiState;
 
-pub fn create_router(state: Arc<AppState>) -> Router {
+pub fn create_router(state: SharedApiState) -> Router {
     Router::new()
         .route("/health", get(health))
-        .nest("/env", env::router())
         .nest("/deploy", deploy::router())
-        .nest("/proxy", proxy::router())
         .with_state(state)
         .layer(from_fn(elevon_http::error::log_app_errors))
         .layer(

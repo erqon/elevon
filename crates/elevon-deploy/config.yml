@@ -1,6 +1,8 @@
 name: project-name
 image: project/project-name
 
+keep_releases: 5
+
 elevon:
   dashboard: https://dash.example.com
   project: my-app
@@ -37,9 +39,8 @@ apps:
     include: ./custom/worker.yml   # custom path
   web:
     role: worker
-
+    cmd: "deno run"
     runtime:
-      role: web
       restart: unless-stopped
       memory_limit: 512mb
       cpu_limit: "1.0"

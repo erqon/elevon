@@ -1,36 +1,42 @@
-use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::Result;
 use bollard::query_parameters::InspectContainerOptionsBuilder;
-use elevon_fs::agent::get_socket_path;
-use tokio::io::AsyncWriteExt;
-use tokio::net::UnixStream;
+use elevon_contracts::deploy::WebApp;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::api::db::AgentDb;
 use crate::api::db::models::{Deployment, DeploymentStatus};
 use crate::env::ElevonEnv;
-use crate::proxy::types::{AgentEvent, RouteConfig, RouteState};
+use crate::proxy::types::{DeployAppData, DeployAppState};
+use crate::socket::{Socket, SocketType};
 
-pub struct AppState {
-    pub agent_db: AgentDb,
+pub type SharedApiState = Arc<ApiState>;
+
+pub struct ApiState {
+    pub db: AgentDb,
     pub docker: bollard::Docker,
     pub env: RwLock<ElevonEnv>,
-    pub socket_client: SocketClient,
+    pub proxy_socket: Arc<Socket>,
+    pub api_socket: Arc<Socket>,
 }
 
-impl AppState {
+impl ApiState {
     pub async fn new(env: &ElevonEnv) -> Result<Self> {
-        let agent_db = AgentDb::new(env.turso_remote_url.as_deref()).await?;
+        let db = AgentDb::new(env.turso_remote_url.as_deref()).await?;
         let docker = bollard::Docker::connect_with_defaults()?;
         let env = RwLock::new(env.clone());
 
+        let proxy_socket = Arc::new(Socket::new(SocketType::Proxy)?);
+        let api_socket = Arc::new(Socket::new(SocketType::Api)?);
+
         let state = Self {
-            agent_db,
+            db,
             docker,
             env,
-            socket_client: SocketClient::new(),
+            proxy_socket,
+            api_socket,
         };
 
         state.check_running_containers().await?;
@@ -40,7 +46,7 @@ impl AppState {
 
     async fn check_running_containers(&self) -> Result<()> {
         let db_active_containers = self.get_running_route_containers().await?;
-        let mut db = self.agent_db.db.clone();
+        let mut db = self.db.get();
 
         for active_container in db_active_containers {
             let docker_container = self
@@ -64,8 +70,9 @@ impl AppState {
         Ok(())
     }
 
-    pub async fn get_running_route_containers(&self) -> Result<Vec<RouteConfig>> {
-        let mut db = self.agent_db.db.clone();
+    // TODO: Fix it so it also returns non web app containers and puts them into `runtime`
+    pub async fn get_running_route_containers(&self) -> Result<Vec<DeployAppData>> {
+        let mut db = self.db.get();
 
         let deployments =
             Deployment::filter(Deployment::fields().status().eq(DeploymentStatus::Active))
@@ -73,7 +80,7 @@ impl AppState {
                 .exec(&mut db)
                 .await?;
 
-        let mut routes: Vec<RouteConfig> = Vec::new();
+        let mut routes: Vec<DeployAppData> = Vec::new();
 
         for mut deployment in deployments {
             let app = deployment.app.get();
@@ -111,22 +118,30 @@ impl AppState {
             if let Some(container) = container {
                 let Some(state) = container.state.and_then(|s| s.running).map(|running| {
                     if running {
-                        RouteState::Active
+                        DeployAppState::Active
                     } else {
-                        RouteState::Draining
+                        DeployAppState::Draining
                     }
                 }) else {
                     continue;
                 };
 
-                let route_config = RouteConfig {
+                if state == DeployAppState::Draining {
+                    continue;
+                }
+
+                let web_app = Some(WebApp {
+                    domain,
+                    port: deployment.port,
+                });
+
+                let route_config = DeployAppData {
                     id: deployment.id.to_string(),
                     project: project_name,
                     name: app_name,
-                    domain,
-                    port: deployment.port,
                     state,
                     container_id,
+                    web_app,
                 };
                 routes.push(route_config);
             } else {
@@ -135,35 +150,5 @@ impl AppState {
         }
 
         Ok(routes)
-    }
-}
-
-#[derive(Clone)]
-pub struct SocketClient {
-    pub socket_path: PathBuf,
-}
-
-impl SocketClient {
-    pub fn new() -> Self {
-        Self {
-            socket_path: get_socket_path(false),
-        }
-    }
-
-    pub async fn connect(&self) -> Result<UnixStream> {
-        let stream = UnixStream::connect(&self.socket_path).await?;
-        Ok(stream)
-    }
-
-    pub async fn send(&self, mut stream: UnixStream, event: AgentEvent) -> Result<()> {
-        let payload = serde_json::to_vec(&serde_json::json!(event))?;
-        stream.write_all(&payload).await?;
-        Ok(())
-    }
-}
-
-impl Default for SocketClient {
-    fn default() -> Self {
-        Self::new()
     }
 }

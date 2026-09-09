@@ -8,7 +8,6 @@ default-run = "elevon-agent"
 arc-swap = "1.9.2"
 dashmap = "6.2.1"
 tokio-stream = "0.1.19"
-futures = "0.3.34"
 
 async-trait.workspace = true
 anyhow.workspace = true
@@ -16,19 +15,22 @@ axum.workspace = true
 bollard.workspace = true
 bytes.workspace = true
 clap.workspace = true
+futures-util.workspace = true
 jiff.workspace = true
-reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 pingora = { version = "0.8.1", features = ["lb", "proxy", "boringssl"] }
 tokio = { workspace = true, features = ["net"] }
+tokio-util = { workspace = true, features = ["codec"] }
 tower-http.workspace = true
-toasty.workspace = true
+toasty = { workspace = true, features = ["migration"] }
 toasty-cli.workspace = true
 toasty-driver-turso = { workspace = true, features = ["sync"] }
 tracing.workspace = true
 uuid.workspace = true
 
+elevon-config.workspace = true
 elevon-contracts.workspace = true
 elevon-fs = { workspace = true, features = ["agent"] }
 elevon-http.workspace = true
+tabled = "0.22.0"

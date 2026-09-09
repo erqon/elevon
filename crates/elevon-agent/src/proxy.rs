@@ -5,22 +5,23 @@ pub mod types;
 
 use std::{sync::Arc, time::Duration};
 
+use anyhow::Context;
 use async_trait::async_trait;
 use elevon_http::runtime::run_async;
-use futures::stream::{self, StreamExt};
+use futures_util::{StreamExt, stream};
 use pingora::{
     Error, ErrorType, Result,
     http::ResponseHeader,
     listeners::tls::TlsSettings,
     protocols::l4::socket::SocketAddr,
     proxy::{ProxyHttp, Session, http_proxy_service},
-    server::{Server, ShutdownWatch},
+    server::{RunArgs, Server, ShutdownWatch, configuration::ServerConf},
     services::background::{BackgroundService, background_service},
     upstreams::peer::HttpPeer,
 };
 
 use crate::{
-    cli::ProxyArgs,
+    env::ElevonEnv,
     proxy::{socket::SocketControl, state::ProxyState},
 };
 
@@ -77,6 +78,7 @@ impl ProxyHttp for Proxy {
             SocketAddr::Inet(addr) => Some(addr.port()),
             _ => None,
         };
+
         if let Some(port) = selected_port {
             let selected = self.state.get_backend_by_port(port);
             if let Some(backend) = selected {
@@ -146,7 +148,14 @@ impl BackgroundService for DrainJanitor {
                 _ = shutdown.changed() => break,
                 _ = tick.tick() => {
                     let grace = Duration::from_secs(30);
-                    for (container_id, _port) in self.state.ready_to_terminate(grace) {
+                    for container_id in self.state.ready_to_terminate(grace) {
+                        // A scenario where this container is a worker, that is working on a task
+                        // that takes 60s to finish, `stop_container` will forcefully kill the container,
+                        // since Docker first sends SIGTERM, wait for ~10 seconds and then if the container,
+                        // doesn't exit automatically Docker sends SIGKILL and forcefully kills the container.
+                        // Meaning the worker might not have finished the task it was working on.
+                        //
+                        // A solution to this would be having a configurable timeout option in `apps.runtime` settings.
                         if let Err(err) = self.state.docker
                             .stop_container(&container_id, None)
                             .await
@@ -170,10 +179,16 @@ impl BackgroundService for DrainJanitor {
     }
 }
 
-pub fn run_proxy(args: ProxyArgs) {
-    let proxy_state = ProxyState::new(&args);
+pub fn run_proxy(env: &ElevonEnv) -> anyhow::Result<()> {
+    let proxy_state = ProxyState::new(env).context("failed to create proxy state")?;
 
-    let mut server = Server::new(None).unwrap();
+    let config = ServerConf {
+        grace_period_seconds: Some(30),
+        graceful_shutdown_timeout_seconds: Some(5),
+        ..Default::default()
+    };
+
+    let mut server = Server::new_with_opt_and_conf(None, config);
     server.bootstrap();
 
     let mut lb = http_proxy_service(
@@ -220,7 +235,8 @@ pub fn run_proxy(args: ProxyArgs) {
     std::thread::spawn(move || {
         run_async(async move {
             if let Err(err) = cloned_state.load_conainters().await {
-                tracing::warn!("initial container load failed: {err}");
+                tracing::error!(%err, "initial container load failed");
+                std::process::exit(1);
             }
         })
     });
@@ -229,5 +245,7 @@ pub fn run_proxy(args: ProxyArgs) {
     server.add_service(control);
     server.add_service(lb_health_check);
     server.add_service(drain_janitor);
-    server.run_forever();
+    server.run(RunArgs::default());
+
+    Ok(())
 }

@@ -4,35 +4,17 @@ use anyhow::Result;
 
 use crate::api::db::models::{Deployment, DeploymentStatus};
 
-pub struct AgentDb {
-    pub db: toasty::Db,
-}
+static MIGRATIONS: toasty::migration::MigrationSet = toasty::embed_migrations!();
 
-impl AgentDb {
-    pub async fn new(turso_remote_url: Option<&str>) -> Result<Self> {
-        let db = get_db(turso_remote_url).await?;
+async fn migrate(db: &toasty::Db) -> toasty::Result<()> {
+    let report = MIGRATIONS.apply(db).await?;
 
-        match db.push_schema().await {
-            Ok(()) => Ok(Self { db }),
-            Err(err) => {
-                let msg = err.to_string().to_lowercase();
-                if msg.contains("already exists") || msg.contains("exist") {
-                    Ok(Self { db })
-                } else {
-                    Err(err.into())
-                }
-            }
-        }
+    let applied = report.applied();
+    if applied > 0 {
+        tracing::info!("applied {} migrations", applied);
     }
 
-    pub async fn get_active_deployments(&mut self) -> Result<Vec<Deployment>> {
-        let deployments =
-            Deployment::filter(Deployment::fields().status().eq(DeploymentStatus::Active))
-                .exec(&mut self.db)
-                .await?;
-
-        Ok(deployments)
-    }
+    Ok(())
 }
 
 pub async fn get_db(turso_remote_url: Option<&str>) -> Result<toasty::Db> {
@@ -49,5 +31,40 @@ pub async fn get_db(turso_remote_url: Option<&str>) -> Result<toasty::Db> {
         .build(driver)
         .await?;
 
+    migrate(&db).await?;
+
     Ok(db)
+}
+
+pub struct AgentDb(pub toasty::Db);
+
+impl AgentDb {
+    pub fn get(&self) -> toasty::Db {
+        self.0.clone()
+    }
+
+    pub async fn new(turso_remote_url: Option<&str>) -> Result<Self> {
+        let db = get_db(turso_remote_url).await?;
+
+        match db.push_schema().await {
+            Ok(()) => Ok(Self(db)),
+            Err(err) => {
+                let msg = err.to_string().to_lowercase();
+                if msg.contains("already exists") || msg.contains("exist") {
+                    Ok(Self(db))
+                } else {
+                    Err(err.into())
+                }
+            }
+        }
+    }
+
+    pub async fn get_active_deployments(&mut self) -> Result<Vec<Deployment>> {
+        let deployments =
+            Deployment::filter(Deployment::fields().status().eq(DeploymentStatus::Active))
+                .exec(&mut self.0)
+                .await?;
+
+        Ok(deployments)
+    }
 }

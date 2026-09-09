@@ -2,11 +2,11 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use arc_swap::ArcSwap;
 use async_trait::async_trait;
-use elevon_contracts::deploy::{TlsType, resolve_app_env_name};
-use elevon_fs::agent::write_tls_file;
+use elevon_contracts::deploy::TlsType;
+use elevon_fs::agent::TlsOptions;
 use pingora::protocols::tls::TlsRef;
 use pingora::tls::pkey::{PKey, Private};
 use pingora::tls::ssl::NameType;
@@ -25,39 +25,42 @@ impl DynamicCert {
         }
     }
 
-    fn get_stored_key_paths(
-        &self,
-        project: &str,
-        app_name: &str,
-        is_project: Option<bool>,
-    ) -> Result<(PathBuf, PathBuf)> {
-        let env_path = resolve_app_env_name(project, app_name);
-        let stored_cert = elevon_fs::agent::get_tls_file(&env_path, TlsType::Cert, is_project)?;
-        let stored_key = elevon_fs::agent::get_tls_file(&env_path, TlsType::Key, is_project)?;
+    fn get_stored_key_paths(&self, project: &str, app: &str) -> Result<(PathBuf, PathBuf)> {
+        let tls_options = TlsOptions {
+            project: project.to_string(),
+            app: Some(app.to_string()),
+        };
+
+        let stored_cert = elevon_fs::agent::get_tls_file(TlsType::Cert, tls_options.clone())?;
+        let stored_key = elevon_fs::agent::get_tls_file(TlsType::Key, tls_options)?;
+
         Ok((stored_cert, stored_key))
     }
 
-    pub fn add_cert(
-        &self,
-        project: &str,
-        app_name: &str,
-        domain: String,
-        is_project: Option<bool>,
-    ) -> Result<()> {
-        let (stored_cert, stored_key) = self.get_stored_key_paths(project, app_name, is_project)?;
-        let cert_bytes = std::fs::read(stored_cert)?;
-        let key_bytes = std::fs::read(stored_key)?;
+    fn add_cert_from_paths(&self, domain: String, cert_path: &str, key_path: &str) -> Result<()> {
+        let cert_bytes = std::fs::read(cert_path)?;
+        let key_bytes = std::fs::read(key_path)?;
 
         let cert = X509::from_pem(&cert_bytes)?;
         let key = PKey::private_key_from_pem(&key_bytes)?;
 
-        self.certs.rcu(|c| {
-            let mut next = c.as_ref().clone();
+        self.certs.rcu(|current| {
+            let mut next = current.as_ref().clone();
             next.insert(domain.clone(), (cert.clone(), key.clone()));
             next
         });
 
         Ok(())
+    }
+
+    pub fn add_cert(&self, project: &str, app: &str, domain: String) -> Result<()> {
+        let (stored_cert, stored_key) = self.get_stored_key_paths(project, app)?;
+
+        self.add_cert_from_paths(
+            domain,
+            stored_cert.to_str().context("invalid certificate path")?,
+            stored_key.to_str().context("invalid key path")?,
+        )
     }
 
     fn find_certs_with_hostname(&self, hostname: &str) -> Option<(Arc<X509>, Arc<PKey<Private>>)> {
@@ -67,21 +70,20 @@ impl DynamicCert {
             .map(|(c, k)| (Arc::new(c.clone()), Arc::new(k.clone())))
     }
 
-    pub fn setup_agent_certs(
-        &self,
-        domain: &str,
-        cert_path: Option<&str>,
-        key_path: Option<&str>,
-    ) -> Result<()> {
-        if let (Some(cert), Some(key)) = (cert_path, key_path) {
-            let cert_bytes = std::fs::read(cert)?;
-            let key_bytes = std::fs::read(key)?;
-            write_tls_file("agent", &cert_bytes, TlsType::Cert, None)?;
-            write_tls_file("agent", &key_bytes, TlsType::Key, None)?;
-        }
+    pub fn setup_agent_certs(&self, domain: &str) -> Result<()> {
+        let tls_options = TlsOptions {
+            project: "agent".to_string(),
+            app: None,
+        };
 
-        // TODO: Fix this. This is not ideal but for now its ok
-        self.add_cert("agent", "agent", domain.to_string(), None)?;
+        let stored_cert = elevon_fs::agent::get_tls_file(TlsType::Cert, tls_options.clone())?;
+        let stored_key = elevon_fs::agent::get_tls_file(TlsType::Key, tls_options)?;
+
+        self.add_cert_from_paths(
+            domain.to_string(),
+            stored_cert.to_str().context("invalid certificate path")?,
+            stored_key.to_str().context("invalid key path")?,
+        )?;
 
         Ok(())
     }

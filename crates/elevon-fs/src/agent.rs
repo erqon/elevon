@@ -1,23 +1,20 @@
 use std::collections::HashMap;
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::io::Write;
+use std::os::unix::fs::OpenOptionsExt;
 use std::{
-    fs::{OpenOptions, create_dir_all, set_permissions},
+    fs::{OpenOptions, create_dir_all},
     path::{Path, PathBuf},
+    process::Command,
 };
 
-use anyhow::{Context, Ok, Result};
+use anyhow::{Context, Ok, Result, bail};
 use elevon_contracts::deploy::TlsType;
 
-pub fn get_elevon_data_path() -> Result<PathBuf> {
-    let path = AgentPath::Data.ensure()?;
-    if dev_root().is_none() {
-        set_permissions(&path, std::fs::Permissions::from_mode(0o700))?;
-    }
-    Ok(path)
-}
+static API_SYSTEMD_SERVICE: &str = "elevon-agent-api.service";
+static PROXY_SYSTEMD_SERVICE: &str = "elevon-agent-proxy.service";
 
 pub fn get_database_path() -> Result<PathBuf> {
-    let db_path = AgentPath::Database.ensure()?;
+    let db_path = AgentPath::Database.ensure_parent_dir()?;
 
     OpenOptions::new()
         .create(true)
@@ -29,36 +26,58 @@ pub fn get_database_path() -> Result<PathBuf> {
     Ok(db_path)
 }
 
-pub fn get_env_path() -> Result<PathBuf> {
-    let p = AgentPath::EnvDir.ensure()?;
-    if dev_root().is_none() {
-        set_permissions(&p, std::fs::Permissions::from_mode(0o700))?;
-    }
-    Ok(p)
+#[derive(Clone)]
+pub struct AppEnvOptions {
+    pub project: String,
+    pub app: Option<String>,
+    pub deployment_id: Option<String>,
+    pub bypass_default: Option<bool>,
 }
 
-pub fn get_app_env(app_name: &str, bypass_default: Option<bool>) -> Result<PathBuf> {
-    let bypass = bypass_default.unwrap_or(false);
-    if app_name == "default" && !bypass && dev_root().is_none() {
-        anyhow::bail!("App can't be named 'default'");
+impl AppEnvOptions {
+    pub fn elevon() -> Self {
+        Self {
+            project: "agent".to_string(),
+            app: None,
+            deployment_id: None,
+            bypass_default: Some(true),
+        }
     }
 
-    let path = AgentPath::AppEnv(app_name.to_string(), bypass).ensure()?;
-    if !path.exists() {
-        std::fs::File::create(&path)?;
+    pub fn app(project: &str, app: &str, deployment_id: &str) -> Self {
+        Self {
+            project: project.to_string(),
+            app: Some(app.to_string()),
+            deployment_id: Some(deployment_id.to_string()),
+            bypass_default: None,
+        }
     }
-    if dev_root().is_none() {
-        set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
+}
+
+pub fn get_app_env(options: AppEnvOptions) -> Result<PathBuf> {
+    let bypass = options.bypass_default.unwrap_or(false);
+
+    if options.project == "default" && !bypass && dev_root().is_none() {
+        bail!("App can't be named 'default'");
     }
+
+    let path = AgentPath::AppEnv(options.project, options.app, options.deployment_id)
+        .ensure_parent_dir()?;
+
+    let file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .mode(0o600)
+        .open(&path)?;
+
+    drop(file);
 
     Ok(path)
 }
 
-pub fn load_app_env(
-    app_name: &str,
-    bypass_default: Option<bool>,
-) -> Result<HashMap<String, String>> {
-    let app_path = get_app_env(app_name, bypass_default)?;
+pub fn load_app_env(options: AppEnvOptions) -> Result<HashMap<String, String>> {
+    let app_path = get_app_env(options)?;
 
     let mut env = HashMap::new();
     env.extend(read_env_file(app_path)?);
@@ -66,68 +85,80 @@ pub fn load_app_env(
     Ok(env)
 }
 
-pub fn load_app_string_env(app_name: &str) -> Result<Vec<String>> {
-    Ok(load_app_env(app_name, None)?
+pub fn load_app_string_env(options: AppEnvOptions) -> Result<Vec<String>> {
+    Ok(load_app_env(options)?
         .iter()
         .map(|(key, val)| format!("{}={}", key, val))
         .collect())
 }
 
-pub fn add_app_env(
-    app_name: &str,
-    bypass_default: Option<bool>,
-    key: String,
-    value: String,
-) -> Result<()> {
-    let mut env = load_app_env(app_name, bypass_default)?;
+pub fn add_app_env(key: String, value: String, options: AppEnvOptions) -> Result<()> {
+    let mut env = load_app_env(options.clone())?;
 
     env.insert(key, value);
 
-    let path = get_app_env(app_name, None).context("failed to resolve env file path")?;
+    let path = get_app_env(options).context("failed to resolve env file path")?;
     write_env_file(&path, &env)
         .with_context(|| format!("failed to write env file {}", path.display()))?;
 
     Ok(())
 }
 
-pub fn get_socket_path(delete: bool) -> PathBuf {
-    let path = AgentPath::Socket
-        .ensure()
-        .unwrap_or_else(|_| PathBuf::from("/run/elevon-agent.sock"));
-    if delete && path.exists() {
-        let _ = std::fs::remove_file(&path);
-    }
-    path
+#[derive(Clone)]
+pub struct TlsOptions {
+    pub project: String,
+    pub app: Option<String>,
 }
 
-pub fn get_proxy_systemd_content(
-    exec: &str,
-    agent_domain: &str,
-    tls_cert_path: Option<&str>,
-    tls_key_path: Option<&str>,
-) -> String {
-    let mut exec_start = format!("{exec} proxy --agent-domain {agent_domain}");
+pub fn get_tls_file(ty: TlsType, options: TlsOptions) -> Result<PathBuf> {
+    let file_dir_name = match options.app {
+        Some(app) => format!("projects/{}/{app}", &options.project),
+        None => options.project,
+    };
 
-    if let Some(cert_path) = tls_cert_path {
-        exec_start.push_str(&format!(" --tls-cert-path {cert_path}"));
-    }
+    let path = AgentPath::ProjectTlsDir(format!("{file_dir_name}/{}", ty.get_file()))
+        .ensure_parent_dir()?;
 
-    if let Some(key_path) = tls_key_path {
-        exec_start.push_str(&format!(" --tls-key-path {key_path}"));
-    }
+    Ok(path)
+}
 
+pub fn write_tls_file(content: &[u8], ty: TlsType, options: TlsOptions) -> Result<()> {
+    let path = get_tls_file(ty, options)?;
+
+    OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&path)?
+        .write_all(content)?;
+
+    Ok(())
+}
+
+pub fn get_proxy_systemd_content(exec: &str) -> String {
     format!(
         "
         [Unit]
         Description=Elevon Agent Proxy
-        After=network.target
-        Wants=elevon-agent-api.service
+        After=network.target {API_SYSTEMD_SERVICE}
+        Wants={API_SYSTEMD_SERVICE}
         
         [Service]
-        User=root
-        ExecStart={exec_start}
+        User=elevon-agent
+        Group=elevon-agent
+        ExecStart={exec} proxy
+
+        TimeoutStopSec=40
+        KillSignal=SIGTERM
         Restart=on-failure
-        RuntimeDirectory=elevon-agent
+        
+        AmbientCapabilities=CAP_NET_BIND_SERVICE
+        CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+        SupplementaryGroups=docker
+        StateDirectory=elevon-agent
+        UMask=0007
         
         [Install]
         WantedBy=multi-user.target
@@ -136,47 +167,39 @@ pub fn get_proxy_systemd_content(
 }
 
 pub fn get_api_systemd_content(exec: &str) -> String {
-    let home = std::env::var("HOME").expect("HOME not set");
-    let user = whoami::username().expect("User not found");
-
     format!(
         "
         [Unit]
-        Description=Elevon Agent HTTP Control API
-        After=network.target
+        Description=Elevon Agent API
+        After=network.target docker.socket
+        Wants=docker.socket
         
         [Service]
-        User={user}
-        Environment=HOME={home}
+        User=elevon-agent
+        Group=elevon-agent
+
         ExecStart={exec} api
-        Restart=on-failure
-        
+
+        SupplementaryGroups=docker
+        StateDirectory=elevon-agent
+        UMask=0007
+
         [Install]
         WantedBy=multi-user.target
         "
     )
 }
 
-pub fn install_proxy_unit(
-    exec: &Path,
-    agent_domain: &str,
-    tls_cert_path: Option<&str>,
-    tls_key_path: Option<&str>,
-) -> Result<()> {
-    let unit = get_proxy_systemd_content(
-        &exec.display().to_string(),
-        agent_domain,
-        tls_cert_path,
-        tls_key_path,
-    );
-    let dest = AgentPath::SystemdUnit("elevon-agent-proxy.service".into()).ensure()?;
+pub fn install_proxy_unit(exec: &Path) -> Result<()> {
+    let unit = get_proxy_systemd_content(&exec.display().to_string());
+    let dest = AgentPath::ProxySystemdPath.ensure_parent_dir()?;
     std::fs::write(dest, unit)?;
     Ok(())
 }
 
 pub fn install_api_unit(exec: &Path) -> Result<()> {
     let unit = get_api_systemd_content(&exec.display().to_string());
-    let dest = AgentPath::SystemdUnit("elevon-agent-api.service".into()).ensure()?;
+    let dest = AgentPath::ApiSystemdPath.ensure_parent_dir()?;
     std::fs::write(dest, unit)?;
     Ok(())
 }
@@ -203,33 +226,6 @@ fn write_env_file(path: impl AsRef<Path>, env: &HashMap<String, String>) -> Resu
     Ok(())
 }
 
-pub fn get_tls_file(project_name: &str, t: TlsType, is_project: Option<bool>) -> Result<PathBuf> {
-    let file_dir_name = match is_project {
-        Some(_) => format!("projects/{project_name}"),
-        None => project_name.to_string(),
-    };
-
-    let file_name = match t {
-        TlsType::Cert => "cert.pem",
-        TlsType::Key => "key.pem",
-    };
-
-    let path = AgentPath::ProjectTlsDir(format!("{file_dir_name}/{file_name}")).ensure()?;
-
-    Ok(path)
-}
-
-pub fn write_tls_file(
-    project_name: &str,
-    content: &[u8],
-    t: TlsType,
-    is_project: Option<bool>,
-) -> Result<()> {
-    let path = get_tls_file(project_name, t, is_project)?;
-    std::fs::write(path, content)?;
-    Ok(())
-}
-
 fn dev_root() -> Option<PathBuf> {
     if cfg!(debug_assertions) {
         Some(PathBuf::from("./devroot"))
@@ -239,112 +235,197 @@ fn dev_root() -> Option<PathBuf> {
 }
 
 pub enum AgentPath {
-    Data,
+    StateDir,
+    UploadsDir,
+    SocketDir,
+    SystemdDir,
     Database,
-    EnvDir,
-    AppEnv(String, bool),
+    AppEnv(String, Option<String>, Option<String>),
     ProjectTlsDir(String),
-    Socket,
-    SystemdUnit(String),
+    ProxySocket,
+    ApiSocket,
+    ApiSystemdPath,
+    ProxySystemdPath,
 }
 
 impl AgentPath {
-    pub fn resolve(&self) -> Result<PathBuf> {
+    pub fn resolve(&self) -> PathBuf {
         let base = match dev_root() {
             Some(root) => root,
             None => PathBuf::from("/"),
         };
 
-        let p = match self {
-            AgentPath::Data => {
-                if dev_root().is_some() {
-                    base.join("var").join("lib").join("elevon")
-                } else {
-                    // XDG_DATA_HOME logic kept as before
-                    let base = std::env::var_os("XDG_DATA_HOME")
-                        .map(PathBuf::from)
-                        .unwrap_or_else(|| {
-                            let home = std::env::var_os("HOME").expect("HOME not set");
-                            PathBuf::from(home).join(".local/share")
-                        });
-                    base.join("elevon")
-                }
+        match self {
+            AgentPath::StateDir => base.join("var").join("lib").join("elevon-agent"),
+
+            AgentPath::UploadsDir => {
+                let dir = AgentPath::StateDir.resolve();
+                dir.join("uploads")
             }
+
+            AgentPath::SocketDir => base.join("run").join("elevon-agent"),
+
+            AgentPath::SystemdDir => base.join("etc").join("systemd").join("system"),
 
             AgentPath::Database => {
-                let data = AgentPath::Data.resolve()?;
-                data.join("elevon.db")
+                let dir = AgentPath::StateDir.resolve();
+                dir.join("db").join("agent.db")
             }
 
-            AgentPath::EnvDir => base.join("etc").join("elevon").join("env"),
+            AgentPath::AppEnv(project, app, deployment_id) => {
+                let dir = AgentPath::UploadsDir.resolve();
+                let mut path = dir.join("env").join(project);
 
-            AgentPath::AppEnv(app, bypass_default) => {
-                if app == "default" && !*bypass_default && dev_root().is_none() {
-                    anyhow::bail!("App can't be named 'default'")
+                if let Some(app) = app {
+                    path = path.join(app);
                 }
-                AgentPath::EnvDir.resolve()?.join(format!("{app}.env"))
+
+                if let Some(deployment_id) = deployment_id {
+                    path = path.join(format!("dep-{deployment_id}"));
+                }
+
+                path.set_extension("env");
+                path
             }
 
             AgentPath::ProjectTlsDir(project) => {
-                base.join("etc").join("elevon").join("tls").join(project)
+                let dir = AgentPath::UploadsDir.resolve();
+                dir.join("tls").join(project)
             }
 
-            AgentPath::Socket => base.join("run").join("elevon-agent.sock"),
-
-            AgentPath::SystemdUnit(name) => {
-                base.join("etc").join("systemd").join("system").join(name)
+            AgentPath::ProxySocket => {
+                let dir = AgentPath::SocketDir.resolve();
+                dir.join("proxy.sock")
             }
-        };
 
-        Ok(p)
-    }
+            AgentPath::ApiSocket => {
+                let dir = AgentPath::SocketDir.resolve();
+                dir.join("agent.sock")
+            }
 
-    /// Ensure parent dirs exist.
-    pub fn ensure(&self) -> Result<PathBuf> {
-        let p = self.resolve()?;
-        if let Some(parent) = p.parent() {
-            create_dir_all(parent)?;
+            AgentPath::ApiSystemdPath => {
+                let dir = AgentPath::SystemdDir.resolve();
+                dir.join(API_SYSTEMD_SERVICE)
+            }
+
+            AgentPath::ProxySystemdPath => {
+                let dir = AgentPath::SystemdDir.resolve();
+                dir.join(PROXY_SYSTEMD_SERVICE)
+            }
         }
-        Ok(p)
     }
 
     pub fn ensure_dir(&self) -> Result<PathBuf> {
-        let p = self.resolve()?;
-        create_dir_all(p.clone())?;
-        Ok(p)
+        let path = self.resolve();
+        create_dir_all(&path)?;
+        Ok(path)
+    }
+
+    pub fn ensure_parent_dir(&self) -> Result<PathBuf> {
+        let path = self.resolve();
+
+        if let Some(parent) = path.parent() {
+            create_dir_all(parent)?;
+        }
+
+        Ok(path)
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::path::PathBuf;
+pub fn remove_files(
+    keep_database: bool,
+    keep_env_files: bool,
+    keep_systemd: bool,
+    temp_file_config: &str,
+) -> Result<()> {
+    let socket_dir = AgentPath::SocketDir.resolve();
+    let database_file_path = AgentPath::Database.resolve();
+    let uploads_dir = AgentPath::UploadsDir.resolve();
 
-    fn resolve_base_path(is_prod: bool) -> PathBuf {
-        match is_prod {
-            true => PathBuf::from("/"),
-            false => PathBuf::from("./devroot"),
+    let api_systemd_path = AgentPath::ApiSystemdPath.resolve();
+    let proxy_systemd_path = AgentPath::ProxySystemdPath.resolve();
+
+    let mut services = Vec::new();
+    if api_systemd_path.exists() {
+        services.push(API_SYSTEMD_SERVICE);
+    }
+    if proxy_systemd_path.exists() {
+        services.push(PROXY_SYSTEMD_SERVICE);
+    }
+
+    if !services.is_empty() {
+        println!("Stopping Elevon services...");
+        let status = Command::new("systemctl")
+            .args(["stop"])
+            .args(&services)
+            .status()?;
+
+        if !status.success() {
+            bail!("failed to stop Elevon services: {status}");
         }
     }
 
-    fn get_systemd_unit_path(base: PathBuf, name: String) -> PathBuf {
-        base.join("etc").join("systemd").join("system").join(name)
+    if !keep_systemd {
+        println!("Removing systemd units...");
+        if !services.is_empty() {
+            let status = Command::new("systemctl")
+                .args(["disable"])
+                .args(&services)
+                .status()?;
+
+            if !status.success() {
+                bail!("failed to disable Elevon services: {status}");
+            }
+        }
+
+        if api_systemd_path.exists() {
+            std::fs::remove_file(&api_systemd_path)?;
+        }
+        if proxy_systemd_path.exists() {
+            std::fs::remove_file(&proxy_systemd_path)?;
+        }
+        if Path::new(temp_file_config).exists() {
+            std::fs::remove_file(temp_file_config)?;
+        }
+
+        let status = Command::new("systemctl").args(["daemon-reload"]).status()?;
+
+        if !status.success() {
+            bail!("failed to reload systemd services: {status}");
+        }
     }
 
-    #[test]
-    fn test_base_path() {
-        let dev_base = resolve_base_path(false);
-        let prod_base = resolve_base_path(true);
-
-        let dev_systemd_unit_path = get_systemd_unit_path(dev_base, "test".to_string());
-        let prod_systemd_unit_path = get_systemd_unit_path(prod_base, "test".to_string());
-
-        assert_eq!(
-            dev_systemd_unit_path,
-            PathBuf::from("./devroot/etc/systemd/system/test")
-        );
-        assert_eq!(
-            prod_systemd_unit_path,
-            PathBuf::from("/etc/systemd/system/test")
-        );
+    if !keep_systemd && socket_dir.exists() {
+        println!("Removing runtime sockets...");
+        std::fs::remove_dir_all(socket_dir)?;
     }
+
+    if !keep_database {
+        println!("Removing database...");
+        if database_file_path.exists() {
+            std::fs::remove_file(&database_file_path)?;
+        }
+
+        if let Some(db_dir) = database_file_path.parent() {
+            let _ = std::fs::remove_dir(db_dir);
+        }
+    } else {
+        println!("Keeping database.");
+    }
+
+    if !keep_env_files && uploads_dir.exists() {
+        println!("Removing environment and TLS files...");
+        std::fs::remove_dir_all(uploads_dir)?;
+    } else if keep_env_files {
+        println!("Keeping environment and TLS files.");
+    }
+
+    if !keep_database && !keep_env_files {
+        println!("Removing remaining agent state...");
+        let state_dir = AgentPath::StateDir.resolve();
+        let _ = std::fs::remove_dir_all(state_dir);
+    }
+
+    println!("Elevon uninstalled.");
+    Ok(())
 }

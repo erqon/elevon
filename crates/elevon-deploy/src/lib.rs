@@ -23,36 +23,26 @@ pub async fn run_deploy_cli(arg: DeployArgs, command: Commands) -> anyhow::Resul
 
     match command {
         Commands::Init => unreachable!(),
+        Commands::Check => {
+            tracing::info!("Successfully passed config file check {}", &arg.config);
+        }
         Commands::Build(args) => {
-            config.run_build(&arg.config, args.push).await?;
+            let registry_credentials = config.registry.resolved_credentials()?;
+            config
+                .run_build(&registry_credentials, &arg.config, args.push)
+                .await?;
         }
         Commands::Push => {
             config.run_push().await?;
         }
         Commands::Deploy(args) => {
-            config.run_deploy(&agent_client, &args.apps).await?;
-        }
-        Commands::Env { args, subcommand } => {
-            let selected = config.get_selected_apps(&args.apps)?;
-
             let registry_credentials = config.registry.resolved_credentials()?;
-            let root_vars = match &config.env {
-                Some(env_vars) => Some(env_vars.resolved_credentials()?),
-                None => None,
-            };
-
-            subcommand
-                .run(
-                    &config.name,
-                    &agent_client,
-                    selected,
-                    &registry_credentials,
-                    root_vars,
-                )
+            config
+                .run_deploy(&agent_client, &args.apps, registry_credentials, &arg.config)
                 .await?;
         }
-        Commands::Check => {
-            tracing::info!("Successfully passed config file check {}", &arg.config);
+        Commands::Rollback(args) => {
+            config.run_rollback(&agent_client, &args.apps).await?;
         }
     }
 

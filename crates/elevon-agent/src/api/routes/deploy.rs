@@ -1,33 +1,31 @@
-use std::sync::Arc;
-
 use axum::{Json, Router, extract::State, routing::post};
-use elevon_contracts::deploy::{AppDeployPayload, StreamEvent};
+use elevon_contracts::deploy::{AppDeployPayload, AppRollbackPayload, StreamEvent};
 
 use crate::{
     api::{
         db::models::AuthKey,
-        state::AppState,
-        stream::{StreamResponse, create_stream_channel, emit, stream_response},
+        state::SharedApiState,
+        stream::{StreamResponse, StreamSender, create_stream_channel, emit, stream_response},
     },
-    image::deploy_apps,
+    image::{deploy_apps, rollback_apps},
 };
 
-pub fn router() -> Router<Arc<AppState>> {
-    Router::new().route("/", post(deploy))
+pub fn router() -> Router<SharedApiState> {
+    Router::new()
+        .route("/", post(deploy))
+        .route("/rollback", post(rollback))
 }
 
-async fn deploy(
-    _: AuthKey,
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<AppDeployPayload>,
-) -> StreamResponse {
+fn spawn_streaming_task<F, Fut>(op: F) -> StreamResponse
+where
+    F: FnOnce(StreamSender) -> Fut + Send + 'static,
+    Fut: Future<Output = anyhow::Result<()>> + Send + 'static,
+{
     let (tx, rx) = create_stream_channel();
-
     let tx_for_task = tx.clone();
-    let payload_for_task = payload;
 
     tokio::spawn(async move {
-        if let Err(err) = deploy_apps(&tx, state, payload_for_task.apps).await {
+        if let Err(err) = op(tx_for_task.clone()).await {
             emit(
                 &tx_for_task,
                 StreamEvent::Error {
@@ -41,4 +39,20 @@ async fn deploy(
     });
 
     stream_response(rx)
+}
+
+async fn deploy(
+    _: AuthKey,
+    State(state): State<SharedApiState>,
+    Json(payload): Json<AppDeployPayload>,
+) -> StreamResponse {
+    spawn_streaming_task(move |tx| async move { deploy_apps(&tx, state, payload).await })
+}
+
+async fn rollback(
+    _: AuthKey,
+    State(state): State<SharedApiState>,
+    Json(payload): Json<AppRollbackPayload>,
+) -> StreamResponse {
+    spawn_streaming_task(move |tx| async move { rollback_apps(&tx, state, payload).await })
 }

@@ -1,3 +1,4 @@
+pub mod app;
 pub mod elevon;
 pub mod env;
 pub mod registry;
@@ -5,16 +6,60 @@ pub mod registry;
 use std::collections::HashMap;
 
 use anyhow::Result;
-use elevon_config::{ConfigError, ElevonConfig, ResolveEnvCredentials, resolve_env_or_literal};
+use elevon_config::{ElevonConfig, ResolveEnvCredentials};
 use elevon_contracts::deploy::{AppRole, TlsConfig};
 use serde::Deserialize;
 
-use crate::{agent::AgentClient, config::env::EnvConfig};
+use crate::{
+    agent::AgentClient,
+    config::{app::AppConfig, env::EnvConfig, registry::RegistryConfig},
+};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct RoutingConfig {
+    pub domain: String,
+    pub port: u16,
+    pub tls: Option<TlsConfig>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum BuildConfig {
+    Path(String),
+    Options(BuildOptions),
+}
+
+impl Default for BuildConfig {
+    fn default() -> Self {
+        BuildConfig::Path(".".to_string())
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(default)]
+pub struct BuildOptions {
+    pub path: String,
+    pub dockerfile: Option<String>,
+}
+
+impl Default for BuildOptions {
+    fn default() -> Self {
+        Self {
+            path: ".".to_string(),
+            dockerfile: None,
+        }
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
 pub struct Config {
     pub name: String,
     pub image: String,
+
+    #[serde(default = "Config::default_keep_releases")]
+    pub keep_releases: Option<u8>,
 
     pub elevon: elevon::ElevonConfig,
 
@@ -24,22 +69,45 @@ pub struct Config {
 
     pub routing: RoutingConfig,
 
-    #[serde(default)]
     pub env: Option<EnvConfig>,
 
-    #[serde(default)]
     pub apps: HashMap<String, AppConfig>,
 }
 
 impl ElevonConfig for Config {}
 
 impl Config {
-    pub async fn run_build(&self, config_path: &str, push: bool) -> Result<()> {
-        crate::image::build_image(&self.image, &self.registry.server, &self.build, config_path)
-            .await?;
+    pub fn default_keep_releases() -> Option<u8> {
+        Some(5)
+    }
 
-        if push {
+    pub fn prepare_project_env_vars(
+        &self,
+        registry_config: RegistryConfig,
+    ) -> Result<HashMap<String, String>> {
+        let mut vars = self
+            .env
+            .as_ref()
+            .map_or_else(|| Ok(HashMap::default()), |env| env.resolved_credentials())?;
+
+        vars.extend(registry_config.vars());
+
+        Ok(vars)
+    }
+
+    pub async fn run_build(
+        &self,
+        registry_config: &RegistryConfig,
+        config_path: &str,
+        push: bool,
+    ) -> Result<()> {
+        let built =
+            crate::image::build_image(registry_config, &self.build, &self.image, config_path)
+                .await?;
+
+        if built && push {
             self.run_push().await?;
+            return Ok(());
         }
 
         Ok(())
@@ -51,7 +119,7 @@ impl Config {
         Ok(())
     }
 
-    pub fn get_selected_apps(&self, arg_apps: &[String]) -> Result<Vec<(String, AppConfig)>> {
+    fn get_selected_apps(&self, arg_apps: &[String]) -> Result<Vec<(String, AppConfig)>> {
         if arg_apps.is_empty() {
             if !self.apps.is_empty() {
                 return Ok(self
@@ -72,8 +140,8 @@ impl Config {
                     "web".to_string(),
                     AppConfig {
                         role: AppRole::Web,
-                        env: None,
                         tls: self.routing.tls.clone(),
+                        ..Default::default()
                     },
                 )]);
             }
@@ -99,63 +167,31 @@ impl Config {
             .collect()
     }
 
-    pub async fn run_deploy(&self, agent_client: &AgentClient, app_names: &[String]) -> Result<()> {
+    pub async fn run_deploy(
+        &self,
+        agent_client: &AgentClient,
+        app_names: &[String],
+        registry_config: RegistryConfig,
+        config_path: &str,
+    ) -> Result<()> {
         let selected = self.get_selected_apps(app_names)?;
-        agent_client.push_deploy(self, selected).await?;
+
+        self.run_build(&registry_config, config_path, true).await?;
+
+        agent_client
+            .push_deploy(self, selected, registry_config)
+            .await?;
+
         Ok(())
     }
-}
 
-#[derive(Debug, Deserialize)]
-pub struct RoutingConfig {
-    pub domain: String,
-    pub port: u16,
-    pub tls: Option<TlsConfig>,
-}
-
-impl ResolveEnvCredentials for RoutingConfig {
-    type Output = HashMap<String, String>;
-
-    fn resolved_credentials(&self) -> Result<Self::Output, ConfigError> {
-        let mut resolved = HashMap::new();
-
-        if let Some(tls) = &self.tls {
-            resolved.insert("TLS_CERT".to_string(), resolve_env_or_literal(&tls.cert)?);
-            resolved.insert("TLS_KEY".to_string(), resolve_env_or_literal(&tls.key)?);
-        }
-
-        Ok(resolved)
+    pub async fn run_rollback(
+        &self,
+        agent_client: &AgentClient,
+        app_names: &[String],
+    ) -> Result<()> {
+        let selected = self.get_selected_apps(app_names)?;
+        agent_client.push_rollback(self, selected).await?;
+        Ok(())
     }
-}
-
-#[derive(Debug, Deserialize, Clone)]
-#[serde(untagged)]
-pub enum BuildConfig {
-    Path(String),
-    Options(BuildOptions),
-}
-
-impl Default for BuildConfig {
-    fn default() -> Self {
-        BuildConfig::Path(".".to_string())
-    }
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct BuildOptions {
-    pub path: String,
-    #[serde(default)]
-    pub dockerfile: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct AppConfig {
-    #[serde(default)]
-    pub role: AppRole,
-
-    #[serde(default)]
-    pub env: Option<EnvConfig>,
-
-    #[serde(skip)]
-    pub tls: Option<TlsConfig>,
 }

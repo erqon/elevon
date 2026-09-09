@@ -26,22 +26,23 @@ bytes = "1.12.1"
 clap = { version = "4.6.6", features = ["color", "derive"] }
 dotenvy = "0.15.7"
 futures-util = "0.3.34"
-git-version = "0.3.9"
 jiff = { version = "0.2.35", features = ["serde"] }
 reqwest = { version = "0.13.4", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.151"
+sha2 = "0.11.0"
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros"] }
-toasty = { version = "0.9.0", default-features = false, features = [
+tokio-util = "0.7.19"
+toasty = { version = "0.10.0", default-features = false, features = [
   "jiff",
   "turso",
 ] }
-toasty-cli = "0.9.0"
-toasty-driver-turso = "0.9.0"
-tower-http = { version = "0.7.0", features = ["trace"] }
+toasty-cli = "0.10.0"
+toasty-driver-turso = "0.10.0"
+tower-http = { version = "0.7.1", features = ["trace"] }
 tracing = "0.1.44"
 tracing-indicatif = "0.3.14"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 thiserror = "2.0.20"
-uuid = { version = "1.24.1", features = ["v7"] }
+uuid = { version = "1.26.0", features = ["v7"] }
 
