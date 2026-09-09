@@ -4,8 +4,9 @@ Elevon is an agent-driven deployment and container management system for remote
 VMs. It lets you build, publish, deploy, route, and roll back containerized
 applications without requiring SSH access to the host during normal operation.
 
-Elevon is currently in beta development. The project is being shaped around a
-small operational surface, explicit configuration, and reliable rollbacks.
+> [!IMPORTANT] 
+> Elevon is beta software.
+> Only Linux is supported for now.
 
 ## What It Is
 
