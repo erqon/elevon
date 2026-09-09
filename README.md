@@ -94,7 +94,7 @@ elevon:
     key: $AGENT_KEY
 
 registry:
-  # server: registry-server-url  # Defaults to ghcr.io
+  server: ghcr.io
   username: $GHCR_USERNAME
   password: $GHCR_PASSWORD
 
