@@ -20,7 +20,7 @@ const STYLES: Styles = Styles::styled()
 )]
 pub struct Cli {
     #[command(flatten)]
-    pub deploy_args: Option<elevon_deploy::cli::DeployArgs>,
+    pub deploy_args: elevon_deploy::cli::DeployArgs,
 
     #[command(subcommand)]
     pub deploy_command: Option<elevon_deploy::cli::Commands>,

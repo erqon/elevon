@@ -17,19 +17,26 @@ pub async fn run_deploy_cli(arg: DeployArgs, command: Commands) -> anyhow::Resul
         return cli::init::run();
     }
 
-    let config = Config::from_file(&arg.config)?;
+    let config_path = match (&arg.config, &arg.project) {
+        (Some(path), None) => path.clone(),
+        (None, Some(project)) => format!(".elevon/deploy.{project}.yml"),
+        (None, None) => ".elevon/deploy.yml".to_string(),
+        (Some(_), Some(_)) => unreachable!("clap rejects conflicting arguments"),
+    };
+
+    let config = Config::from_file(&config_path)?;
     let agent_credentials = config.elevon.agent.resolved_credentials()?;
     let agent_client = AgentClient::new(&agent_credentials.url, &agent_credentials.key)?;
 
     match command {
         Commands::Init => unreachable!(),
         Commands::Check => {
-            tracing::info!("Successfully passed config file check {}", &arg.config);
+            tracing::info!("Successfully passed config file check {}", &config_path);
         }
         Commands::Build(args) => {
             let registry_credentials = config.registry.resolved_credentials()?;
             config
-                .run_build(&registry_credentials, &arg.config, args.push)
+                .run_build(&registry_credentials, &config_path, args.push)
                 .await?;
         }
         Commands::Push => {
@@ -38,7 +45,12 @@ pub async fn run_deploy_cli(arg: DeployArgs, command: Commands) -> anyhow::Resul
         Commands::Deploy(args) => {
             let registry_credentials = config.registry.resolved_credentials()?;
             config
-                .run_deploy(&agent_client, &args.apps, registry_credentials, &arg.config)
+                .run_deploy(
+                    &agent_client,
+                    &args.apps,
+                    registry_credentials,
+                    &config_path,
+                )
                 .await?;
         }
         Commands::Rollback(args) => {

@@ -32,18 +32,18 @@ pub struct DeployArgs {
     #[arg(
         short,
         long,
-        default_value = ".elevon/deploy.yml",
-        help = "Path to the deploy configuration file"
+        conflicts_with = "config",
+        help = "Project name used to find deploy.<name>.yml"
     )]
-    pub config: String,
-}
+    pub project: Option<String>,
 
-impl Default for DeployArgs {
-    fn default() -> Self {
-        Self {
-            config: ".elevon/deploy.yml".to_string(),
-        }
-    }
+    #[arg(
+        short,
+        long,
+        conflicts_with = "project",
+        help = "Path to the deploy configuration file (defaults to .elevon/deploy.yml)"
+    )]
+    pub config: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
