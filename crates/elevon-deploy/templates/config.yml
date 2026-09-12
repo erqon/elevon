@@ -5,10 +5,12 @@ image: project/project-name
 # keep_releases: 5
 
 # Config values below can be read from environment variables marked with $VALUE_NAME:
-# - agent.url
-# - agent.key
+# - elevon.agent.url
+# - elevon.agent.key
 # - registry.username
 # - registry.password
+# - routing.tls.cert
+# - routing.tls.key
 
 elevon:
   agent:

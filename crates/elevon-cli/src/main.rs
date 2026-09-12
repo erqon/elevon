@@ -8,8 +8,7 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     if let Some(command) = cli.deploy_command {
-        let args = cli.deploy_args.unwrap_or_default();
-        elevon_deploy::run_deploy_cli(args, command).await?;
+        elevon_deploy::run_deploy_cli(cli.deploy_args, command).await?;
     }
 
     Ok(())
