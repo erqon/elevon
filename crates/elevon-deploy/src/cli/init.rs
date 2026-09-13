@@ -1,8 +1,6 @@
 use std::{fs, path::PathBuf};
 
 pub fn run() -> anyhow::Result<()> {
-    tracing::info!("Initializing config file ...");
-
     let config_dir = PathBuf::from(".elevon");
 
     if config_dir.exists() {

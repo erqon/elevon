@@ -89,10 +89,14 @@ impl AgentClient {
                     .transpose()?;
 
                 let web_app: Option<WebApp> = match &cfg.role {
-                    AppRole::Web => Some(WebApp {
-                        domain: config.routing.domain.clone(),
-                        port: config.routing.port,
-                    }),
+                    AppRole::Web => {
+                        let resolved_routing = config.routing.resolved_credentials()?;
+
+                        Some(WebApp {
+                            domain: resolved_routing.domain.clone(),
+                            port: resolved_routing.port,
+                        })
+                    }
                     AppRole::Worker => None,
                 };
 
