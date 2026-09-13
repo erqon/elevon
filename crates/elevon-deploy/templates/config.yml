@@ -9,6 +9,7 @@ image: project/project-name
 # - elevon.agent.key
 # - registry.username
 # - registry.password
+# - routing.port
 # - routing.tls.cert
 # - routing.tls.key
 
