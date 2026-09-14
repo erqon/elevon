@@ -1,3 +1,4 @@
+use anyhow::Context;
 use elevon_config::{ElevonConfig, ResolveEnvCredentials};
 
 use crate::{
@@ -25,16 +26,28 @@ pub async fn run_deploy_cli(arg: DeployArgs, command: Commands) -> anyhow::Resul
     };
 
     let config = Config::from_file(&config_path)?;
-    let agent_credentials = config.elevon.agent.resolved_credentials()?;
-    let agent_client = AgentClient::new(&agent_credentials.url, &agent_credentials.key)?;
+    let agent_credentials = config
+        .elevon
+        .agent
+        .resolved_credentials()
+        .context("failed to resolve agent credentials")?;
+
+    let agent_client = AgentClient::new(&agent_credentials.url, &agent_credentials.key)
+        .context("failed to create agent client")?;
+
+    // TODO: Do the resolve_credentials in here so the `check` command will check the environment variables too
+    let registry_credentials = config
+        .registry
+        .resolved_credentials()
+        .context("failed to resolve registry credentials")?;
 
     match command {
         Commands::Init => unreachable!(),
         Commands::Check => {
+            // TODO: Check for environment variables too
             tracing::info!("Successfully passed config file check {}", &config_path);
         }
         Commands::Build(args) => {
-            let registry_credentials = config.registry.resolved_credentials()?;
             config
                 .run_build(&registry_credentials, &config_path, args.push)
                 .await?;
@@ -43,7 +56,6 @@ pub async fn run_deploy_cli(arg: DeployArgs, command: Commands) -> anyhow::Resul
             config.run_push().await?;
         }
         Commands::Deploy(args) => {
-            let registry_credentials = config.registry.resolved_credentials()?;
             config
                 .run_deploy(
                     &agent_client,

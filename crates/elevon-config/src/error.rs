@@ -10,4 +10,6 @@ pub enum ConfigError {
     Parse(#[from] serde_yml::Error),
     #[error("environment variable `{name}` is not set")]
     MissingEnv { name: String },
+    #[error("invalid value for `{field}`: `{value}`")]
+    InvalidValue { field: String, value: String },
 }

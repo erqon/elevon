@@ -6,7 +6,7 @@ pub mod registry;
 use std::collections::HashMap;
 
 use anyhow::Result;
-use elevon_config::{ElevonConfig, ResolveEnvCredentials};
+use elevon_config::{ConfigError, ElevonConfig, ResolveEnvCredentials, resolve_env_or_literal};
 use elevon_contracts::deploy::{AppRole, TlsConfig};
 use serde::Deserialize;
 
@@ -15,12 +15,57 @@ use crate::{
     config::{app::AppConfig, env::EnvConfig, registry::RegistryConfig},
 };
 
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum PortConfig {
+    Literal(u16),
+    Env(String),
+}
+
+impl Default for PortConfig {
+    fn default() -> Self {
+        Self::Literal(8000)
+    }
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 pub struct RoutingConfig {
     pub domain: String,
+    pub port: PortConfig,
+    pub tls: Option<TlsConfig>,
+}
+
+#[derive(Debug)]
+pub struct ResolvedRoutingConfig {
+    pub domain: String,
     pub port: u16,
     pub tls: Option<TlsConfig>,
+}
+
+impl ResolveEnvCredentials for RoutingConfig {
+    type Output = ResolvedRoutingConfig;
+
+    fn resolved_credentials(&self) -> Result<Self::Output, elevon_config::ConfigError> {
+        let port = match &self.port {
+            PortConfig::Literal(port) => *port,
+            PortConfig::Env(key) => {
+                let value = resolve_env_or_literal(key)?;
+                value
+                    .parse::<u16>()
+                    .map_err(|_| ConfigError::InvalidValue {
+                        field: "routing.port".into(),
+                        value,
+                    })?
+            }
+        };
+
+        Ok(ResolvedRoutingConfig {
+            domain: self.domain.clone(),
+            port,
+            tls: self.tls.clone(),
+        })
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]

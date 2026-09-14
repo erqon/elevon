@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use elevon_config::ResolveEnvCredentials;
 use elevon_contracts::deploy::{
     AppDeployPayload, AppPayload, AppRole, AppRollback, AppRollbackPayload, AppRuntimeOptions,
@@ -25,8 +25,8 @@ pub struct AgentClient {
 }
 
 impl AgentClient {
-    pub fn new(base_url: &str, api_key: &str) -> Result<Self, reqwest::Error> {
-        let base_url = Url::parse(base_url).expect("Invalid base URL configuration");
+    pub fn new(base_url: &str, api_key: &str) -> Result<Self> {
+        let base_url = Url::parse(base_url).context("[elevon.agent.url] invalid base URL")?;
 
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(10))
@@ -89,10 +89,14 @@ impl AgentClient {
                     .transpose()?;
 
                 let web_app: Option<WebApp> = match &cfg.role {
-                    AppRole::Web => Some(WebApp {
-                        domain: config.routing.domain.clone(),
-                        port: config.routing.port,
-                    }),
+                    AppRole::Web => {
+                        let resolved_routing = config.routing.resolved_credentials()?;
+
+                        Some(WebApp {
+                            domain: resolved_routing.domain.clone(),
+                            port: resolved_routing.port,
+                        })
+                    }
                     AppRole::Worker => None,
                 };
 
