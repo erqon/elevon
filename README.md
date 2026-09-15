@@ -146,7 +146,6 @@ Use [`crates/elevon-deploy/templates/config.yml`](crates/elevon-deploy/templates
 as the full template, including comments about defaults and environment
 variable expansion.
 
-
 The current release artifacts are built for Linux `x86_64`. Other platform
 names are recognized by the archive resolver, but matching release artifacts
 must exist before those platforms are usable.
