@@ -7,11 +7,10 @@ import viteReact from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
 import { defineConfig, type PluginOption } from "vite";
 
-// Deno workspace: npm pkgs live under <repo>/node_modules/.deno — Vite won't
-// discover that from deno.json alone, so allow the monorepo root explicitly.
 const configDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(configDir, "../..");
 
+// https://github.com/denoland/deno-vite-plugin/pull/102#issuecomment-5102178909
 const tanstackVirtualIdWorkaround: PluginOption = {
   name: "tanstack-virtual-id-workaround",
   enforce: "pre" as const,
