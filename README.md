@@ -139,11 +139,11 @@ variable expansion.
 Release installers are available in [`scripts`](scripts):
 
 ```bash
-# Agent: system-wide installation, requires root
-sudo bash scripts/install-agent.sh
+# Agent: system-wide installation
+curl -fsSL https://elevon.erqon.dev/install-agent.sh | sudo bash
 
 # CLI: current-user installation
-bash scripts/install-cli.sh
+curl -fsSL https://elevon.erqon.dev/install-cli.sh | bash
 ```
 
 The current release artifacts are built for Linux `x86_64`. Other platform
