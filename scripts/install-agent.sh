@@ -9,8 +9,6 @@ CRATE_NAME="elevon-agent"
 BIN_NAME="elevon-agent"
 INSTALL_DIR="${ELEVON_INSTALL_DIR:-/usr/local/bin}"
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-
 die() {
     echo "error: $*" >&2
     exit 1
@@ -40,6 +38,28 @@ release_url() {
     echo "https://github.com/${REPO_PATH}/releases/download/elevon-agent-v${version}/${asset}"
 }
 
+resolve_asset() {
+    local version="$1"
+    local os arch
+
+    os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+    arch="$(uname -m)"
+
+    case "$os" in
+    linux | darwin) ;;
+    mingw* | msys* | cygwin* | windows*) die "Windows is not supported" ;;
+    *) die "unsupported operating system: $os" ;;
+    esac
+
+    case "$arch" in
+    x86_64 | amd64) arch="x86_64" ;;
+    arm64 | aarch64) arch="aarch64" ;;
+    *) die "unsupported architecture: $arch" ;;
+    esac
+
+    echo "${CRATE_NAME}-v${version}-${os}-${arch}.tar.gz"
+}
+
 main() {
     [[ "$EUID" -eq 0 ]] || die "agent installation must be run as root (try: sudo $0)"
 
@@ -47,20 +67,21 @@ main() {
     need tar
     need install
 
-    local version asset url tmp_dir source
+    local version asset url tmp_dir source archive_binary
     version="$(resolve_version)"
     [[ -n "$version" ]] || die "could not resolve the latest agent release"
 
-    asset="$(bash "$SCRIPT_DIR/resolve-release-archive.sh" "$CRATE_NAME" "$version")"
+    asset="$(resolve_asset "$version")"
     url="$(release_url "$version" "$asset")"
     tmp_dir="$(mktemp -d)"
-    trap 'rm -rf "$tmp_dir"' EXIT
+    trap 'rm -rf "${tmp_dir:-}"' EXIT
 
     echo "Downloading ${url}"
     curl --fail --location --show-error "$url" --output "$tmp_dir/$asset"
     tar -xzf "$tmp_dir/$asset" -C "$tmp_dir"
 
-    source="$(find "$tmp_dir" -type f -name "$BIN_NAME" -print -quit)"
+    archive_binary="${asset%.tar.gz}"
+    source="$(find "$tmp_dir" -type f \( -name "$archive_binary" -o -name "$BIN_NAME" \) -print -quit)"
     [[ -n "$source" ]] || die "binary '$BIN_NAME' not found in archive"
 
     mkdir -p "$INSTALL_DIR"
@@ -69,8 +90,9 @@ main() {
     echo "Installed $INSTALL_DIR/$BIN_NAME"
     if command -v "$BIN_NAME" >/dev/null; then
         echo "Ready: $(command -v "$BIN_NAME")"
+        echo "Run \`elevon-agent --help\` to view commands"
     else
-        echo "Add $HOME/.local/bin to PATH to use $BIN_NAME."
+        echo "Add $INSTALL_DIR to PATH, then run \`elevon-agent --help\` to view commands."
     fi
 }
 

@@ -49,6 +49,18 @@ connections from the CLI or proxy.
 - Agent auth-key management.
 - Retention of a configurable number of previous releases.
 
+## Installation
+
+Install the agent on the target VM and the CLI on your development machine:
+
+```bash
+# Agent: system-wide installation
+curl -fsSL https://elevon.erqon.dev/install-agent.sh | sudo bash
+
+# CLI: current-user installation
+curl -fsSL https://elevon.erqon.dev/install-cli.sh | bash
+```
+
 ## CLI
 
 The deployment CLI uses `.elevon/deploy.yml` by default:
@@ -133,18 +145,6 @@ apps:
 Use [`crates/elevon-deploy/templates/config.yml`](crates/elevon-deploy/templates/config.yml)
 as the full template, including comments about defaults and environment
 variable expansion.
-
-## Installation
-
-Release installers are available in [`scripts`](scripts):
-
-```bash
-# Agent: system-wide installation, requires root
-sudo bash scripts/install-agent.sh
-
-# CLI: current-user installation
-bash scripts/install-cli.sh
-```
 
 The current release artifacts are built for Linux `x86_64`. Other platform
 names are recognized by the archive resolver, but matching release artifacts

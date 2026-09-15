@@ -3,13 +3,6 @@ name: CI
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - "crates/**"
-      - "apps/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "deno.json"
-      - "deno.lock"
 
 permissions:
   contents: read
