@@ -1,0 +1,56 @@
+name: Release Deploy
+
+on:
+  push:
+    tags: ["elevon-deploy-v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (e.g. 0.1.0)"
+        required: true
+        type: string
+
+env:
+  CRATE_NAME: elevon-deploy
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.build.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/build-crate
+        id: build
+        with:
+          name: ${{ env.CRATE_NAME }}
+          binary: ${{ env.CRATE_NAME }}
+          version: ${{ inputs.version }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.CRATE_NAME }}-linux
+          path: ${{ steps.build.outputs.archive }}
+
+  release:
+    needs: [build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ env.CRATE_NAME }}-*
+          merge-multiple: true
+          path: dist
+
+      - uses: ./.github/actions/release-crate
+        with:
+          tag: ${{ needs.build-linux.outputs.tag }}
+          files: dist/*.tar.gz
