@@ -21,8 +21,7 @@ use pingora::{
 };
 
 use crate::{
-    env::ElevonEnv,
-    proxy::{socket::SocketControl, state::ProxyState},
+    cli::ProxyArgs, env::ElevonEnv, proxy::{socket::SocketControl, state::ProxyState},
 };
 
 pub struct RequestCtx {
@@ -179,7 +178,7 @@ impl BackgroundService for DrainJanitor {
     }
 }
 
-pub fn run_proxy(env: &ElevonEnv) -> anyhow::Result<()> {
+pub fn run_proxy(args: ProxyArgs, env: &ElevonEnv) -> anyhow::Result<()> {
     let proxy_state = ProxyState::new(env).context("failed to create proxy state")?;
 
     let config = ServerConf {

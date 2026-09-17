@@ -54,7 +54,7 @@ pub enum Commands {
     Uninstall(UninstallArgs),
 
     #[command(about = "Run the reverse proxy for the agent")]
-    Proxy,
+    Proxy(ProxyArgs),
 
     #[command(about = "Run the agent HTTP control API")]
     Api,
@@ -111,4 +111,13 @@ pub struct UninstallArgs {
         help = "Keep the environment files"
     )]
     pub keep_env_files: bool,
+}
+
+#[derive(Args)]
+pub struct ProxyArgs {
+    #[arg(
+        long,
+        help = "Run the proxy on <PORT>, this also makes the proxy run as HTTP instead of HTTPS"
+    )]
+    pub port: Option<u16>,
 }
