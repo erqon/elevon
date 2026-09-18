@@ -23,13 +23,13 @@ pub struct ApiState {
 }
 
 impl ApiState {
-    pub async fn new(env: &ElevonEnv) -> Result<Self> {
-        let db = AgentDb::new(env.turso_remote_url.as_deref()).await?;
+    pub async fn new(agent_name: &str, env: &ElevonEnv) -> Result<Self> {
+        let db = AgentDb::new(agent_name, env.turso_remote_url.as_deref()).await?;
         let docker = bollard::Docker::connect_with_defaults()?;
         let env = RwLock::new(env.clone());
 
-        let proxy_socket = Arc::new(Socket::new(SocketType::Proxy)?);
-        let api_socket = Arc::new(Socket::new(SocketType::Api)?);
+        let proxy_socket = Arc::new(Socket::new(agent_name, SocketType::Proxy)?);
+        let api_socket = Arc::new(Socket::new(agent_name, SocketType::Api)?);
 
         let state = Self {
             db,
@@ -92,6 +92,7 @@ impl ApiState {
             };
 
             let app_name = app.name.clone();
+            let agent_name = app.agent.clone();
             let project_name = app.project.clone();
 
             let options = InspectContainerOptionsBuilder::default()
@@ -137,6 +138,7 @@ impl ApiState {
 
                 let route_config = DeployAppData {
                     id: deployment.id.to_string(),
+                    agent: agent_name,
                     project: project_name,
                     name: app_name,
                     state,

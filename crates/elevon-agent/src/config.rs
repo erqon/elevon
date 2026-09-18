@@ -23,7 +23,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn setup(&self) -> anyhow::Result<()> {
+    pub fn setup(&self, agent_name: &str) -> anyhow::Result<()> {
         if let Some(tls) = &self.agent.tls {
             let cert_bytes = std::fs::read(tls.cert.clone())?;
             let key_bytes = std::fs::read(tls.key.clone())?;
@@ -33,8 +33,8 @@ impl Config {
                 app: None,
             };
 
-            write_tls_file(&cert_bytes, TlsType::Cert, options.clone())?;
-            write_tls_file(&key_bytes, TlsType::Key, options)?;
+            write_tls_file(agent_name, &cert_bytes, TlsType::Cert, options.clone())?;
+            write_tls_file(agent_name, &key_bytes, TlsType::Key, options)?;
         }
 
         Ok(())

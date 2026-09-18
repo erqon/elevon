@@ -13,8 +13,8 @@ use elevon_contracts::deploy::TlsType;
 static API_SYSTEMD_SERVICE: &str = "elevon-agent-api.service";
 static PROXY_SYSTEMD_SERVICE: &str = "elevon-agent-proxy.service";
 
-pub fn get_database_path() -> Result<PathBuf> {
-    let db_path = AgentPath::Database.ensure_parent_dir()?;
+pub fn get_database_path(agent_name: &str) -> Result<PathBuf> {
+    let db_path = AgentPath::Database(agent_name).ensure_parent_dir()?;
 
     OpenOptions::new()
         .create(true)
@@ -54,15 +54,20 @@ impl AppEnvOptions {
     }
 }
 
-pub fn get_app_env(options: AppEnvOptions) -> Result<PathBuf> {
+pub fn get_app_env(agent_name: &str, options: AppEnvOptions) -> Result<PathBuf> {
     let bypass = options.bypass_default.unwrap_or(false);
 
     if options.project == "default" && !bypass && dev_root().is_none() {
         bail!("App can't be named 'default'");
     }
 
-    let path = AgentPath::AppEnv(options.project, options.app, options.deployment_id)
-        .ensure_parent_dir()?;
+    let path = AgentPath::AppEnv(
+        agent_name,
+        options.project,
+        options.app,
+        options.deployment_id,
+    )
+    .ensure_parent_dir()?;
 
     let file = OpenOptions::new()
         .create(true)
@@ -76,8 +81,8 @@ pub fn get_app_env(options: AppEnvOptions) -> Result<PathBuf> {
     Ok(path)
 }
 
-pub fn load_app_env(options: AppEnvOptions) -> Result<HashMap<String, String>> {
-    let app_path = get_app_env(options)?;
+pub fn load_app_env(agent_name: &str, options: AppEnvOptions) -> Result<HashMap<String, String>> {
+    let app_path = get_app_env(agent_name, options)?;
 
     let mut env = HashMap::new();
     env.extend(read_env_file(app_path)?);
@@ -85,19 +90,24 @@ pub fn load_app_env(options: AppEnvOptions) -> Result<HashMap<String, String>> {
     Ok(env)
 }
 
-pub fn load_app_string_env(options: AppEnvOptions) -> Result<Vec<String>> {
-    Ok(load_app_env(options)?
+pub fn load_app_string_env(agent_name: &str, options: AppEnvOptions) -> Result<Vec<String>> {
+    Ok(load_app_env(agent_name, options)?
         .iter()
         .map(|(key, val)| format!("{}={}", key, val))
         .collect())
 }
 
-pub fn add_app_env(key: String, value: String, options: AppEnvOptions) -> Result<()> {
-    let mut env = load_app_env(options.clone())?;
+pub fn add_app_env(
+    agent_name: &str,
+    key: String,
+    value: String,
+    options: AppEnvOptions,
+) -> Result<()> {
+    let mut env = load_app_env(agent_name, options.clone())?;
 
     env.insert(key, value);
 
-    let path = get_app_env(options).context("failed to resolve env file path")?;
+    let path = get_app_env(agent_name, options).context("failed to resolve env file path")?;
     write_env_file(&path, &env)
         .with_context(|| format!("failed to write env file {}", path.display()))?;
 
@@ -110,20 +120,25 @@ pub struct TlsOptions {
     pub app: Option<String>,
 }
 
-pub fn get_tls_file(ty: TlsType, options: TlsOptions) -> Result<PathBuf> {
+pub fn get_tls_file(agent_name: &str, ty: TlsType, options: TlsOptions) -> Result<PathBuf> {
     let file_dir_name = match options.app {
         Some(app) => format!("projects/{}/{app}", &options.project),
         None => options.project,
     };
 
-    let path = AgentPath::ProjectTlsDir(format!("{file_dir_name}/{}", ty.get_file()))
+    let path = AgentPath::ProjectTlsDir(agent_name, format!("{file_dir_name}/{}", ty.get_file()))
         .ensure_parent_dir()?;
 
     Ok(path)
 }
 
-pub fn write_tls_file(content: &[u8], ty: TlsType, options: TlsOptions) -> Result<()> {
-    let path = get_tls_file(ty, options)?;
+pub fn write_tls_file(
+    agent_name: &str,
+    content: &[u8],
+    ty: TlsType,
+    options: TlsOptions,
+) -> Result<()> {
+    let path = get_tls_file(agent_name, ty, options)?;
 
     OpenOptions::new()
         .create(true)
@@ -234,21 +249,21 @@ fn dev_root() -> Option<PathBuf> {
     }
 }
 
-pub enum AgentPath {
-    StateDir,
-    UploadsDir,
-    SocketDir,
+pub enum AgentPath<'c> {
+    StateDir(&'c str),
+    UploadsDir(&'c str),
+    SocketDir(&'c str),
     SystemdDir,
-    Database,
-    AppEnv(String, Option<String>, Option<String>),
-    ProjectTlsDir(String),
-    ProxySocket,
-    ApiSocket,
+    Database(&'c str),
+    AppEnv(&'c str, String, Option<String>, Option<String>),
+    ProjectTlsDir(&'c str, String),
+    ProxySocket(&'c str),
+    ApiSocket(&'c str),
     ApiSystemdPath,
     ProxySystemdPath,
 }
 
-impl AgentPath {
+impl AgentPath<'_> {
     pub fn resolve(&self) -> PathBuf {
         let base = match dev_root() {
             Some(root) => root,
@@ -256,24 +271,30 @@ impl AgentPath {
         };
 
         match self {
-            AgentPath::StateDir => base.join("var").join("lib").join("elevon-agent"),
+            AgentPath::StateDir(agent_name) => base
+                .join("var")
+                .join("lib")
+                .join("elevon-agent")
+                .join(agent_name),
 
-            AgentPath::UploadsDir => {
-                let dir = AgentPath::StateDir.resolve();
+            AgentPath::UploadsDir(agent_name) => {
+                let dir = AgentPath::StateDir(agent_name).resolve();
                 dir.join("uploads")
             }
 
-            AgentPath::SocketDir => base.join("run").join("elevon-agent"),
+            AgentPath::SocketDir(agent_name) => {
+                base.join("run").join("elevon-agent").join(agent_name)
+            }
 
             AgentPath::SystemdDir => base.join("etc").join("systemd").join("system"),
 
-            AgentPath::Database => {
-                let dir = AgentPath::StateDir.resolve();
+            AgentPath::Database(agent_name) => {
+                let dir = AgentPath::StateDir(agent_name).resolve();
                 dir.join("db").join("agent.db")
             }
 
-            AgentPath::AppEnv(project, app, deployment_id) => {
-                let dir = AgentPath::UploadsDir.resolve();
+            AgentPath::AppEnv(agent_name, project, app, deployment_id) => {
+                let dir = AgentPath::UploadsDir(agent_name).resolve();
                 let mut path = dir.join("env").join(project);
 
                 if let Some(app) = app {
@@ -288,18 +309,18 @@ impl AgentPath {
                 path
             }
 
-            AgentPath::ProjectTlsDir(project) => {
-                let dir = AgentPath::UploadsDir.resolve();
+            AgentPath::ProjectTlsDir(agent_name, project) => {
+                let dir = AgentPath::UploadsDir(agent_name).resolve();
                 dir.join("tls").join(project)
             }
 
-            AgentPath::ProxySocket => {
-                let dir = AgentPath::SocketDir.resolve();
+            AgentPath::ProxySocket(agent_name) => {
+                let dir = AgentPath::SocketDir(agent_name).resolve();
                 dir.join("proxy.sock")
             }
 
-            AgentPath::ApiSocket => {
-                let dir = AgentPath::SocketDir.resolve();
+            AgentPath::ApiSocket(agent_name) => {
+                let dir = AgentPath::SocketDir(agent_name).resolve();
                 dir.join("agent.sock")
             }
 
@@ -333,14 +354,15 @@ impl AgentPath {
 }
 
 pub fn remove_files(
+    agent_name: &str,
     keep_database: bool,
     keep_env_files: bool,
     keep_systemd: bool,
     temp_file_config: &str,
 ) -> Result<()> {
-    let socket_dir = AgentPath::SocketDir.resolve();
-    let database_file_path = AgentPath::Database.resolve();
-    let uploads_dir = AgentPath::UploadsDir.resolve();
+    let socket_dir = AgentPath::SocketDir(agent_name).resolve();
+    let database_file_path = AgentPath::Database(agent_name).resolve();
+    let uploads_dir = AgentPath::UploadsDir(agent_name).resolve();
 
     let api_systemd_path = AgentPath::ApiSystemdPath.resolve();
     let proxy_systemd_path = AgentPath::ProxySystemdPath.resolve();
@@ -422,7 +444,7 @@ pub fn remove_files(
 
     if !keep_database && !keep_env_files {
         println!("Removing remaining agent state...");
-        let state_dir = AgentPath::StateDir.resolve();
+        let state_dir = AgentPath::StateDir(agent_name).resolve();
         let _ = std::fs::remove_dir_all(state_dir);
     }
 

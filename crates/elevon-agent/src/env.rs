@@ -14,19 +14,19 @@ pub struct ElevonEnv {
 }
 
 impl ElevonEnv {
-    pub fn new(config: Config) -> Result<Self> {
+    pub fn new(agent_name: &str, config: Config) -> Result<Self> {
         let mut elevon_env = Self {
             agent_domain: config.agent.domain.clone(),
             agent_port: config.agent.port,
             proxy_port: config.proxy.and_then(|c| c.port),
             turso_remote_url: config.turso_remote_url,
         };
-        elevon_env.set_env_values()?;
+        elevon_env.set_env_values(agent_name)?;
         Ok(elevon_env)
     }
 
-    pub fn load() -> Result<Self> {
-        let vars = load_app_env(AppEnvOptions::elevon())?;
+    pub fn load(agent_name: &str) -> Result<Self> {
+        let vars = load_app_env(agent_name, AppEnvOptions::elevon())?;
         let mut env = Self::default();
 
         for key in ElevonEnvKey::all() {
@@ -50,12 +50,13 @@ impl ElevonEnv {
         Ok(())
     }
 
-    fn set_value(&mut self, key: ElevonEnvKey, value: String) -> Result<()> {
+    fn set_value(&mut self, agent_name: &str, key: ElevonEnvKey, value: String) -> Result<()> {
         let persisted = value.clone();
 
         self.apply_value(key, value)?;
 
         add_app_env(
+            agent_name,
             key.bare_name().to_string(),
             persisted,
             AppEnvOptions::elevon(),
@@ -64,16 +65,28 @@ impl ElevonEnv {
         Ok(())
     }
 
-    fn set_env_values(&mut self) -> Result<()> {
-        self.set_value(ElevonEnvKey::AgentDomain, self.agent_domain.clone())?;
-        self.set_value(ElevonEnvKey::AgentDomain, self.agent_port.to_string())?;
+    fn set_env_values(&mut self, agent_name: &str) -> Result<()> {
+        self.set_value(
+            agent_name,
+            ElevonEnvKey::AgentDomain,
+            self.agent_domain.clone(),
+        )?;
+        self.set_value(
+            agent_name,
+            ElevonEnvKey::AgentDomain,
+            self.agent_port.to_string(),
+        )?;
 
         if let Some(proxy_port) = self.proxy_port {
-            self.set_value(ElevonEnvKey::ProxyPort, proxy_port.to_string())?;
+            self.set_value(agent_name, ElevonEnvKey::ProxyPort, proxy_port.to_string())?;
         }
 
         if let Some(turso_remote_url) = &self.turso_remote_url {
-            self.set_value(ElevonEnvKey::TursoRemoteUrl, turso_remote_url.clone())?;
+            self.set_value(
+                agent_name,
+                ElevonEnvKey::TursoRemoteUrl,
+                turso_remote_url.clone(),
+            )?;
         }
 
         Ok(())

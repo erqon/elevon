@@ -59,7 +59,12 @@ fn prepare_env_variables(app_config: &AppPayload, deployment_id: &str) -> Result
 
     if let Some(vars) = &app_config.vars {
         for (key, value) in vars {
-            add_app_env(key.clone(), value.clone(), env_options.clone())?;
+            add_app_env(
+                &app_config.agent,
+                key.clone(),
+                value.clone(),
+                env_options.clone(),
+            )?;
         }
     }
 
@@ -67,6 +72,7 @@ fn prepare_env_variables(app_config: &AppPayload, deployment_id: &str) -> Result
 }
 
 struct PullImageOptions<'cfg, 'dep> {
+    pub agent: &'cfg str,
     pub project: &'cfg str,
     pub name: &'cfg str,
     pub image_ref: &'cfg str,
@@ -88,7 +94,7 @@ async fn pull_image(
     .await;
 
     let env_options = AppEnvOptions::app(options.project, options.name, options.deployment_id);
-    let project_env = load_app_env(env_options)?;
+    let project_env = load_app_env(options.agent, env_options)?;
 
     let (registry_server, registry_username, registry_password) = match (
         project_env.get("REGISTRY_SERVER"),
@@ -146,7 +152,7 @@ async fn run_container(
 
     // TODO: Currently it laods everything from the file but it should be fixed in a way like,
     // saving env keys in db and loading them up.
-    let app_env = load_app_string_env(app_env_options)?;
+    let app_env = load_app_string_env(&app_config.agent, app_env_options)?;
 
     let mut port_bindings = PortMap::new();
 
@@ -204,6 +210,7 @@ async fn _deploy_app(
     prepare_env_variables(options.app_config, &deployment.id.to_string())?;
 
     let pull_image_options = PullImageOptions {
+        agent: &options.app_config.agent,
         project: &options.app_config.project,
         name: &options.app_config.name,
         image_ref: &options.app_config.image_ref,
@@ -222,8 +229,18 @@ async fn _deploy_app(
             app: Some(options.app_config.name.clone()),
         };
 
-        write_tls_file(tls.cert.as_bytes(), TlsType::Cert, tls_options.clone())?;
-        write_tls_file(tls.key.as_bytes(), TlsType::Key, tls_options)?;
+        write_tls_file(
+            &options.app_config.agent,
+            tls.cert.as_bytes(),
+            TlsType::Cert,
+            tls_options.clone(),
+        )?;
+        write_tls_file(
+            &options.app_config.agent,
+            tls.key.as_bytes(),
+            TlsType::Key,
+            tls_options,
+        )?;
     }
 
     let container_id = run_container(docker, &deployment, options.app_config, options.port).await;
@@ -313,7 +330,7 @@ async fn prune_old_releases(
         }
 
         let env_options = AppEnvOptions::app(&app.project, &app.name, &old.id.to_string());
-        let _ = std::fs::remove_file(elevon_fs::agent::get_app_env(env_options)?);
+        let _ = std::fs::remove_file(elevon_fs::agent::get_app_env(&app.agent, env_options)?);
 
         if let Some(image_ref) = &old.image_ref {
             let still_referenced = Deployment::filter(

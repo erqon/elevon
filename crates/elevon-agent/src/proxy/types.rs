@@ -20,6 +20,7 @@ pub enum DeployAppState {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DeployAppData {
     pub id: String,
+    pub agent: String,
     pub project: String,
     pub name: String,
     pub state: DeployAppState,

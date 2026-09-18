@@ -15,6 +15,7 @@ image: project/project-name
 
 elevon:
   agent:
+    # name: production  # Defaults to `default`
     url: $AGENT_URL
     key: $AGENT_KEY
 

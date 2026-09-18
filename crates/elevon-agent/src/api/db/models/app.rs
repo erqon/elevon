@@ -15,6 +15,9 @@ pub struct App {
     pub name: String,
 
     #[index]
+    pub agent: String,
+
+    #[index]
     pub project: String,
 
     pub domain: Option<String>,

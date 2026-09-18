@@ -118,11 +118,11 @@ pub async fn run(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
     }
 
     let config = Config::from_file(cli_args.config).context("failed to load config")?;
-    config.setup().context("failed to setup configuration")?;
+    config.setup(&cli_args.name).context("failed to setup configuration")?;
 
-    ElevonEnv::new(config).context("failed to init agent env")?;
+    ElevonEnv::new(&cli_args.name, config).context("failed to init agent env")?;
 
-    let mut db = AgentDb::new(None)
+    let mut db = AgentDb::new(&cli_args.name, None)
         .await
         .context("failed to initialize the agent database")?
         .get();
@@ -170,7 +170,7 @@ pub async fn run(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
     Ok(())
 }
 
-pub fn uninstall(args: UninstallArgs) -> Result<()> {
+pub fn uninstall(agent_name: &str, args: UninstallArgs) -> Result<()> {
     // TODO: Stop any running containers
 
     println!("This will uninstall Elevon.");
@@ -198,6 +198,7 @@ pub fn uninstall(args: UninstallArgs) -> Result<()> {
     }
 
     elevon_fs::agent::remove_files(
+        agent_name,
         args.keep_database,
         args.keep_env_files,
         args.keep_systemd,

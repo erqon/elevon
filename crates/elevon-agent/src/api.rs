@@ -12,8 +12,8 @@ use tokio::task::JoinSet;
 
 use crate::{cli::ApiArgs, env::ElevonEnv, socket::Socket};
 
-pub async fn run_api_server(args: ApiArgs, env: &ElevonEnv) -> Result<()> {
-    let state = Arc::new(state::ApiState::new(env).await?);
+pub async fn run_api_server(agent_name: &str, args: ApiArgs, env: &ElevonEnv) -> Result<()> {
+    let state = Arc::new(state::ApiState::new(agent_name, env).await?);
     let cloned_state = state.clone();
 
     let router = routes::create_router(cloned_state);

@@ -19,8 +19,8 @@ pub enum KeyCommands {
 }
 
 impl KeyCommands {
-    pub async fn run(command: KeyCommands) -> Result<()> {
-        let api_socket = Socket::new(SocketType::Api)?;
+    pub async fn run(agent_name: &str, command: KeyCommands) -> Result<()> {
+        let api_socket = Socket::new(agent_name, SocketType::Api)?;
 
         match command {
             KeyCommands::Create(args) => {

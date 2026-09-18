@@ -17,7 +17,7 @@ fn main() {
 
 fn run() -> Result<()> {
     let cli = Cli::parse();
-    let env = ElevonEnv::load().context("failed to load agent environment")?;
+    let env = ElevonEnv::load(&cli.args.name).context("failed to load agent environment")?;
 
     match cli.command {
         Commands::Init => {
@@ -28,17 +28,24 @@ fn run() -> Result<()> {
                 .context("install command failed")?;
         }
         Commands::Uninstall(args) => {
-            elevon_agent::cli::install::uninstall(args).context("uninstall command failed")?;
+            elevon_agent::cli::install::uninstall(&cli.args.name, args)
+                .context("uninstall command failed")?;
         }
         Commands::Api(args) => {
-            run_async(elevon_agent::api::run_api_server(args, &env))
-                .context("api command failed")?;
+            run_async(elevon_agent::api::run_api_server(
+                &cli.args.name,
+                args,
+                &env,
+            ))
+            .context("api command failed")?;
         }
         Commands::Proxy(args) => {
-            elevon_agent::proxy::run_proxy(args, &env).context("proxy command failed")?;
+            elevon_agent::proxy::run_proxy(&cli.args.name, args, &env)
+                .context("proxy command failed")?;
         }
         Commands::Key { subcommand } => {
-            run_async(KeyCommands::run(subcommand)).context("key command failed")?;
+            run_async(KeyCommands::run(&cli.args.name, subcommand))
+                .context("key command failed")?;
         }
     }
 

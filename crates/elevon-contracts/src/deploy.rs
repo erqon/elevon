@@ -155,6 +155,7 @@ impl ResolveEnvCredentials for TlsConfig {
 #[serde(default)]
 pub struct AppPayload {
     pub image_ref: String,
+    pub agent: String,
     pub project: String,
     pub name: String,
     pub keep_releases: u8,

@@ -17,8 +17,8 @@ async fn migrate(db: &toasty::Db) -> toasty::Result<()> {
     Ok(())
 }
 
-pub async fn get_db(turso_remote_url: Option<&str>) -> Result<toasty::Db> {
-    let db_path = elevon_fs::agent::get_database_path()?;
+pub async fn get_db(agent_name: &str, turso_remote_url: Option<&str>) -> Result<toasty::Db> {
+    let db_path = elevon_fs::agent::get_database_path(agent_name)?;
 
     let mut driver = toasty_driver_turso::Turso::file(db_path).concurrent_writes();
 
@@ -43,8 +43,8 @@ impl AgentDb {
         self.0.clone()
     }
 
-    pub async fn new(turso_remote_url: Option<&str>) -> Result<Self> {
-        let db = get_db(turso_remote_url).await?;
+    pub async fn new(agent_name: &str, turso_remote_url: Option<&str>) -> Result<Self> {
+        let db = get_db(agent_name, turso_remote_url).await?;
 
         match db.push_schema().await {
             Ok(()) => Ok(Self(db)),

@@ -25,14 +25,20 @@ impl DynamicCert {
         }
     }
 
-    fn get_stored_key_paths(&self, project: &str, app: &str) -> Result<(PathBuf, PathBuf)> {
+    fn get_stored_key_paths(
+        &self,
+        agent_name: &str,
+        project: &str,
+        app: &str,
+    ) -> Result<(PathBuf, PathBuf)> {
         let tls_options = TlsOptions {
             project: project.to_string(),
             app: Some(app.to_string()),
         };
 
-        let stored_cert = elevon_fs::agent::get_tls_file(TlsType::Cert, tls_options.clone())?;
-        let stored_key = elevon_fs::agent::get_tls_file(TlsType::Key, tls_options)?;
+        let stored_cert =
+            elevon_fs::agent::get_tls_file(agent_name, TlsType::Cert, tls_options.clone())?;
+        let stored_key = elevon_fs::agent::get_tls_file(agent_name, TlsType::Key, tls_options)?;
 
         Ok((stored_cert, stored_key))
     }
@@ -53,8 +59,14 @@ impl DynamicCert {
         Ok(())
     }
 
-    pub fn add_cert(&self, project: &str, app: &str, domain: String) -> Result<()> {
-        let (stored_cert, stored_key) = self.get_stored_key_paths(project, app)?;
+    pub fn add_cert(
+        &self,
+        agent_name: &str,
+        project: &str,
+        app: &str,
+        domain: String,
+    ) -> Result<()> {
+        let (stored_cert, stored_key) = self.get_stored_key_paths(agent_name, project, app)?;
 
         self.add_cert_from_paths(
             domain,
@@ -70,14 +82,15 @@ impl DynamicCert {
             .map(|(c, k)| (Arc::new(c.clone()), Arc::new(k.clone())))
     }
 
-    pub fn setup_agent_certs(&self, domain: &str) -> Result<()> {
+    pub fn setup_agent_certs(&self, agent_name: &str, domain: &str) -> Result<()> {
         let tls_options = TlsOptions {
             project: "agent".to_string(),
             app: None,
         };
 
-        let stored_cert = elevon_fs::agent::get_tls_file(TlsType::Cert, tls_options.clone())?;
-        let stored_key = elevon_fs::agent::get_tls_file(TlsType::Key, tls_options)?;
+        let stored_cert =
+            elevon_fs::agent::get_tls_file(agent_name, TlsType::Cert, tls_options.clone())?;
+        let stored_key = elevon_fs::agent::get_tls_file(agent_name, TlsType::Key, tls_options)?;
 
         self.add_cert_from_paths(
             domain.to_string(),

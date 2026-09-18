@@ -39,18 +39,18 @@ pub struct ProxyState {
 }
 
 impl ProxyState {
-    pub fn new(env: &ElevonEnv) -> anyhow::Result<Arc<Self>> {
+    pub fn new(agent_name: &str, env: &ElevonEnv) -> anyhow::Result<Arc<Self>> {
         let dynamic_cert = DynamicCert::new();
 
-        dynamic_cert.setup_agent_certs(&env.agent_domain)?;
+        dynamic_cert.setup_agent_certs(agent_name, &env.agent_domain)?;
 
         let agent_state = AgentState {
             domain: env.agent_domain.clone(),
             port: env.agent_port,
         };
 
-        let proxy_socket = Socket::new(SocketType::Proxy)?;
-        let api_socket = Socket::new(SocketType::Api)?;
+        let proxy_socket = Socket::new(agent_name, SocketType::Proxy)?;
+        let api_socket = Socket::new(agent_name, SocketType::Api)?;
 
         Ok(Arc::new(ProxyState {
             agent: agent_state,
@@ -130,7 +130,12 @@ impl ProxyState {
             let backends = next.entry(web_app.domain.clone()).or_default();
 
             self.dynamic_cert
-                .add_cert(&route.project, &route.name, web_app.domain.clone())
+                .add_cert(
+                    &route.agent,
+                    &route.project,
+                    &route.name,
+                    web_app.domain.clone(),
+                )
                 .unwrap_or_else(|err| {
                     tracing::error!(
                         domain = %web_app.domain,

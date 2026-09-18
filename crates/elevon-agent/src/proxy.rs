@@ -180,7 +180,7 @@ impl BackgroundService for DrainJanitor {
     }
 }
 
-pub fn run_proxy(args: ProxyArgs, env: &ElevonEnv) -> anyhow::Result<()> {
+pub fn run_proxy(agent_name: &str, args: ProxyArgs, env: &ElevonEnv) -> anyhow::Result<()> {
     // In development, run HTTP on port 6188.
     // With --port, run HTTP on the specified port.
     // Otherwise, run HTTP on 80 and HTTPS on 443.
@@ -201,7 +201,7 @@ pub fn run_proxy(args: ProxyArgs, env: &ElevonEnv) -> anyhow::Result<()> {
         ("80", Some("443"))
     };
 
-    let proxy_state = ProxyState::new(env).context("failed to create proxy state")?;
+    let proxy_state = ProxyState::new(agent_name, env).context("failed to create proxy state")?;
 
     let config = ServerConf {
         grace_period_seconds: Some(30),

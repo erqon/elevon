@@ -126,6 +126,7 @@ impl AgentClient {
                         &config.image,
                         &get_image_tag()?,
                     ),
+                    agent: config.elevon.agent.name.clone(),
                     project: config.name.clone(),
                     name: name.to_string(),
                     keep_releases: config

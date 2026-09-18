@@ -40,6 +40,14 @@ pub struct CliArgs {
         help = "Path to the config file"
     )]
     pub config: String,
+
+    #[arg(
+        long,
+        global = true,
+        default_value = "default",
+        help = "Unique name for the agent"
+    )]
+    pub name: String,
 }
 
 #[derive(Subcommand)]

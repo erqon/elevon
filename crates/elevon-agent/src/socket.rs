@@ -23,10 +23,10 @@ pub struct Socket {
 }
 
 impl Socket {
-    pub fn new(ty: SocketType) -> Result<Self> {
+    pub fn new(agent_name: &str, ty: SocketType) -> Result<Self> {
         let path = match ty {
-            SocketType::Proxy => AgentPath::ProxySocket.ensure_parent_dir()?,
-            SocketType::Api => AgentPath::ApiSocket.ensure_parent_dir()?,
+            SocketType::Proxy => AgentPath::ProxySocket(agent_name).ensure_parent_dir()?,
+            SocketType::Api => AgentPath::ApiSocket(agent_name).ensure_parent_dir()?,
         };
 
         Ok(Self { path })
