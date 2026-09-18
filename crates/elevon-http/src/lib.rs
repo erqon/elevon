@@ -11,7 +11,7 @@ use tracing_subscriber::{EnvFilter, Layer};
 
 pub fn check_port(port: u16) -> Option<u16> {
     match std::net::TcpListener::bind(("0.0.0.0", port)) {
-        Ok(_) => return Some(port),
+        Ok(_) => Some(port),
         Err(_) => None,
     }
 }
