@@ -23,12 +23,7 @@ pub async fn run_api_server(args: ApiArgs, env: &ElevonEnv) -> Result<()> {
 
     Socket::create_api_listener_handle(&mut set, state.api_socket.clone(), state.clone());
 
-    let port = match &args.port {
-        Some(p) => &p.to_string(),
-        None => "3333",
-    };
-    let addr = format!("127.0.0.1:{}", port);
-
+    let addr = format!("127.0.0.1:{}", args.port);
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .context(format!("failed to bind API listener to {}", addr))?;

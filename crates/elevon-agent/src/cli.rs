@@ -116,6 +116,7 @@ pub struct UninstallArgs {
 #[derive(Args)]
 pub struct ProxyArgs {
     #[arg(
+        short,
         long,
         value_name = "PORT",
         help = "Custom ports run HTTP only. Use a tunnel or reverse proxy for public HTTPS."
@@ -125,6 +126,12 @@ pub struct ProxyArgs {
 
 #[derive(Args)]
 pub struct ApiArgs {
-    #[arg(long, value_name = "PORT", help = "Listen on PORT")]
-    pub port: Option<u16>,
+    #[arg(
+        short,
+        long,
+        value_name = "PORT",
+        default_value_t = 3333,
+        help = "Listen on PORT"
+    )]
+    pub port: u16,
 }
