@@ -3,25 +3,26 @@ use std::collections::HashMap;
 use anyhow::Result;
 use elevon_fs::agent::{AppEnvOptions, add_app_env, load_app_env};
 
+use crate::config::Config;
+
 #[derive(Debug, Clone, Default)]
 pub struct ElevonEnv {
     pub agent_domain: String,
+    pub agent_port: u16,
+    pub proxy_port: Option<u16>,
     pub turso_remote_url: Option<String>,
 }
 
 impl ElevonEnv {
-    pub fn new(agent_domain: String, turso_remote_url: Option<String>) -> Result<Self> {
-        let mut env = Self {
-            agent_domain: agent_domain.clone(),
-            turso_remote_url: turso_remote_url.clone(),
+    pub fn new(config: Config) -> Result<Self> {
+        let mut elevon_env = Self {
+            agent_domain: config.agent.domain.clone(),
+            agent_port: config.agent.port,
+            proxy_port: config.proxy.and_then(|c| c.port),
+            turso_remote_url: config.turso_remote_url,
         };
-
-        env.set_value(ElevonEnvKey::AgentDomain, agent_domain)?;
-        if let Some(turso_remote_url) = turso_remote_url {
-            env.set_value(ElevonEnvKey::TursoRemoteUrl, turso_remote_url)?;
-        }
-
-        Ok(env)
+        elevon_env.set_env_values()?;
+        Ok(elevon_env)
     }
 
     pub fn load() -> Result<Self> {
@@ -30,7 +31,7 @@ impl ElevonEnv {
 
         for key in ElevonEnvKey::all() {
             if let Some(value) = key.read_from(&vars) {
-                env.apply_value(key, value);
+                env.apply_value(key, value)?;
             }
         }
 
@@ -38,17 +39,21 @@ impl ElevonEnv {
     }
 
     // updates the in-memory field only, without touching disk
-    fn apply_value(&mut self, key: ElevonEnvKey, value: String) {
+    fn apply_value(&mut self, key: ElevonEnvKey, value: String) -> Result<()> {
         match key {
             ElevonEnvKey::AgentDomain => self.agent_domain = value,
+            ElevonEnvKey::AgentPort => self.agent_port = value.parse::<u16>()?,
+            ElevonEnvKey::ProxyPort => self.proxy_port = Some(value.parse::<u16>()?),
             ElevonEnvKey::TursoRemoteUrl => self.turso_remote_url = Some(value),
         }
+
+        Ok(())
     }
 
     fn set_value(&mut self, key: ElevonEnvKey, value: String) -> Result<()> {
         let persisted = value.clone();
 
-        self.apply_value(key, value);
+        self.apply_value(key, value)?;
 
         add_app_env(
             key.bare_name().to_string(),
@@ -58,11 +63,28 @@ impl ElevonEnv {
 
         Ok(())
     }
+
+    fn set_env_values(&mut self) -> Result<()> {
+        self.set_value(ElevonEnvKey::AgentDomain, self.agent_domain.clone())?;
+        self.set_value(ElevonEnvKey::AgentDomain, self.agent_port.to_string())?;
+
+        if let Some(proxy_port) = self.proxy_port {
+            self.set_value(ElevonEnvKey::ProxyPort, proxy_port.to_string())?;
+        }
+
+        if let Some(turso_remote_url) = &self.turso_remote_url {
+            self.set_value(ElevonEnvKey::TursoRemoteUrl, turso_remote_url.clone())?;
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
 pub enum ElevonEnvKey {
     AgentDomain,
+    AgentPort,
+    ProxyPort,
     TursoRemoteUrl,
 }
 
@@ -74,6 +96,8 @@ impl ElevonEnvKey {
     pub fn bare_name(&self) -> &'static str {
         match self {
             Self::AgentDomain => "AGENT_DOMAIN",
+            Self::AgentPort => "AGENT_PORT",
+            Self::ProxyPort => "PROXY_PORT",
             Self::TursoRemoteUrl => "TURSO_REMOTE_URL",
         }
     }

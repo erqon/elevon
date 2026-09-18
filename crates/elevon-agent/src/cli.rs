@@ -57,7 +57,7 @@ pub enum Commands {
     Proxy(ProxyArgs),
 
     #[command(about = "Run the agent HTTP control API")]
-    Api,
+    Api(ApiArgs),
 
     #[command(about = "Manage auth keys")]
     Key {
@@ -117,7 +117,14 @@ pub struct UninstallArgs {
 pub struct ProxyArgs {
     #[arg(
         long,
-        help = "Run the proxy on <PORT>, this also makes the proxy run as HTTP instead of HTTPS"
+        value_name = "PORT",
+        help = "Custom ports run HTTP only. Use a tunnel or reverse proxy for public HTTPS."
     )]
+    pub port: Option<u16>,
+}
+
+#[derive(Args)]
+pub struct ApiArgs {
+    #[arg(long, value_name = "PORT", help = "Listen on PORT")]
     pub port: Option<u16>,
 }
