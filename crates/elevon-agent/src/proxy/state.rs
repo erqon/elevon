@@ -44,10 +44,9 @@ impl ProxyState {
 
         dynamic_cert.setup_agent_certs(&env.agent_domain)?;
 
-        // TODO: Make the port dynamic with the 3333 as default
         let agent_state = AgentState {
             domain: env.agent_domain.clone(),
-            port: 3000,
+            port: env.agent_port,
         };
 
         let proxy_socket = Socket::new(SocketType::Proxy)?;

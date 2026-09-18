@@ -118,10 +118,9 @@ pub async fn run(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
     }
 
     let config = Config::from_file(cli_args.config).context("failed to load config")?;
-    config.setup_agent()?;
+    config.setup().context("failed to setup configuration")?;
 
-    ElevonEnv::new(config.agent.domain, config.turso_remote_url)
-        .context("failed to init agent env")?;
+    ElevonEnv::new(config).context("failed to init agent env")?;
 
     let mut db = AgentDb::new(None)
         .await

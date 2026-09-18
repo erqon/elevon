@@ -1,4 +1,4 @@
-use std::{collections::HashSet, net::TcpListener, sync::LazyLock};
+use std::{collections::HashSet, sync::LazyLock};
 
 use anyhow::Result;
 use bollard::{
@@ -34,9 +34,9 @@ static ALLOCATED_PORTS: LazyLock<RwLock<HashSet<u16>>> =
 
 fn find_free_port() -> Option<u16> {
     for port in 3334..=9998 {
-        match TcpListener::bind(("0.0.0.0", port)) {
-            Ok(_) => return Some(port),
-            Err(_) => continue,
+        match elevon_http::check_port(port) {
+            Some(p) => return Some(p),
+            None => continue,
         }
     }
     None

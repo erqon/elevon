@@ -10,9 +10,9 @@ use anyhow::{Context, Result};
 use axum::Router;
 use tokio::task::JoinSet;
 
-use crate::{env::ElevonEnv, socket::Socket};
+use crate::{cli::ApiArgs, env::ElevonEnv, socket::Socket};
 
-pub async fn run_api_server(env: &ElevonEnv) -> Result<()> {
+pub async fn run_api_server(args: ApiArgs, env: &ElevonEnv) -> Result<()> {
     let state = Arc::new(state::ApiState::new(env).await?);
     let cloned_state = state.clone();
 
@@ -23,9 +23,10 @@ pub async fn run_api_server(env: &ElevonEnv) -> Result<()> {
 
     Socket::create_api_listener_handle(&mut set, state.api_socket.clone(), state.clone());
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
+    let addr = format!("127.0.0.1:{}", args.port);
+    let listener = tokio::net::TcpListener::bind(&addr)
         .await
-        .context("failed to bind API listener to 127.0.0.1:3000")?;
+        .context(format!("failed to bind API listener to {}", addr))?;
 
     tracing::info!("listening on {}", listener.local_addr()?);
 

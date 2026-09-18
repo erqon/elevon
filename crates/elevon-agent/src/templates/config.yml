@@ -1,7 +1,14 @@
 agent:
   # Domain used by the agent
   domain: agent.example.com
+  port: 3333
+  # (Optional)
   tls:
     # Paths to certificate files
     cert: ./cert.pem
     key: ./key.pem
+
+# proxy:
+  # By default, the proxy runs on HTTP 80 and HTTPS 443.
+  # A custom port runs HTTP only, useful when running multiple agents behind a tunnel or reverse proxy.
+  # port: 6188

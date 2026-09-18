@@ -9,6 +9,13 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
 
+pub fn check_port(port: u16) -> Option<u16> {
+    match std::net::TcpListener::bind(("0.0.0.0", port)) {
+        Ok(_) => Some(port),
+        Err(_) => None,
+    }
+}
+
 pub fn init_logging() {
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info,tower_http=info"));

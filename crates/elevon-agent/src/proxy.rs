@@ -7,7 +7,7 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::Context;
 use async_trait::async_trait;
-use elevon_http::runtime::run_async;
+use elevon_http::{check_port, runtime::run_async};
 use futures_util::{StreamExt, stream};
 use pingora::{
     Error, ErrorType, Result,
@@ -21,6 +21,7 @@ use pingora::{
 };
 
 use crate::{
+    cli::ProxyArgs,
     env::ElevonEnv,
     proxy::{socket::SocketControl, state::ProxyState},
 };
@@ -179,7 +180,27 @@ impl BackgroundService for DrainJanitor {
     }
 }
 
-pub fn run_proxy(env: &ElevonEnv) -> anyhow::Result<()> {
+pub fn run_proxy(args: ProxyArgs, env: &ElevonEnv) -> anyhow::Result<()> {
+    // In development, run HTTP on port 6188.
+    // With --port, run HTTP on the specified port.
+    // Otherwise, run HTTP on 80 and HTTPS on 443.
+    let (http_port, https_port): (&str, Option<&str>) = if cfg!(debug_assertions) {
+        ("6188", None)
+    } else if let Some(port) = &args.port {
+        let http = check_port(*port);
+
+        if http.is_none() {
+            if http.is_none() {
+                tracing::error!("HTTP port is already taken: {}", port);
+            }
+            std::process::exit(1);
+        }
+
+        (&port.to_string(), None)
+    } else {
+        ("80", Some("443"))
+    };
+
     let proxy_state = ProxyState::new(env).context("failed to create proxy state")?;
 
     let config = ServerConf {
@@ -201,14 +222,10 @@ pub fn run_proxy(env: &ElevonEnv) -> anyhow::Result<()> {
     let tls_settings = TlsSettings::with_callbacks(Box::new(proxy_state.dynamic_cert.clone()))
         .expect("failed to initialize TLS settings");
 
-    let (http_port, https_port) = if cfg!(debug_assertions) {
-        ("6188", "6189")
-    } else {
-        ("80", "443")
-    };
-
     lb.add_tcp(&format!("0.0.0.0:{}", http_port));
-    lb.add_tls_with_settings(&format!("0.0.0.0:{}", https_port), None, tls_settings);
+    if let Some(https_port) = https_port {
+        lb.add_tls_with_settings(&format!("0.0.0.0:{}", https_port), None, tls_settings);
+    }
 
     let control = background_service(
         "socket control",
