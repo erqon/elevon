@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use elevon_fs::agent::{AppEnvOptions, add_app_env, load_app_env};
+use strum::IntoEnumIterator;
+use strum_macros::{EnumIter, IntoStaticStr};
 
 use crate::config::Config;
 
@@ -66,7 +68,7 @@ impl ElevonEnv {
 
     fn set_env_values(&mut self) -> Result<()> {
         self.set_value(ElevonEnvKey::AgentDomain, self.agent_domain.clone())?;
-        self.set_value(ElevonEnvKey::AgentDomain, self.agent_port.to_string())?;
+        self.set_value(ElevonEnvKey::AgentPort, self.agent_port.to_string())?;
 
         if let Some(proxy_port) = self.proxy_port {
             self.set_value(ElevonEnvKey::ProxyPort, proxy_port.to_string())?;
@@ -80,7 +82,8 @@ impl ElevonEnv {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, EnumIter, IntoStaticStr)]
+#[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
 pub enum ElevonEnvKey {
     AgentDomain,
     AgentPort,
@@ -89,17 +92,14 @@ pub enum ElevonEnvKey {
 }
 
 impl ElevonEnvKey {
-    pub fn all() -> [Self; 2] {
-        [Self::AgentDomain, Self::TursoRemoteUrl]
+    /// Returns an iterator over all variants.
+    pub fn all() -> impl Iterator<Item = Self> {
+        Self::iter()
     }
 
+    /// Returns the environment variable name string.
     pub fn bare_name(&self) -> &'static str {
-        match self {
-            Self::AgentDomain => "AGENT_DOMAIN",
-            Self::AgentPort => "AGENT_PORT",
-            Self::ProxyPort => "PROXY_PORT",
-            Self::TursoRemoteUrl => "TURSO_REMOTE_URL",
-        }
+        self.into()
     }
 
     fn read_from(&self, vars: &HashMap<String, String>) -> Option<String> {

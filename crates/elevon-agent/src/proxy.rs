@@ -181,13 +181,19 @@ impl BackgroundService for DrainJanitor {
 }
 
 pub fn run_proxy(args: ProxyArgs, env: &ElevonEnv) -> anyhow::Result<()> {
+    let port: Option<u16> = match (args.port, env.proxy_port) {
+        (Some(p), _) => Some(p),    // CLI flag specified -> use CLI flag
+        (None, Some(p)) => Some(p), // No CLI flag, env set -> use env
+        _ => None,                  // Neither set -> default port
+    };
+
     // In development, run HTTP on port 6188.
     // With --port, run HTTP on the specified port.
     // Otherwise, run HTTP on 80 and HTTPS on 443.
     let (http_port, https_port): (&str, Option<&str>) = if cfg!(debug_assertions) {
         ("6188", None)
-    } else if let Some(port) = &args.port {
-        let http = check_port(*port);
+    } else if let Some(port) = port {
+        let http = check_port(port);
 
         if http.is_none() {
             if http.is_none() {
@@ -219,11 +225,11 @@ pub fn run_proxy(args: ProxyArgs, env: &ElevonEnv) -> anyhow::Result<()> {
         },
     );
 
-    let tls_settings = TlsSettings::with_callbacks(Box::new(proxy_state.dynamic_cert.clone()))
-        .expect("failed to initialize TLS settings");
-
     lb.add_tcp(&format!("0.0.0.0:{}", http_port));
     if let Some(https_port) = https_port {
+        let tls_settings = TlsSettings::with_callbacks(Box::new(proxy_state.dynamic_cert.clone()))
+            .expect("failed to initialize TLS settings");
+
         lb.add_tls_with_settings(&format!("0.0.0.0:{}", https_port), None, tls_settings);
     }
 

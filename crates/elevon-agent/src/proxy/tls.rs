@@ -38,8 +38,10 @@ impl DynamicCert {
     }
 
     fn add_cert_from_paths(&self, domain: String, cert_path: &str, key_path: &str) -> Result<()> {
-        let cert_bytes = std::fs::read(cert_path)?;
-        let key_bytes = std::fs::read(key_path)?;
+        let (cert_bytes, key_bytes) = match (std::fs::read(cert_path), std::fs::read(key_path)) {
+            (Ok(cert), Ok(key)) => (cert, key),
+            _ => return Ok(()),
+        };
 
         let cert = X509::from_pem(&cert_bytes)?;
         let key = PKey::private_key_from_pem(&key_bytes)?;

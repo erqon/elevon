@@ -17,12 +17,15 @@ fn main() {
 
 fn run() -> Result<()> {
     let cli = Cli::parse();
+
+    if matches!(cli.command, Commands::Init) {
+        return elevon_agent::cli::init::run().context("init command failed");
+    }
+
     let env = ElevonEnv::load().context("failed to load agent environment")?;
 
     match cli.command {
-        Commands::Init => {
-            elevon_agent::cli::init::run().context("init command failed")?;
-        }
+        Commands::Init => unreachable!(),
         Commands::Install(args) => {
             run_async(elevon_agent::cli::install::run(cli.args, args))
                 .context("install command failed")?;
