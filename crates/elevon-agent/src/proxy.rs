@@ -187,8 +187,6 @@ pub fn run_proxy(args: ProxyArgs, env: &ElevonEnv) -> anyhow::Result<()> {
         _ => None,                  // Neither set -> default port
     };
 
-    println!("port: {:?}", port);
-
     // In development, run HTTP on port 6188.
     // With --port, run HTTP on the specified port.
     // Otherwise, run HTTP on 80 and HTTPS on 443.
