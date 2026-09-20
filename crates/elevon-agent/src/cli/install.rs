@@ -1,6 +1,7 @@
 use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, bail};
+use const_format::formatcp;
 use elevon_config::ElevonConfig;
 use elevon_fs::agent::{install_api_unit, install_proxy_unit};
 
@@ -11,7 +12,7 @@ use crate::{
     env::ElevonEnv,
 };
 
-static TEMP_FILE_CONFIG: &str = "/etc/tmpfiles.d/elevon-agent.conf";
+const TEMP_FILE_CONFIG: &str = "/etc/tmpfiles.d/elevon-agent.conf";
 
 fn check_before_installation() -> Result<()> {
     let docker_version_output = Command::new("docker")
@@ -203,4 +204,11 @@ pub fn run_uninstall(args: UninstallArgs) -> Result<()> {
         args.keep_systemd,
         TEMP_FILE_CONFIG,
     )
+}
+
+pub fn upgrade(version: Option<String>) {
+    const ASSET: &str = "";
+    const REPO_PATH: &str = "erqon/elevon";
+    const RELEASE_URL: &str =
+        formatcp!("https://github.com/{REPO_PATH}/releases/download/elevon-agent-v/{ASSET}");
 }

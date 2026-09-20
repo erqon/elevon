@@ -36,3 +36,4 @@ elevon-http.workspace = true
 tabled = "0.22.0"
 strum = "0.28.0"
 strum_macros = "0.28.0"
+const_format = "0.2.36"

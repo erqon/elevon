@@ -53,6 +53,9 @@ pub enum Commands {
     #[command(about = "Uninstall agent")]
     Uninstall(UninstallArgs),
 
+    #[command(about = "Upgrade to new version")]
+    Upgrade,
+
     #[command(about = "Run the reverse proxy for the agent")]
     Proxy(ProxyArgs),
 
@@ -111,6 +114,12 @@ pub struct UninstallArgs {
         help = "Keep the environment files"
     )]
     pub keep_env_files: bool,
+}
+
+#[derive(Args)]
+pub struct UpgradeArgs {
+    #[arg(long, help = "Version to upgrade to")]
+    pub version: Option<String>,
 }
 
 #[derive(Args)]

@@ -39,12 +39,13 @@ fn run() -> Result<()> {
         Commands::Uninstall(args) => {
             elevon_agent::cli::install::run_uninstall(args).context("uninstall command failed")?;
         }
+        Commands::Upgrade => {}
         Commands::Api(args) => {
             run_async(elevon_agent::api::run_api_server(args, &env))
                 .context("api command failed")?;
         }
         Commands::Proxy(args) => {
-            elevon_agent::proxy::run_proxy(args, &env).context("proxy command failed")?;
+            elevon_agent::proxy::run_proxy(args, &env, false).context("proxy command failed")?;
         }
         Commands::Key { subcommand: _ } => unreachable!(),
     }

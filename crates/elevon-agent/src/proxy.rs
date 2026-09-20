@@ -15,7 +15,10 @@ use pingora::{
     listeners::tls::TlsSettings,
     protocols::l4::socket::SocketAddr,
     proxy::{ProxyHttp, Session, http_proxy_service},
-    server::{RunArgs, Server, ShutdownWatch, configuration::ServerConf},
+    server::{
+        RunArgs, Server, ShutdownWatch,
+        configuration::{Opt, ServerConf},
+    },
     services::background::{BackgroundService, background_service},
     upstreams::peer::HttpPeer,
 };
@@ -180,7 +183,7 @@ impl BackgroundService for DrainJanitor {
     }
 }
 
-pub fn run_proxy(args: ProxyArgs, env: &ElevonEnv) -> anyhow::Result<()> {
+pub fn run_proxy(args: ProxyArgs, env: &ElevonEnv, upgrade: bool) -> anyhow::Result<()> {
     let port: Option<u16> = match (args.port, env.proxy_port) {
         (Some(p), _) => Some(p),    // CLI flag specified -> use CLI flag
         (None, Some(p)) => Some(p), // No CLI flag, env set -> use env
@@ -210,10 +213,16 @@ pub fn run_proxy(args: ProxyArgs, env: &ElevonEnv) -> anyhow::Result<()> {
     let config = ServerConf {
         grace_period_seconds: Some(30),
         graceful_shutdown_timeout_seconds: Some(5),
+        upgrade_sock: "/tmp/elevon_agent_upgrade.sock".to_string(),
         ..Default::default()
     };
 
-    let mut server = Server::new_with_opt_and_conf(None, config);
+    let server_options = Some(Opt {
+        upgrade,
+        ..Default::default()
+    });
+
+    let mut server = Server::new_with_opt_and_conf(server_options, config);
     server.bootstrap();
 
     let mut lb = http_proxy_service(
