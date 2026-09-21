@@ -11,10 +11,6 @@ if [[ -n "$TARGET" ]]; then
 		os="linux"
 		arch="x86_64"
 		;;
-	x86_64-apple-darwin)
-		os="darwin"
-		arch="x86_64"
-		;;
 	aarch64-apple-darwin)
 		os="darwin"
 		arch="aarch64"
@@ -32,10 +28,6 @@ fi
 if [[ -z "$TARGET" ]]; then
 	case "$os" in
 	linux | darwin) ;;
-	mingw* | msys* | cygwin* | windows*)
-		echo "Windows is not supported" >&2
-		exit 1
-		;;
 	*)
 		echo "unsupported os: $os" >&2
 		exit 1
