@@ -196,9 +196,7 @@ pub fn run_proxy(args: ProxyArgs, env: &ElevonEnv) -> anyhow::Result<()> {
         let http = check_port(port);
 
         if http.is_none() {
-            if http.is_none() {
-                tracing::error!("HTTP port is already taken: {}", port);
-            }
+            tracing::error!("HTTP port is already taken: {}", port);
             std::process::exit(1);
         }
 
