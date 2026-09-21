@@ -1,5 +1,8 @@
+use std::fs::{OpenOptions, TryLockError};
+
 use axum::{Json, Router, extract::State, routing::post};
 use elevon_contracts::deploy::{AppDeployPayload, AppRollbackPayload, StreamEvent};
+use elevon_fs::agent::AgentPath;
 
 use crate::{
     api::{
@@ -41,12 +44,31 @@ where
     stream_response(rx)
 }
 
+fn lock_action() -> anyhow::Result<std::fs::File> {
+    let lock_path = AgentPath::DeployLock.resolve();
+    let lock_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open(lock_path)?;
+
+    match lock_file.try_lock() {
+        Ok(()) => Ok(lock_file),
+        Err(TryLockError::WouldBlock) => {
+            anyhow::bail!("another deployment is already running")
+        }
+        Err(TryLockError::Error(err)) => Err(err.into()),
+    }
+}
+
 async fn deploy(
     _: AuthKey,
     State(state): State<SharedApiState>,
     Json(payload): Json<AppDeployPayload>,
 ) -> StreamResponse {
-    spawn_streaming_task(move |tx| async move { deploy_apps(&tx, state, payload).await })
+    spawn_streaming_task(move |tx| async move {
+        let _lock_file = lock_action()?;
+        deploy_apps(&tx, state, payload).await
+    })
 }
 
 async fn rollback(
@@ -54,5 +76,8 @@ async fn rollback(
     State(state): State<SharedApiState>,
     Json(payload): Json<AppRollbackPayload>,
 ) -> StreamResponse {
-    spawn_streaming_task(move |tx| async move { rollback_apps(&tx, state, payload).await })
+    spawn_streaming_task(move |tx| async move {
+        let _lock_file = lock_action()?;
+        rollback_apps(&tx, state, payload).await
+    })
 }

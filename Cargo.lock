@@ -1552,7 +1552,6 @@ dependencies = [
  "anyhow",
  "clap",
  "elevon-deploy",
- "elevon-http",
  "thiserror 2.0.20",
  "tokio",
 ]

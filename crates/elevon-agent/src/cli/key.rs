@@ -26,7 +26,7 @@ impl KeyCommands {
             KeyCommands::Create(args) => {
                 let name = args.name.clone();
 
-                println!("Creating auth key: {}", name);
+                tracing::info!("Creating auth key: {}", name);
 
                 let response: Option<ApiSocketEventResponse> = api_socket
                     .send_and_receive(ApiSocketEvent::KeyCommands(KeyCommands::Create(args)))
@@ -38,7 +38,7 @@ impl KeyCommands {
                 };
 
                 if let ApiSocketEventResponse::KeyCreate(key) = response {
-                    println!("Save your API Key: {}", key);
+                    tracing::info!("Save your API Key: {}", key);
                 }
             }
             KeyCommands::List => {
@@ -48,7 +48,7 @@ impl KeyCommands {
                     .context("failed to list auth keys")?;
 
                 if let Some(ApiSocketEventResponse::KeyList(rows)) = response {
-                    println!("{}", Table::new(rows).with(Style::modern()));
+                    tracing::info!("{}", Table::new(rows).with(Style::modern()));
                 }
             }
             KeyCommands::Revoke => {}
