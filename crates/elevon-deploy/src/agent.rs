@@ -29,7 +29,7 @@ impl AgentClient {
         let base_url = Url::parse(base_url).context("[elevon.agent.url] invalid base URL")?;
 
         let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(10))
+            .connect_timeout(std::time::Duration::from_secs(10))
             .build()?;
 
         Ok(Self {
