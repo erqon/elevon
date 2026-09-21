@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 
-pub fn run() -> Result<()> {
+pub fn run_init() -> Result<()> {
     let path = PathBuf::from("elevon-agent.yml");
     if path.exists() {
         eprintln!("elevon-agent.yml file already exists");

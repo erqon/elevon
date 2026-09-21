@@ -19,7 +19,12 @@ fn run() -> Result<()> {
     let cli = Cli::parse();
 
     if matches!(cli.command, Commands::Init) {
-        return elevon_agent::cli::init::run().context("init command failed");
+        return elevon_agent::cli::init::run_init().context("init command failed");
+    }
+
+    // This still needs the current user to be in `elevon-agent` group to run without sudo.
+    if let Commands::Key { subcommand } = cli.command {
+        return run_async(KeyCommands::run(subcommand)).context("key command failed");
     }
 
     let env = ElevonEnv::load().context("failed to load agent environment")?;
@@ -27,11 +32,11 @@ fn run() -> Result<()> {
     match cli.command {
         Commands::Init => unreachable!(),
         Commands::Install(args) => {
-            run_async(elevon_agent::cli::install::run(cli.args, args))
+            run_async(elevon_agent::cli::install::run_install(cli.args, args))
                 .context("install command failed")?;
         }
         Commands::Uninstall(args) => {
-            elevon_agent::cli::install::uninstall(args).context("uninstall command failed")?;
+            elevon_agent::cli::install::run_uninstall(args).context("uninstall command failed")?;
         }
         Commands::Api(args) => {
             run_async(elevon_agent::api::run_api_server(args, &env))
@@ -40,9 +45,7 @@ fn run() -> Result<()> {
         Commands::Proxy(args) => {
             elevon_agent::proxy::run_proxy(args, &env).context("proxy command failed")?;
         }
-        Commands::Key { subcommand } => {
-            run_async(KeyCommands::run(subcommand)).context("key command failed")?;
-        }
+        Commands::Key { subcommand: _ } => unreachable!(),
     }
 
     Ok(())
