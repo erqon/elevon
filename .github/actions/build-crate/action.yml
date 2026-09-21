@@ -13,6 +13,9 @@ inputs:
     description: Version number without the v prefix
     required: false
     default: ""
+  target:
+    description: Target to build for
+    required: true
 
 outputs:
   tag:
@@ -52,13 +55,15 @@ runs:
 
     - uses: dtolnay/rust-toolchain@stable
       with:
-        targets: x86_64-unknown-linux-musl
+        targets: ${{ inputs.target }}
 
-    - uses: mlugg/setup-zig@v2
+    - uses: xyzzylabs/setup-zig@v1
+      if: inputs.target == 'x86_64-unknown-linux-musl'
       with:
         version: 0.16.0
 
     - name: Install cargo-zigbuild
+      if: inputs.target == 'x86_64-unknown-linux-musl'
       shell: bash
       run: cargo install cargo-zigbuild
 
@@ -66,7 +71,12 @@ runs:
 
     - name: Build
       shell: bash
-      run: cargo zigbuild -p "${{ inputs.name }}" --release --target x86_64-unknown-linux-musl
+      run: |
+        if [ "${{ inputs.target }}" = "x86_64-unknown-linux-musl" ]; then
+          cargo zigbuild -p "${{ inputs.name }}" --release --target x86_64-unknown-linux-musl
+        else
+          cargo build -p "${{ inputs.name }}" --release --target "${{ inputs.target }}"
+        fi
 
     - name: Resolve build archive
       id: resolve
@@ -81,7 +91,7 @@ runs:
           VERSION_TAG="${TAG#*-}"
         fi
 
-        ARCHIVE="$(./scripts/resolve-release-archive.sh "${CRATE}" "${VERSION_TAG}")"
+        ARCHIVE="$(./scripts/resolve-release-archive.sh "${CRATE}" "${VERSION_TAG}" "${{ inputs.target }}")"
         BIN="${ARCHIVE%.tar.gz}"
 
         echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
@@ -94,5 +104,5 @@ runs:
         BIN="${{ steps.resolve.outputs.bin }}"
         BINARY_NAME="${{ inputs.binary != '' && inputs.binary || inputs.name }}"
 
-        cp "target/x86_64-unknown-linux-musl/release/${BINARY_NAME}" "$BIN"
+        cp "target/${{ inputs.target }}/release/${BINARY_NAME}" "$BIN"
         tar -czf "$ARCHIVE" "$BIN"

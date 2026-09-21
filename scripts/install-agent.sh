@@ -47,7 +47,6 @@ resolve_asset() {
 
 	case "$os" in
 	linux | darwin) ;;
-	mingw* | msys* | cygwin* | windows*) die "Windows is not supported" ;;
 	*) die "unsupported operating system: $os" ;;
 	esac
 
