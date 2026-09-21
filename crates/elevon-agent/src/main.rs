@@ -22,6 +22,7 @@ fn run() -> Result<()> {
         return elevon_agent::cli::init::run_init().context("init command failed");
     }
 
+    // This still needs the current user to be in `elevon-agent` group to run without sudo.
     if let Commands::Key { subcommand } = cli.command {
         return run_async(KeyCommands::run(subcommand)).context("key command failed");
     }
