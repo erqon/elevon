@@ -11,7 +11,7 @@ async fn migrate(db: &toasty::Db) -> toasty::Result<()> {
 
     let applied = report.applied();
     if applied > 0 {
-        tracing::info!("applied {} migrations", applied);
+        tracing::info!("Applied {} migrations", applied);
     }
 
     Ok(())

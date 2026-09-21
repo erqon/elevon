@@ -111,7 +111,7 @@ fn run_systemctl(args: &[&str]) -> Result<()> {
 // write units
 // daemon-reload
 // start services
-pub async fn run(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
+pub async fn run_install(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
     if !args.no_systemd {
         check_before_installation()?;
         create_elevon_agent_user()?;
@@ -130,10 +130,10 @@ pub async fn run(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
     let auth_keys = AuthKey::all().exec(&mut db).await?;
 
     if !auth_keys.is_empty() {
-        tracing::info!("Auth key already exist, run 'key list' to view the keys");
+        println!("Auth key already exist, run 'key list' to view the keys");
     } else {
         let auth_key = AuthKey::create_key(&mut db, "Default").await?;
-        tracing::info!("save your API Key: {}", auth_key);
+        println!("Save your API Key: {}", auth_key);
     }
 
     if !args.no_systemd {
@@ -141,12 +141,12 @@ pub async fn run(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
 
         let agent = std::env::current_exe().context("failed to resolve current executable")?;
 
-        tracing::info!("Creating systemd units in /etc/systemd/system/ ...");
+        println!("Creating systemd units in /etc/systemd/system/ ...");
 
         install_api_unit(&agent).context("failed to write elevon-agent-api.service")?;
         install_proxy_unit(&agent).context("failed to write elevon-agent-proxy.service")?;
 
-        tracing::info!("Systemd units written");
+        println!("Systemd units written");
 
         run_tmpfiles()?;
 
@@ -159,18 +159,16 @@ pub async fn run(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
                 "elevon-agent-api.service",
                 "elevon-agent-proxy.service",
             ])?;
-            tracing::info!("Services enabled and started");
+            println!("Services enabled and started");
         } else {
-            tracing::info!(
-                "Run `systemctl enable --now elevon-agent-api elevon-agent-proxy` when ready"
-            );
+            println!("Run `systemctl enable --now elevon-agent-api elevon-agent-proxy` when ready");
         }
     }
 
     Ok(())
 }
 
-pub fn uninstall(args: UninstallArgs) -> Result<()> {
+pub fn run_uninstall(args: UninstallArgs) -> Result<()> {
     // TODO: Stop any running containers
 
     println!("This will uninstall Elevon.");

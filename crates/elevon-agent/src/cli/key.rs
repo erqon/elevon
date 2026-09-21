@@ -26,7 +26,7 @@ impl KeyCommands {
             KeyCommands::Create(args) => {
                 let name = args.name.clone();
 
-                tracing::info!("creating auth key: {}", name);
+                println!("Creating auth key: {}", name);
 
                 let response: Option<ApiSocketEventResponse> = api_socket
                     .send_and_receive(ApiSocketEvent::KeyCommands(KeyCommands::Create(args)))
@@ -38,7 +38,7 @@ impl KeyCommands {
                 };
 
                 if let ApiSocketEventResponse::KeyCreate(key) = response {
-                    tracing::info!("save your API Key: {}", key);
+                    println!("Save your API Key: {}", key);
                 }
             }
             KeyCommands::List => {
