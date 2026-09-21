@@ -110,10 +110,11 @@ async fn pull_image(
         ..Default::default()
     });
 
-    docker
-        .create_image(Some(image_options), None, credentials)
-        .try_collect::<Vec<_>>()
-        .await?;
+    let mut pull_stream = docker.create_image(Some(image_options), None, credentials);
+
+    while let Some(event) = pull_stream.try_next().await? {
+        tracing::debug!(?event, "docker pull event");
+    }
 
     emit(
         tx,
