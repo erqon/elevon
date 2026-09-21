@@ -18,29 +18,36 @@ permissions:
   contents: write
 
 jobs:
-  build-linux:
-    runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.build.outputs.tag }}
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: x86_64-apple-darwin
+            os: macos-15-intel
+          - target: aarch64-apple-darwin
+            os: macos-15
 
     steps:
       - uses: actions/checkout@v7
-
       - uses: ./.github/actions/build-crate
         id: build
         with:
           name: ${{ env.CRATE_NAME }}
           binary: ${{ env.BINARY_NAME }}
           version: ${{ inputs.version }}
+          target: ${{ matrix.target }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ env.CRATE_NAME }}-linux
+          name: ${{ env.CRATE_NAME }}-${{ matrix.target }}
           path: ${{ steps.build.outputs.archive }}
 
   release:
-    needs: [build-linux]
+    needs: [build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -53,5 +60,5 @@ jobs:
 
       - uses: ./.github/actions/release-crate
         with:
-          tag: ${{ needs.build-linux.outputs.tag }}
+          tag: ${{ github.event_name == 'workflow_dispatch' && format('elevon-cli-v{0}', inputs.version) || github.ref_name }}
           files: dist/*.tar.gz
