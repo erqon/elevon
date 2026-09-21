@@ -30,7 +30,7 @@ Markers for features before the release
 - [x] Fix/add install script **(N/P)**
 - [x] App runtime configuration **(M)**
 - [x] Deploy rollback command **(M)**
-- [ ] Deploy lock (allow only one deployment per app at a time) **(M)**
+- [x] Deploy lock (allow only one deployment per app at a time) **(M)**
 - <s>[ ] Interactive rollback selector (choose previous release) **(N)** </s>
 - <s>[ ] Release snapshot export/import (images + env + runtime config) **(M)** </s>
 - <s>[ ] Dry-run mode (validate config and rollout plan without deploying) **(M)** </s>
