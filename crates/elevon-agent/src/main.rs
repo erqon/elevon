@@ -7,8 +7,6 @@ use elevon_agent::{
 use elevon_http::runtime::run_async;
 
 fn main() {
-    elevon_http::init_cli_logging();
-
     if let Err(err) = run() {
         tracing::error!("{err:#}");
         std::process::exit(1);
@@ -17,6 +15,9 @@ fn main() {
 
 fn run() -> Result<()> {
     let cli = Cli::parse();
+
+    let with_level = matches!(cli.command, Commands::Api(_) | Commands::Proxy(_));
+    elevon_http::init_cli_logging(with_level);
 
     if matches!(cli.command, Commands::Init) {
         return elevon_agent::cli::init::run_init().context("init command failed");

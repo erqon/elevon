@@ -130,10 +130,10 @@ pub async fn run_install(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
     let auth_keys = AuthKey::all().exec(&mut db).await?;
 
     if !auth_keys.is_empty() {
-        println!("Auth key already exist, run 'key list' to view the keys");
+        tracing::info!("Auth key already exist, run 'key list' to view the keys");
     } else {
         let auth_key = AuthKey::create_key(&mut db, "Default").await?;
-        println!("Save your API Key: {}", auth_key);
+        tracing::info!("Save your API Key: {}", auth_key);
     }
 
     if !args.no_systemd {
@@ -141,12 +141,12 @@ pub async fn run_install(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
 
         let agent = std::env::current_exe().context("failed to resolve current executable")?;
 
-        println!("Creating systemd units in /etc/systemd/system/ ...");
+        tracing::info!("Creating systemd units in /etc/systemd/system/ ...");
 
         install_api_unit(&agent).context("failed to write elevon-agent-api.service")?;
         install_proxy_unit(&agent).context("failed to write elevon-agent-proxy.service")?;
 
-        println!("Systemd units written");
+        tracing::info!("Systemd units written");
 
         run_tmpfiles()?;
 
@@ -159,9 +159,11 @@ pub async fn run_install(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
                 "elevon-agent-api.service",
                 "elevon-agent-proxy.service",
             ])?;
-            println!("Services enabled and started");
+            tracing::info!("Services enabled and started");
         } else {
-            println!("Run `systemctl enable --now elevon-agent-api elevon-agent-proxy` when ready");
+            tracing::info!(
+                "Run `systemctl enable --now elevon-agent-api elevon-agent-proxy` when ready"
+            );
         }
     }
 
@@ -171,26 +173,26 @@ pub async fn run_install(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
 pub fn run_uninstall(args: UninstallArgs) -> Result<()> {
     // TODO: Stop any running containers
 
-    println!("This will uninstall Elevon.");
+    tracing::info!("This will uninstall Elevon.");
 
     if !args.keep_systemd {
-        println!("- systemd units");
+        tracing::info!("- systemd units");
     }
     if !args.keep_database {
-        println!("- database");
+        tracing::info!("- database");
     }
     if !args.keep_env_files {
-        println!("- environment files");
+        tracing::info!("- environment files");
     }
 
     if !args.yes {
-        println!("This will remove Elevon files and services. Continue? [y/N]");
+        tracing::info!("This will remove Elevon files and services. Continue? [y/N]");
 
         let mut input = String::new();
         std::io::stdin().read_line(&mut input)?;
 
         if !matches!(input.trim().to_lowercase().as_str(), "y" | "yes") {
-            println!("Cancelled.");
+            tracing::info!("Cancelled.");
             return Ok(());
         }
     }

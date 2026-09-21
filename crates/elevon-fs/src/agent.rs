@@ -237,7 +237,7 @@ fn dev_root() -> Option<PathBuf> {
 pub enum AgentPath {
     StateDir,
     UploadsDir,
-    SocketDir,
+    RuntimeDir,
     SystemdDir,
     Database,
     AppEnv(String, Option<String>, Option<String>),
@@ -246,6 +246,7 @@ pub enum AgentPath {
     ApiSocket,
     ApiSystemdPath,
     ProxySystemdPath,
+    DeployLock,
 }
 
 impl AgentPath {
@@ -263,7 +264,7 @@ impl AgentPath {
                 dir.join("uploads")
             }
 
-            AgentPath::SocketDir => base.join("run").join("elevon-agent"),
+            AgentPath::RuntimeDir => base.join("run").join("elevon-agent"),
 
             AgentPath::SystemdDir => base.join("etc").join("systemd").join("system"),
 
@@ -294,12 +295,12 @@ impl AgentPath {
             }
 
             AgentPath::ProxySocket => {
-                let dir = AgentPath::SocketDir.resolve();
+                let dir = AgentPath::RuntimeDir.resolve();
                 dir.join("proxy.sock")
             }
 
             AgentPath::ApiSocket => {
-                let dir = AgentPath::SocketDir.resolve();
+                let dir = AgentPath::RuntimeDir.resolve();
                 dir.join("agent.sock")
             }
 
@@ -311,6 +312,11 @@ impl AgentPath {
             AgentPath::ProxySystemdPath => {
                 let dir = AgentPath::SystemdDir.resolve();
                 dir.join(PROXY_SYSTEMD_SERVICE)
+            }
+
+            AgentPath::DeployLock => {
+                let dir = AgentPath::RuntimeDir.resolve();
+                dir.join("deploy.lock")
             }
         }
     }
@@ -338,7 +344,7 @@ pub fn remove_files(
     keep_systemd: bool,
     temp_file_config: &str,
 ) -> Result<()> {
-    let socket_dir = AgentPath::SocketDir.resolve();
+    let runtime_dir = AgentPath::RuntimeDir.resolve();
     let database_file_path = AgentPath::Database.resolve();
     let uploads_dir = AgentPath::UploadsDir.resolve();
 
@@ -395,9 +401,9 @@ pub fn remove_files(
         }
     }
 
-    if !keep_systemd && socket_dir.exists() {
-        println!("Removing runtime sockets...");
-        std::fs::remove_dir_all(socket_dir)?;
+    if !keep_systemd && runtime_dir.exists() {
+        println!("Removing runtime directory...");
+        std::fs::remove_dir_all(runtime_dir)?;
     }
 
     if !keep_database {

@@ -14,6 +14,12 @@ pub mod image;
 pub mod util;
 
 pub async fn run_deploy_cli(arg: DeployArgs, command: Commands) -> anyhow::Result<()> {
+    let with_level = matches!(
+        command,
+        Commands::Build(_) | Commands::Deploy(_) | Commands::Rollback(_)
+    );
+    elevon_http::init_cli_logging(with_level);
+
     if matches!(command, Commands::Init) {
         return cli::init::run();
     }

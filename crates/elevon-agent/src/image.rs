@@ -463,7 +463,7 @@ async fn deploy_app(
     };
     let deployment_to_drain_id = deployment_to_drain.as_ref().map(|d| d.id);
 
-    // Marks the current deployment as draining, so no new requests will not be handled by it,
+    // Marks the current deployment as draining, so no new requests will be handled by it,
     // and later the DrainJanitor service will terminate the container.
     if let Some(deployment_to_drain) = deployment_to_drain
         && let Some(container_id) = deployment_to_drain.container_id.clone()

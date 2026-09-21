@@ -38,7 +38,7 @@ pub fn init_logging() {
     }
 }
 
-pub fn init_cli_logging() {
+pub fn init_cli_logging(with_level: bool) {
     let indicatif_layer = IndicatifLayer::new().with_progress_style(
         ProgressStyle::with_template(
             "{span_child_prefix}{spinner:.cyan} {span_name:.bold.cyan} {msg:.dim}",
@@ -58,7 +58,7 @@ pub fn init_cli_logging() {
             tracing_subscriber::fmt::layer()
                 .without_time()
                 .with_target(false)
-                .with_level(true)
+                .with_level(with_level)
                 .with_ansi(true)
                 .with_writer(indicatif_layer.get_stderr_writer()),
         )
