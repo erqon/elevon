@@ -19,16 +19,27 @@ need() {
 }
 
 resolve_version() {
-	if [[ "$VERSION" != "latest" ]]; then
-		echo "${VERSION#v}"
-		return
-	fi
+    if [[ "$VERSION" != "latest" ]]; then
+        echo "${VERSION#v}"
+        return
+    fi
 
-	curl --fail --location --silent --show-error \
-		"https://api.github.com/repos/${REPO_PATH}/releases/latest" |
-		sed -n 's/^[[:space:]]*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' |
-		sed 's/^elevon-cli-v//' |
-		head -n 1
+    local api_url="https://api.github.com/repos/${REPO_PATH}/releases?per_page=100"
+
+    echo "Fetching releases from: $api_url" >&2
+
+    curl --fail --location --silent --show-error "$api_url" |
+        awk -F'"' '
+            /"tag_name"[[:space:]]*:[[:space:]]*"elevon-cli-v/ && !found {
+                for (i = 1; i <= NF; i++) {
+                    if ($i ~ /^elevon-cli-v/) {
+                        sub(/^elevon-cli-v/, "", $i)
+                        print $i
+                        found = 1
+                    }
+                }
+            }
+        '
 }
 
 release_url() {
