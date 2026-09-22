@@ -6,8 +6,12 @@ default-run = "elevon-agent"
 
 [dependencies]
 arc-swap = "1.9.2"
+const_format = "0.2.36"
 dashmap = "6.2.1"
+strum = "0.28.0"
+strum_macros = "0.28.0"
 tokio-stream = "0.1.19"
+tabled = "0.22.0"
 
 async-trait.workspace = true
 anyhow.workspace = true
@@ -33,7 +37,4 @@ elevon-config.workspace = true
 elevon-contracts.workspace = true
 elevon-fs = { workspace = true, features = ["agent"] }
 elevon-http.workspace = true
-tabled = "0.22.0"
-strum = "0.28.0"
-strum_macros = "0.28.0"
-const_format = "0.2.36"
+
