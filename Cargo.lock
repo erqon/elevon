@@ -1590,6 +1590,7 @@ dependencies = [
  "clap",
  "elevon-config",
  "elevon-contracts",
+ "elevon-fs",
  "elevon-http",
  "futures-util",
  "ignore",

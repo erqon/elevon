@@ -28,20 +28,23 @@ fn run() -> Result<()> {
         return run_async(KeyCommands::run(subcommand)).context("key command failed");
     }
 
+    if let Commands::Upgrade(args) = cli.command {
+        return run_async(elevon_agent::cli::install::upgrade(args))
+            .context("upgrade command failed");
+    }
+
     let env = ElevonEnv::load().context("failed to load agent environment")?;
 
     match cli.command {
         Commands::Init => unreachable!(),
+        Commands::Upgrade(_) => unreachable!(),
+        Commands::Key { subcommand: _ } => unreachable!(),
         Commands::Install(args) => {
             run_async(elevon_agent::cli::install::run_install(cli.args, args))
                 .context("install command failed")?;
         }
         Commands::Uninstall(args) => {
             elevon_agent::cli::install::run_uninstall(args).context("uninstall command failed")?;
-        }
-        Commands::Upgrade(args) => {
-            run_async(elevon_agent::cli::install::upgrade(args.version))
-                .context("upgrade command failed")?;
         }
         Commands::Api(args) => {
             run_async(elevon_agent::api::run_api_server(args, &env))
@@ -50,7 +53,6 @@ fn run() -> Result<()> {
         Commands::Proxy(args) => {
             elevon_agent::proxy::run_proxy(args, &env, false).context("proxy command failed")?;
         }
-        Commands::Key { subcommand: _ } => unreachable!(),
     }
 
     Ok(())

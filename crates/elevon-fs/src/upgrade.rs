@@ -35,11 +35,21 @@ impl ReleaseClient {
         })
     }
 
-    async fn resolve_version(&self) -> Result<String> {
+    async fn resolve_version(&self, current_version: &str) -> Result<Option<String>> {
         let prefix = format!("{}-v", self.crate_name);
 
         if self.version != "latest" {
-            return Ok(format!("{prefix}{}", self.version.trim_start_matches('v')));
+            let requested_version = self.version.trim_start_matches('v');
+
+            if requested_version == current_version {
+                println!("Already running version {current_version}");
+                return Ok(None);
+            }
+
+            return Ok(Some(format!(
+                "{prefix}{}",
+                self.version.trim_start_matches('v')
+            )));
         }
 
         let url = format!("{API_REPO_URL}/releases?per_page=100");
@@ -63,11 +73,26 @@ impl ReleaseClient {
             .find(|tag| tag.starts_with(&prefix))
             .with_context(|| format!("no release found with tag prefix {prefix}"))?;
 
-        Ok(tag)
+        let version = tag
+            .strip_prefix(&prefix)
+            .context("failed to strip prefix from tag")?;
+
+        if version == current_version {
+            println!("Already running version {current_version}");
+            return Ok(None);
+        } else {
+            println!("Upgrading from {current_version} to {version}");
+        }
+
+        Ok(Some(tag))
     }
 
-    async fn download_binary(&self) -> Result<NamedTempFile> {
-        let tag = self.resolve_version().await?;
+    async fn download_binary(&self, current_version: &str) -> Result<Option<NamedTempFile>> {
+        let tag = match self.resolve_version(current_version).await? {
+            Some(t) => t,
+            None => return Ok(None),
+        };
+
         let prefix = format!("{}-v", self.crate_name);
         let version = tag
             .strip_prefix(&prefix)
@@ -102,11 +127,15 @@ impl ReleaseClient {
             .await
             .context("failed to flush downloaded asset")?;
 
-        Ok(temporary_file)
+        Ok(Some(temporary_file))
     }
 
-    pub async fn install_binary(&self, destination: &Path) -> Result<()> {
-        let archive_file = self.download_binary().await?;
+    pub async fn install_binary(&self, current_version: &str, destination: &Path) -> Result<bool> {
+        let archive_file = match self.download_binary(current_version).await? {
+            Some(v) => v,
+            None => return Ok(false),
+        };
+
         let archive = fs::File::open(archive_file.path()).context("failed to open archive")?;
         let mut archive = Archive::new(GzDecoder::new(archive));
         let temporary_dir = tempfile::tempdir().context("failed to create extraction directory")?;
@@ -156,7 +185,7 @@ impl ReleaseClient {
             .map_err(|error| error.error)
             .context("failed to replace installed binary")?;
 
-        Ok(())
+        Ok(true)
     }
 
     fn resolve_asset(&self, version: &str) -> Result<String> {

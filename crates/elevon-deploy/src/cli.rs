@@ -54,6 +54,9 @@ pub enum Commands {
     #[command(about = "Checks for deployment needed assets")]
     Check,
 
+    #[command(about = "Upgrade the CLI binary")]
+    Upgrade(UpgradeArgs),
+
     #[command(about = "Build container images from the deploy config")]
     Build(BuildArgs),
 
@@ -65,6 +68,12 @@ pub enum Commands {
 
     #[command(about = "Rollback applications to previous deployment")]
     Rollback(AppArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct UpgradeArgs {
+    #[arg(long, help = "The version to upgrade to")]
+    pub version: Option<String>,
 }
 
 #[derive(Debug, Args)]

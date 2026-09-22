@@ -118,8 +118,15 @@ pub struct UninstallArgs {
 
 #[derive(Args)]
 pub struct UpgradeArgs {
-    #[arg(long, help = "Version to upgrade to")]
+    #[arg(long, help = "The version to upgrade to")]
     pub version: Option<String>,
+
+    #[arg(long,
+        action = clap::ArgAction::SetTrue,
+        default_value_t = false,
+        help = "Reload running services"
+    )]
+    pub reload_services: bool,
 }
 
 #[derive(Args)]

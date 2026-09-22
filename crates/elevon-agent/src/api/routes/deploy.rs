@@ -49,6 +49,7 @@ fn lock_action() -> anyhow::Result<std::fs::File> {
     let lock_file = OpenOptions::new()
         .create(true)
         .write(true)
+        .truncate(true)
         .open(lock_path)?;
 
     match lock_file.try_lock() {
