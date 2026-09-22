@@ -10,8 +10,8 @@ use std::{
 use anyhow::{Context, Ok, Result, bail};
 use elevon_contracts::deploy::TlsType;
 
-static API_SYSTEMD_SERVICE: &str = "elevon-agent-api.service";
-static PROXY_SYSTEMD_SERVICE: &str = "elevon-agent-proxy.service";
+const API_SYSTEMD_SERVICE: &str = "elevon-agent-api.service";
+const PROXY_SYSTEMD_SERVICE: &str = "elevon-agent-proxy.service";
 
 pub fn get_database_path() -> Result<PathBuf> {
     let db_path = AgentPath::Database.ensure_parent_dir()?;

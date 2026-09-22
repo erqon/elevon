@@ -8,7 +8,15 @@ default = ["agent"]
 agent = []
 
 [dependencies]
-elevon-contracts.workspace = true
+flate2 = "1.1.5"
+tar.workspace = true
+tempfile = "3.27.0"
 
 anyhow.workspace = true
 dotenvy.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+tracing.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util"] }
+
+elevon-contracts.workspace = true

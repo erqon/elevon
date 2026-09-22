@@ -6,12 +6,12 @@ use elevon_fs::agent::{install_api_unit, install_proxy_unit};
 
 use crate::{
     api::db::{AgentDb, models::AuthKey},
-    cli::{CliArgs, InstallArgs, UninstallArgs},
+    cli::{CliArgs, InstallArgs, UninstallArgs, UpgradeArgs},
     config::Config,
     env::ElevonEnv,
 };
 
-static TEMP_FILE_CONFIG: &str = "/etc/tmpfiles.d/elevon-agent.conf";
+const TEMP_FILE_CONFIG: &str = "/etc/tmpfiles.d/elevon-agent.conf";
 
 fn check_before_installation() -> Result<()> {
     let docker_version_output = Command::new("docker")
@@ -203,4 +203,30 @@ pub fn run_uninstall(args: UninstallArgs) -> Result<()> {
         args.keep_systemd,
         TEMP_FILE_CONFIG,
     )
+}
+
+pub async fn upgrade(args: UpgradeArgs) -> Result<()> {
+    let current_version = env!("CARGO_PKG_VERSION");
+    let version = args.version.unwrap_or("latest".to_string());
+
+    tracing::info!("Current Elevon Agent version: {}", current_version);
+    tracing::info!("Looking for {} version", version);
+
+    let client = elevon_fs::upgrade::ReleaseClient::new("elevon-agent".to_string(), version)?;
+    let destination = std::env::current_exe().context("failed to resolve current executable")?;
+
+    let installed = client.install_binary(current_version, &destination).await?;
+
+    if installed {
+        tracing::info!(path = %destination.display(), "Agent binary updated");
+    } else if args.reload_services {
+        run_systemctl(&[
+            "restart",
+            "elevon-agent-api.service",
+            "elevon-agent-proxy.service",
+        ])?;
+        tracing::info!("agent services restarted");
+    }
+
+    Ok(())
 }

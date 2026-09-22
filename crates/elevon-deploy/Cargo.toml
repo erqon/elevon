@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 shlex = "2.0.1"
 bytesize = { version = "2.7.0", features = ["serde"] }
-tar = "0.4.46"
 ignore = "0.4.33"
 
 anyhow.workspace = true
@@ -17,6 +16,7 @@ reqwest = { workspace = true, features = ["stream"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+tar.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-indicatif.workspace = true
@@ -25,3 +25,4 @@ tracing-subscriber.workspace = true
 elevon-config.workspace = true
 elevon-contracts.workspace = true
 elevon-http.workspace = true
+elevon-fs.workspace = true

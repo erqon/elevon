@@ -13,7 +13,11 @@ pub mod config;
 pub mod image;
 pub mod util;
 
-pub async fn run_deploy_cli(arg: DeployArgs, command: Commands) -> anyhow::Result<()> {
+pub async fn run_deploy_cli(
+    arg: DeployArgs,
+    command: Commands,
+    cli_version: Option<&str>,
+) -> anyhow::Result<()> {
     let with_level = matches!(
         command,
         Commands::Build(_) | Commands::Deploy(_) | Commands::Rollback(_)
@@ -21,7 +25,13 @@ pub async fn run_deploy_cli(arg: DeployArgs, command: Commands) -> anyhow::Resul
     elevon_http::init_cli_logging(with_level);
 
     if matches!(command, Commands::Init) {
-        return cli::init::run();
+        return cli::init::run_init();
+    }
+
+    if let Commands::Upgrade(args) = command {
+        return cli::init::run_upgrade(cli_version, args.version)
+            .await
+            .context("failed to upgrade cli");
     }
 
     let config_path = match (&arg.config, &arg.project) {
@@ -41,7 +51,6 @@ pub async fn run_deploy_cli(arg: DeployArgs, command: Commands) -> anyhow::Resul
     let agent_client = AgentClient::new(&agent_credentials.url, &agent_credentials.key)
         .context("failed to create agent client")?;
 
-    // TODO: Do the resolve_credentials in here so the `check` command will check the environment variables too
     let registry_credentials = config
         .registry
         .resolved_credentials()
@@ -50,9 +59,9 @@ pub async fn run_deploy_cli(arg: DeployArgs, command: Commands) -> anyhow::Resul
     match command {
         Commands::Init => unreachable!(),
         Commands::Check => {
-            // TODO: Check for environment variables too
             tracing::info!("Successfully passed config file check {}", &config_path);
         }
+        Commands::Upgrade(_) => unreachable!(),
         Commands::Build(args) => {
             config
                 .run_build(&registry_credentials, &config_path, args.push)
