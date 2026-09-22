@@ -54,7 +54,7 @@ pub enum Commands {
     Uninstall(UninstallArgs),
 
     #[command(about = "Upgrade to new version")]
-    Upgrade,
+    Upgrade(UpgradeArgs),
 
     #[command(about = "Run the reverse proxy for the agent")]
     Proxy(ProxyArgs),

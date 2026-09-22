@@ -1,23 +1,27 @@
-use std::process::Command;
+use std::{fs, os::unix::fs::PermissionsExt, path::Path};
 
 use anyhow::{Context, Result, bail};
+use flate2::read::GzDecoder;
 use serde::Deserialize;
+use tar::Archive;
+use tempfile::NamedTempFile;
+use tokio::io::{AsyncWriteExt, BufWriter};
 
-const REPO_URL: &str = "https://github.com/erqon/elevon";
-const API_REPO_URL: &str = "https://api.github.com/repos/erqon/elevon";
+const RELEASE_URL: &str = "https://github.com/elevon-sh/elevon/releases";
+const API_REPO_URL: &str = "https://api.github.com/repos/elevon-sh/elevon";
 
 #[derive(Debug, Deserialize)]
 struct Release {
     tag_name: String,
 }
 
-struct HttpClient {
+pub struct ReleaseClient {
     client: reqwest::Client,
     crate_name: String,
     version: String,
 }
 
-impl HttpClient {
+impl ReleaseClient {
     pub fn new(crate_name: String, version: String) -> Result<Self> {
         let client = reqwest::Client::builder()
             .connect_timeout(std::time::Duration::from_secs(10))
@@ -32,8 +36,10 @@ impl HttpClient {
     }
 
     async fn resolve_version(&self) -> Result<String> {
+        let prefix = format!("{}-v", self.crate_name);
+
         if self.version != "latest" {
-            return Ok(self.version.trim_start_matches('v').to_owned());
+            return Ok(format!("{prefix}{}", self.version.trim_start_matches('v')));
         }
 
         let url = format!("{API_REPO_URL}/releases?per_page=100");
@@ -54,52 +60,118 @@ impl HttpClient {
         let tag = releases
             .into_iter()
             .map(|release| release.tag_name)
-            .find(|tag| tag.starts_with(&self.crate_name))
-            .context("no CLI release found")?;
+            .find(|tag| tag.starts_with(&prefix))
+            .with_context(|| format!("no release found with tag prefix {prefix}"))?;
 
-        Ok(tag
-            .strip_prefix(&self.crate_name)
-            .expect("tag prefix was checked")
-            .to_owned())
+        Ok(tag)
     }
 
-    async fn download_binary(&self) {
-        // let url = format!("{REPO_URL}/releases/download/")
-    }
-}
+    async fn download_binary(&self) -> Result<NamedTempFile> {
+        let tag = self.resolve_version().await?;
+        let prefix = format!("{}-v", self.crate_name);
+        let version = tag
+            .strip_prefix(&prefix)
+            .with_context(|| format!("invalid release tag: {tag}"))?;
+        let asset = self.resolve_asset(version)?;
+        let url = format!("{RELEASE_URL}/download/{tag}/{asset}");
 
-fn resolve_asset(crate_name: &str, version: &str) -> Result<Option<String>> {
-    let output = Command::new("uname")
-        .arg("-s")
-        .output()
-        .context("failed to get os")?;
+        tracing::debug!(%url, "downloading release asset");
 
-    if output.status.success() {
-        let os_raw = String::from_utf8_lossy(&output.stdout);
-        let os = os_raw.trim().to_lowercase();
+        let mut response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .with_context(|| format!("download request failed: {url}"))?
+            .error_for_status()
+            .with_context(|| format!("GitHub returned an error for {url}"))?;
 
-        if os != "linux" || os != "darwin" {
-            bail!("unsupported operating system");
+        let temporary_file = NamedTempFile::new().context("failed to create temporary file")?;
+        let file = tokio::fs::File::from_std(temporary_file.reopen()?);
+        let mut writer = BufWriter::new(file);
+
+        while let Some(chunk) = response.chunk().await? {
+            writer
+                .write_all(&chunk)
+                .await
+                .context("failed to write downloaded asset")?;
         }
 
-        let arch_output = Command::new("uname")
-            .arg("-m")
-            .output()
-            .context("failed to get arch")?;
+        writer
+            .flush()
+            .await
+            .context("failed to flush downloaded asset")?;
 
-        if arch_output.status.success() {
-            let arch_raw = String::from_utf8_lossy(&arch_output.stdout);
-            let mut arch = arch_raw.trim().to_lowercase();
+        Ok(temporary_file)
+    }
 
-            match arch.as_str() {
-                "x86_64" | "amd64" => arch = "x86_64".to_string(),
-                "arm64" | "aarch64" => arch = "aarch64".to_string(),
-                _ => {}
+    pub async fn install_binary(&self, destination: &Path) -> Result<()> {
+        let archive_file = self.download_binary().await?;
+        let archive = fs::File::open(archive_file.path()).context("failed to open archive")?;
+        let mut archive = Archive::new(GzDecoder::new(archive));
+        let temporary_dir = tempfile::tempdir().context("failed to create extraction directory")?;
+        let mut extracted_binary = None;
+
+        for entry in archive
+            .entries()
+            .context("failed to read archive entries")?
+        {
+            let mut entry = entry.context("failed to read archive entry")?;
+            if !entry.header().entry_type().is_file() {
+                continue;
             }
 
-            return Ok(Some(format!("{crate_name}-v{version}-{os}-{arch}.tar.gz")));
+            let path = entry.path().context("failed to read archive entry path")?;
+            let Some(name) = path.file_name() else {
+                continue;
+            };
+
+            if name == self.crate_name.as_str()
+                || name.to_string_lossy().starts_with(&self.crate_name)
+            {
+                let extracted = temporary_dir.path().join(&self.crate_name);
+                entry
+                    .unpack(&extracted)
+                    .context("failed to extract release binary")?;
+                extracted_binary = Some(extracted);
+                break;
+            }
         }
+
+        let extracted_binary =
+            extracted_binary.context("release archive does not contain the agent binary")?;
+        let parent = destination
+            .parent()
+            .context("installed binary path has no parent directory")?;
+        fs::create_dir_all(parent).context("failed to create binary directory")?;
+
+        let temporary_binary =
+            NamedTempFile::new_in(parent).context("failed to create replacement binary")?;
+        fs::copy(&extracted_binary, temporary_binary.path())
+            .context("failed to stage replacement binary")?;
+        fs::set_permissions(temporary_binary.path(), fs::Permissions::from_mode(0o755))
+            .context("failed to set replacement binary permissions")?;
+        temporary_binary
+            .persist(destination)
+            .map_err(|error| error.error)
+            .context("failed to replace installed binary")?;
+
+        Ok(())
     }
 
-    Ok(None)
+    fn resolve_asset(&self, version: &str) -> Result<String> {
+        let os = match std::env::consts::OS {
+            "linux" => "linux",
+            "macos" => "darwin",
+            _ => bail!("unsupported operating system"),
+        };
+
+        let arch = match std::env::consts::ARCH {
+            "x86_64" => "x86_64",
+            "aarch64" => "aarch64",
+            _ => bail!("unsupported architecture"),
+        };
+
+        Ok(format!("{}-v{version}-{os}-{arch}.tar.gz", self.crate_name))
+    }
 }

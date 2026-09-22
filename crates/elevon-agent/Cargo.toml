@@ -6,7 +6,6 @@ default-run = "elevon-agent"
 
 [dependencies]
 arc-swap = "1.9.2"
-const_format = "0.2.36"
 dashmap = "6.2.1"
 strum = "0.28.0"
 strum_macros = "0.28.0"

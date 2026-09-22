@@ -1,7 +1,6 @@
 use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, bail};
-use const_format::formatcp;
 use elevon_config::ElevonConfig;
 use elevon_fs::agent::{install_api_unit, install_proxy_unit};
 
@@ -206,9 +205,21 @@ pub fn run_uninstall(args: UninstallArgs) -> Result<()> {
     )
 }
 
-pub fn upgrade(version: Option<String>) {
-    const ASSET: &str = "";
-    const REPO_PATH: &str = "erqon/elevon";
-    const RELEASE_URL: &str =
-        formatcp!("https://github.com/{REPO_PATH}/releases/download/elevon-agent-v/{ASSET}");
+pub async fn upgrade(version: Option<String>) -> Result<()> {
+    let version = version.unwrap_or("latest".to_string());
+
+    let client = elevon_fs::upgrade::ReleaseClient::new("elevon-agent".to_string(), version)?;
+    let destination = std::env::current_exe().context("failed to resolve current executable")?;
+
+    client.install_binary(&destination).await?;
+    tracing::info!(path = %destination.display(), "agent binary updated");
+
+    run_systemctl(&[
+        "restart",
+        "elevon-agent-api.service",
+        "elevon-agent-proxy.service",
+    ])?;
+    tracing::info!("agent services restarted");
+
+    Ok(())
 }
