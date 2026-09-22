@@ -38,3 +38,18 @@ Markers for features before the release
 - <s>[ ] Deploy multiple replicas of the same app from one config (load balancing) **(N)** </s>
 - <s>[ ] Health-check gated promotion (switch traffic only after new container is healthy) **(N)** </s>
 - <s>[ ] Rollback-on-failure policy (auto rollback on health-check failure or deploy timeout) </s>
+
+## Stable release (Deadline 30th Sep)
+
+## Elevon Agent
+
+- [x] Upgrade the binary
+- [ ] Running infrastructure Docker services (Postgres, Redis, etc.) **(N)**
+- [ ] Deployment history and audit trail
+
+## Elevon Deploy
+
+- [x] Upgrade the binary
+- [ ] Interactive rollback selector (choose previous release) **(M)**
+- [ ] Health-check gated promotion (switch traffic only after new container is healthy) **(M)**
+- [ ] Rollback-on-failure policy (auto rollback on health-check failure or deploy timeout) **(N)**
