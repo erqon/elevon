@@ -101,23 +101,15 @@ impl AgentClient {
                 };
 
                 let cmd = cfg.cmd.as_ref().and_then(|c| shlex::split(c));
-                let (restart, cpu, memory, network) = match cfg.runtime.clone() {
-                    Some(runtime) => (
-                        runtime.restart,
-                        runtime.cpu,
-                        runtime.memory,
-                        runtime.network,
-                    ),
-                    None => (None, None, None, None),
-                };
+                let runtime_config = cfg.runtime.clone().unwrap_or_default();
 
                 let runtime_options = AppRuntimeOptions {
                     role: cfg.role.clone(),
                     cmd,
-                    restart,
-                    cpu_limit: cpu.as_ref().map(|c| c.nano_cpus()),
-                    memory_limit: memory.as_ref().map(|m| m.bytes()),
-                    network,
+                    restart: Some(runtime_config.restart),
+                    cpu_limit: runtime_config.cpu.as_ref().map(|c| c.nano_cpus()),
+                    memory_limit: runtime_config.memory.as_ref().map(|m| m.bytes()),
+                    network: runtime_config.network,
                 };
 
                 Ok(Some(AppPayload {

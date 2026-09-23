@@ -20,10 +20,10 @@ pub struct AppConfig {
     pub tls: Option<TlsConfig>,
 }
 
-#[derive(Debug, Default, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(default)]
 pub struct AppRuntimeConfig {
-    pub restart: Option<RestartPolicyNameEnum>,
+    pub restart: RestartPolicyNameEnum,
 
     #[serde(alias = "cpu_limit")]
     pub cpu: Option<CpuLimit>,
@@ -32,6 +32,17 @@ pub struct AppRuntimeConfig {
     pub memory: Option<MemoryLimit>,
 
     pub network: Option<String>,
+}
+
+impl Default for AppRuntimeConfig {
+    fn default() -> Self {
+        Self {
+            restart: RestartPolicyNameEnum::UNLESS_STOPPED,
+            cpu: None,
+            memory: None,
+            network: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
