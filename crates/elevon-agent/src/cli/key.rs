@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 use serde::{Deserialize, Serialize};
 use tabled::{Table, settings::Style};
@@ -8,14 +8,25 @@ use crate::{
     socket::{Socket, SocketType},
 };
 
+#[derive(Args, Clone, Serialize, Deserialize)]
+pub struct KeyRevokeArgs {
+    #[arg(name = "id", help = "An ID or list of IDs of the keys")]
+    pub ids: Vec<String>,
+}
+
 #[derive(Subcommand, Serialize, Deserialize)]
 pub enum KeyCommands {
-    #[command(about = "Command to create new auth keys")]
+    #[command(about = "Create new auth keys")]
     Create(KeyCreateArgs),
 
+    #[command(about = "List all keys")]
     List,
 
-    Revoke,
+    #[command(about = "Revoke keys")]
+    Revoke(KeyRevokeArgs),
+
+    #[command(about = "Delete keys")]
+    Delete(KeyRevokeArgs),
 }
 
 impl KeyCommands {
@@ -33,11 +44,9 @@ impl KeyCommands {
                     .await
                     .context("failed to contact the API server through api.sock")?;
 
-                let Some(response) = response else {
-                    bail!("failed to create auth key for {}", name);
-                };
-
-                if let ApiSocketEventResponse::KeyCreate(key) = response {
+                if let Some(response) = response
+                    && let ApiSocketEventResponse::KeyCreate(key) = response
+                {
                     tracing::info!("Save your API Key: {}", key);
                 }
             }
@@ -51,7 +60,16 @@ impl KeyCommands {
                     tracing::info!("{}", Table::new(rows).with(Style::modern()));
                 }
             }
-            KeyCommands::Revoke => {}
+            KeyCommands::Revoke(args) => {
+                api_socket
+                    .send(ApiSocketEvent::KeyCommands(KeyCommands::Revoke(
+                        args.clone(),
+                    )))
+                    .await?;
+
+                tracing::info!("Successfully revoked key(s): [{}]", args.ids.join(", "));
+            }
+            KeyCommands::Delete(_args) => {}
         }
 
         Ok(())

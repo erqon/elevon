@@ -1,7 +1,6 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use axum::extract::FromRequestParts;
 use elevon_http::{auth::get_auth_token, error::AppError, token::hash};
-use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use tabled::Tabled;
 
@@ -39,7 +38,11 @@ impl AuthKey {
         let api_key = elevon_http::token::opaque();
         let hashed_api_key = elevon_http::token::hash(&api_key);
 
-        let now = Timestamp::now();
+        let _ = AuthKey::get_by_name(db, name)
+            .await
+            .context("name already used")?;
+
+        let now = jiff::Timestamp::now();
         let expires_at = now.checked_add(jiff::Span::new().hours(30 * 24))?;
 
         toasty::create!(AuthKey {
