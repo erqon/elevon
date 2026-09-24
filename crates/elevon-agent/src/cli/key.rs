@@ -14,6 +14,15 @@ pub struct KeyRevokeArgs {
     pub ids: Vec<String>,
 }
 
+#[derive(Args, Clone, Serialize, Deserialize)]
+pub struct KeyDeleteArgs {
+    #[arg(name = "id", help = "An ID or list of IDs of the keys")]
+    pub ids: Vec<String>,
+
+    #[arg(long, short = 'y')]
+    pub yes: bool,
+}
+
 #[derive(Subcommand, Serialize, Deserialize)]
 pub enum KeyCommands {
     #[command(about = "Create new auth keys")]
@@ -26,7 +35,7 @@ pub enum KeyCommands {
     Revoke(KeyRevokeArgs),
 
     #[command(about = "Delete keys")]
-    Delete(KeyRevokeArgs),
+    Delete(KeyDeleteArgs),
 }
 
 impl KeyCommands {
@@ -57,19 +66,46 @@ impl KeyCommands {
                     .context("failed to list auth keys")?;
 
                 if let Some(ApiSocketEventResponse::KeyList(rows)) = response {
-                    tracing::info!("{}", Table::new(rows).with(Style::modern()));
+                    tracing::info!("\n{}", Table::new(rows).with(Style::modern()));
                 }
             }
             KeyCommands::Revoke(args) => {
-                api_socket
-                    .send(ApiSocketEvent::KeyCommands(KeyCommands::Revoke(
+                let response: Option<ApiSocketEventResponse> = api_socket
+                    .send_and_receive(ApiSocketEvent::KeyCommands(KeyCommands::Revoke(
                         args.clone(),
                     )))
                     .await?;
 
-                tracing::info!("Successfully revoked key(s): [{}]", args.ids.join(", "));
+                if matches!(response, Some(ApiSocketEventResponse::KeyUpdated)) {
+                    tracing::info!("Successfully revoked key(s): [{}]", args.ids.join(", "));
+                }
             }
-            KeyCommands::Delete(_args) => {}
+            KeyCommands::Delete(args) => {
+                if !args.yes {
+                    tracing::info!(
+                        "This will delete auth key(s): [{}]. Continue? [y/N]",
+                        args.ids.join(", ")
+                    );
+
+                    let mut input = String::new();
+                    std::io::stdin().read_line(&mut input)?;
+
+                    if !matches!(input.trim().to_lowercase().as_str(), "y" | "yes") {
+                        tracing::info!("Cancelled");
+                        return Ok(());
+                    }
+                }
+
+                let response: Option<ApiSocketEventResponse> = api_socket
+                    .send_and_receive(ApiSocketEvent::KeyCommands(KeyCommands::Delete(
+                        args.clone(),
+                    )))
+                    .await?;
+
+                if matches!(response, Some(ApiSocketEventResponse::KeyUpdated)) {
+                    tracing::info!("Successfully deleted key(s): [{}]", args.ids.join(", "));
+                }
+            }
         }
 
         Ok(())

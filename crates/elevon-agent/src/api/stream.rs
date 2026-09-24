@@ -1,10 +1,15 @@
-use std::{convert::Infallible, time::Duration};
+use std::{
+    convert::Infallible,
+    fs::{OpenOptions, TryLockError},
+    time::Duration,
+};
 
 use axum::response::{
     Sse,
     sse::{Event, KeepAlive, KeepAliveStream},
 };
 use elevon_contracts::deploy::StreamEvent;
+use elevon_fs::agent::AgentPath;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -33,4 +38,46 @@ pub fn stream_response(rx: StreamReceiver) -> StreamResponse {
             .interval(Duration::from_secs(1))
             .text("keep alive"),
     )
+}
+
+pub fn spawn_streaming_task<F, Fut>(op: F) -> StreamResponse
+where
+    F: FnOnce(StreamSender) -> Fut + Send + 'static,
+    Fut: Future<Output = anyhow::Result<()>> + Send + 'static,
+{
+    let (tx, rx) = create_stream_channel();
+    let tx_for_task = tx.clone();
+
+    tokio::spawn(async move {
+        if let Err(err) = op(tx_for_task.clone()).await {
+            emit(
+                &tx_for_task,
+                StreamEvent::Error {
+                    message: err.to_string(),
+                },
+            )
+            .await;
+        }
+
+        emit(&tx_for_task, StreamEvent::Done).await;
+    });
+
+    stream_response(rx)
+}
+
+pub fn lock_action() -> anyhow::Result<std::fs::File> {
+    let lock_path = AgentPath::DeployLock.resolve();
+    let lock_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(lock_path)?;
+
+    match lock_file.try_lock() {
+        Ok(()) => Ok(lock_file),
+        Err(TryLockError::WouldBlock) => {
+            anyhow::bail!("another deployment is already running")
+        }
+        Err(TryLockError::Error(err)) => Err(err.into()),
+    }
 }

@@ -1,3 +1,4 @@
+pub mod agent;
 pub mod init;
 
 use clap::{
@@ -46,7 +47,7 @@ pub struct DeployArgs {
     pub config: Option<String>,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Subcommand)]
 pub enum Commands {
     #[command(about = "Initialize a configuration file template")]
     Init,
@@ -68,6 +69,12 @@ pub enum Commands {
 
     #[command(about = "Rollback applications to previous deployment")]
     Rollback(AppArgs),
+
+    #[command(about = "Agent related commands")]
+    Agent {
+        #[command(subcommand)]
+        command: agent::Commands,
+    },
 }
 
 #[derive(Debug, Args)]

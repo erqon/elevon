@@ -1,7 +1,7 @@
 use std::os::unix::fs::PermissionsExt;
 use std::{path::PathBuf, sync::Arc};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use elevon_fs::agent::AgentPath;
 use futures_util::{Future, SinkExt, StreamExt};
 use serde::de::DeserializeOwned;
@@ -24,6 +24,7 @@ pub enum SocketResponse<R> {
     Log(String),
     Data(R),
     Done,
+    Error(String),
 }
 
 #[derive(Clone)]
@@ -93,6 +94,7 @@ impl Socket {
                         SocketResponse::Done => {
                             return Ok(None);
                         }
+                        SocketResponse::Error(message) => bail!(message),
                     }
                 }
                 Err(err) => return Err(err.into()),
@@ -177,6 +179,9 @@ impl Socket {
                                             }
                                         }
                                         Err(err) => {
+                                            let _ = sender
+                                                .send(SocketResponse::Error(err.to_string()))
+                                                .await;
                                             tracing::error!(%err, "Action execution failed")
                                         }
                                     }

@@ -19,7 +19,7 @@ use crate::{
 };
 
 pub struct AgentClient {
-    client: Client,
+    pub client: Client,
     base_url: Url,
     api_key: String,
 }
@@ -39,13 +39,13 @@ impl AgentClient {
         })
     }
 
-    fn absolute_url(&self, endpoint: &str) -> Url {
+    pub fn absolute_url(&self, endpoint: &str) -> Url {
         self.base_url
             .join(endpoint)
             .expect("Failed to append endpoint")
     }
 
-    fn headers(&self) -> HeaderMap {
+    pub fn headers(&self) -> HeaderMap {
         let mut headers = HeaderMap::new();
 
         headers.insert(
