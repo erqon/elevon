@@ -1,9 +1,6 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use axum::extract::FromRequestParts;
 use elevon_http::{auth::get_auth_token, error::AppError, token::hash};
-use jiff::Timestamp;
-use serde::{Deserialize, Serialize};
-use tabled::Tabled;
 
 use crate::api::state::SharedApiState;
 
@@ -36,22 +33,27 @@ pub struct AuthKey {
 
 impl AuthKey {
     pub async fn create_key(db: &mut toasty::Db, name: &str) -> Result<String> {
-        let api_key = elevon_http::token::opaque();
-        let hashed_api_key = elevon_http::token::hash(&api_key);
+        let key = elevon_http::token::opaque();
+        let hashed_key = elevon_http::token::hash(&key);
 
-        let now = Timestamp::now();
+        let already_exists = AuthKey::get_by_name(db, name).await.is_ok();
+        if already_exists {
+            bail!("name already used");
+        }
+
+        let now = jiff::Timestamp::now();
         let expires_at = now.checked_add(jiff::Span::new().hours(30 * 24))?;
 
         toasty::create!(AuthKey {
             name: name.to_string(),
-            key_hash: hashed_api_key,
+            key_hash: hashed_key,
             enabled: true,
             expires_at
         })
         .exec(db)
         .await?;
 
-        Ok(api_key)
+        Ok(key)
     }
 }
 
@@ -89,14 +91,4 @@ async fn check_auth_key(mut db: toasty::Db, auth_key: String) -> anyhow::Result<
     .await?;
 
     Ok(auth_key)
-}
-
-#[derive(Tabled, Serialize, Deserialize)]
-pub struct AuthKeyTableRow {
-    pub id: String,
-    pub name: String,
-    pub enabled: bool,
-    pub expires: String,
-    pub last_used: String,
-    pub revoked: String,
 }

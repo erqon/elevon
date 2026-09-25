@@ -147,7 +147,7 @@ pub struct ApiArgs {
         long,
         value_name = "PORT",
         default_value_t = 3333,
-        help = "Listen on PORT"
+        help = "Port to listen to"
     )]
     pub port: u16,
 }

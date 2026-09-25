@@ -80,10 +80,10 @@ async fn pull_image(
 ) -> Result<()> {
     emit(
         tx,
-        StreamEvent::Log {
-            level: StreamLogLevel::Info,
-            message: format!("[{}] Pulling the image from registry", options.name),
-        },
+        StreamEvent::log(format!(
+            "[{}] Pulling the image from registry",
+            options.name
+        )),
     )
     .await;
 
@@ -118,10 +118,7 @@ async fn pull_image(
 
     emit(
         tx,
-        StreamEvent::Log {
-            level: StreamLogLevel::Info,
-            message: format!("[{}] Image was pulled", options.name),
-        },
+        StreamEvent::log(format!("[{}] Image was pulled", options.name)),
     )
     .await;
 
@@ -235,10 +232,10 @@ async fn _deploy_app(
 
             emit(
                 tx,
-                StreamEvent::Log {
-                    level: StreamLogLevel::Error,
-                    message: format!("[{}] Container failed to start", options.app_config.name),
-                },
+                StreamEvent::log(format!(
+                    "[{}] Container failed to start",
+                    options.app_config.name
+                )),
             )
             .await;
 
@@ -254,10 +251,10 @@ async fn _deploy_app(
         Ok(container_id) => {
             emit(
                 tx,
-                StreamEvent::Log {
-                    level: StreamLogLevel::Info,
-                    message: format!("[{}] Container started running", options.app_config.name),
-                },
+                StreamEvent::log(format!(
+                    "[{}] Container started running",
+                    options.app_config.name
+                )),
             )
             .await;
 
@@ -360,10 +357,7 @@ async fn deploy_app(
 
     emit(
         tx,
-        StreamEvent::Log {
-            level: StreamLogLevel::Info,
-            message: format!("[{}] Deploying...", app_config.name),
-        },
+        StreamEvent::log(format!("[{}] Deploying...", app_config.name)),
     )
     .await;
 
@@ -371,13 +365,10 @@ async fn deploy_app(
 
     emit(
         tx,
-        StreamEvent::Log {
-            level: StreamLogLevel::Info,
-            message: format!(
-                "[{}] Starting running a container on port {}",
-                app_config.name, port
-            ),
-        },
+        StreamEvent::log(format!(
+            "[{}] Starting running a container on port {}",
+            app_config.name, port
+        )),
     )
     .await;
 
@@ -441,10 +432,10 @@ async fn deploy_app(
     if AppRole::Web == app_config.runtime_options.role {
         emit(
             tx,
-            StreamEvent::Log {
-                level: StreamLogLevel::Info,
-                message: format!("[{}] Updating proxy routing for traffic", app_config.name),
-            },
+            StreamEvent::log(format!(
+                "[{}] Updating proxy routing for traffic",
+                app_config.name
+            )),
         )
         .await;
 
@@ -470,13 +461,10 @@ async fn deploy_app(
     {
         emit(
             tx,
-            StreamEvent::Log {
-                level: StreamLogLevel::Info,
-                message: format!(
-                    "[{}] Found previously released container, draining it...",
-                    app_config.name,
-                ),
-            },
+            StreamEvent::log(format!(
+                "[{}] Found previously released container, draining it...",
+                app_config.name,
+            )),
         )
         .await;
 
@@ -537,10 +525,7 @@ pub async fn rollback_apps(
         let Some(db_app) = db_app else {
             emit(
                 tx,
-                StreamEvent::Log {
-                    level: StreamLogLevel::Info,
-                    message: format!("[{}] App not found, skipping...", app.name),
-                },
+                StreamEvent::log(format!("[{}] App not found, skipping...", app.name)),
             )
             .await;
 
@@ -555,13 +540,10 @@ pub async fn rollback_apps(
         let Some(previous_deployment) = previous_deployment else {
             emit(
                 tx,
-                StreamEvent::Log {
-                    level: StreamLogLevel::Info,
-                    message: format!(
-                        "[{}] Previous deployment doesn't exist, skipping...",
-                        app.name
-                    ),
-                },
+                StreamEvent::log(format!(
+                    "[{}] Previous deployment doesn't exist, skipping...",
+                    app.name
+                )),
             )
             .await;
 
@@ -574,13 +556,10 @@ pub async fn rollback_apps(
         ) else {
             emit(
                 tx,
-                StreamEvent::Log {
-                    level: StreamLogLevel::Info,
-                    message: format!(
-                        "[{}] Previous deployment doesn't have image properties, skipping...",
-                        app.name
-                    ),
-                },
+                StreamEvent::log(format!(
+                    "[{}] Previous deployment doesn't have image properties, skipping...",
+                    app.name
+                )),
             )
             .await;
 

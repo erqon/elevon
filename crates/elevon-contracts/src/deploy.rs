@@ -8,9 +8,10 @@ use elevon_config::{ConfigError, ResolveEnvCredentials, resolve_env_or_literal};
 use futures_util::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum StreamLogLevel {
+    #[default]
     Info,
     Warn,
     Error,
@@ -27,6 +28,15 @@ pub enum StreamEvent {
     Error {
         message: String,
     },
+}
+
+impl StreamEvent {
+    pub fn log(message: impl Into<String>) -> Self {
+        Self::Log {
+            level: StreamLogLevel::default(),
+            message: message.into(),
+        }
+    }
 }
 
 pub async fn log_stream_events<S>(mut event_stream: S) -> anyhow::Result<()>
@@ -52,8 +62,6 @@ where
                 continue;
             }
 
-            // println!("line: {}", line)
-
             if let Some(payload) = line.strip_prefix("data: ") {
                 if payload == "[DONE]" {
                     tracing::debug!("Stream sent [DONE] payload");
@@ -65,7 +73,7 @@ where
                         tracing::info!(message);
                     }
                     Ok(StreamEvent::Error { message }) => {
-                        tracing::error!(message);
+                        tracing_indicatif::indicatif_println!("\x1b[31m✗ {message}\x1b[0m");
                     }
                     Ok(other_event) => {
                         tracing::debug!(?other_event, "Unhandled stream event variant");
