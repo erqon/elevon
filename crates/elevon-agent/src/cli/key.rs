@@ -99,13 +99,23 @@ impl KeyCommands {
                 }
             }
             KeyCommands::Delete(args) => {
-                elevon_contracts::handle_cli_yes(
-                    args.yes,
-                    format!(
-                        "This will delete auth key(s): [{}]. Continue? [y/N]",
-                        args.ids.join(", ")
-                    ),
-                )?;
+                let formatted_keys: String = args
+                    .ids
+                    .iter()
+                    .map(|id| format!("- {}", id))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                let message = [
+                    "This will delete auth key(s):",
+                    "",
+                    &formatted_keys,
+                    "",
+                    "Continue? [y/N]",
+                ]
+                .join("\n");
+
+                elevon_contracts::handle_cli_yes(args.yes, message)?;
 
                 let response: Option<ApiSocketEventResponse> = api_socket
                     .send_and_receive(ApiSocketEvent::KeyCommands(KeyCommands::Delete(
