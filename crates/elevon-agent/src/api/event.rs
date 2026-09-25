@@ -1,16 +1,24 @@
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
+use tabled::Tabled;
 use uuid::Uuid;
 
 use crate::{
-    api::{
-        db::models::{AuthKey, AuthKeyTableRow},
-        state::SharedApiState,
-    },
-    cli::key::{KeyCommands, KeyDeleteArgs, KeyRevokeArgs},
+    api::{db::models::AuthKey, state::SharedApiState},
+    cli::key::KeyCommands,
     proxy::types::DeployAppData,
     socket::Emitter,
 };
+
+#[derive(Clone, Tabled, Serialize, Deserialize)]
+pub struct AuthKeyTableRow {
+    pub id: String,
+    pub name: String,
+    pub enabled: bool,
+    pub expires: String,
+    pub last_used: String,
+    pub revoked: String,
+}
 
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "event", content = "data")]
@@ -19,13 +27,18 @@ pub enum ApiSocketEvent {
     KeyCommands(KeyCommands),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(tag = "event", content = "data")]
 pub enum ApiSocketEventResponse {
     RunningContainers(Vec<DeployAppData>),
     KeyCreate(String),
     KeyList(Vec<AuthKeyTableRow>),
     KeyUpdated,
+}
+
+async fn emit_log(emitter: Emitter<ApiSocketEventResponse>, message: String) -> Result<()> {
+    emitter.log(message).await?;
+    Ok(())
 }
 
 impl ApiSocketEvent {
@@ -53,13 +66,18 @@ impl ApiSocketEvent {
                 }
                 KeyCommands::Revoke(args) => {
                     emitter.log("Revoking auth key(s)").await?;
-                    handle_key_revoke(&emitter, args, &mut state.db.get()).await?;
+                    handle_key_revoke(args.ids, &mut state.db.get(), move |message| {
+                        emit_log(emitter.clone(), message)
+                    })
+                    .await?;
                     Some(ApiSocketEventResponse::KeyUpdated)
                 }
                 KeyCommands::Delete(args) => {
-                    handle_key_delete(&emitter, args, &mut state.db.get())
-                        .await
-                        .context("auth key deletion failed")?;
+                    handle_key_delete(args.ids, &mut state.db.get(), move |message| {
+                        emit_log(emitter.clone(), message)
+                    })
+                    .await
+                    .context("auth key deletion failed")?;
                     Some(ApiSocketEventResponse::KeyUpdated)
                 }
             },
@@ -92,12 +110,16 @@ pub async fn handle_key_list(db: &mut toasty::Db) -> Result<Vec<AuthKeyTableRow>
     Ok(rows)
 }
 
-async fn handle_key_revoke(
-    emitter: &Emitter<ApiSocketEventResponse>,
-    args: KeyRevokeArgs,
+pub async fn handle_key_revoke<F, Fut>(
+    keys: Vec<String>,
     db: &mut toasty::Db,
-) -> Result<()> {
-    for key in args.ids {
+    log_action: F,
+) -> Result<()>
+where
+    F: Fn(String) -> Fut,
+    Fut: Future<Output = Result<()>>,
+{
+    for key in keys {
         let key_id = Uuid::parse_str(&key).context("failed to parse ID")?;
         let mut auth_key = AuthKey::get_by_id(db, key_id)
             .await
@@ -114,18 +136,22 @@ async fn handle_key_revoke(
             .exec(db)
             .await?;
 
-        emitter.log(&format!("Revoked auth key: {}", key)).await?;
+        log_action(format!("Revoked auth key: '{key}'")).await?;
     }
 
     Ok(())
 }
 
-async fn handle_key_delete(
-    emitter: &Emitter<ApiSocketEventResponse>,
-    args: KeyDeleteArgs,
+pub async fn handle_key_delete<F, Fut>(
+    keys: Vec<String>,
     db: &mut toasty::Db,
-) -> Result<()> {
-    for key in args.ids {
+    log_action: F,
+) -> Result<()>
+where
+    F: Fn(String) -> Fut,
+    Fut: Future<Output = Result<()>>,
+{
+    for key in keys {
         let key_id = Uuid::parse_str(&key).context("invalid UUID")?;
         let auth_key = AuthKey::get_by_id(db, key_id)
             .await
@@ -137,7 +163,7 @@ async fn handle_key_delete(
             .await
             .with_context(|| format!("failed to delete key: {key}"))?;
 
-        emitter.log(format!("Deleted auth key: {key}")).await?;
+        log_action(format!("Deleted auth key: '{key}'")).await?;
     }
 
     Ok(())

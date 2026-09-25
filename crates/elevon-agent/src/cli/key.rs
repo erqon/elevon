@@ -8,15 +8,33 @@ use crate::{
     socket::{Socket, SocketType},
 };
 
+#[derive(Args, Serialize, Deserialize)]
+pub struct KeyCreateArgs {
+    #[arg(
+        value_name = "NAME",
+        default_value = "Default",
+        help = "Name of the key"
+    )]
+    pub name: String,
+}
+
 #[derive(Args, Clone, Serialize, Deserialize)]
 pub struct KeyRevokeArgs {
-    #[arg(name = "id", help = "An ID or list of IDs of the keys")]
+    #[arg(
+        value_name = "ID",
+        required = true,
+        help = "An ID or list of IDs of the keys to revoke"
+    )]
     pub ids: Vec<String>,
 }
 
 #[derive(Args, Clone, Serialize, Deserialize)]
 pub struct KeyDeleteArgs {
-    #[arg(name = "id", help = "An ID or list of IDs of the keys")]
+    #[arg(
+        value_name = "ID",
+        required = true,
+        help = "An ID or list of IDs of the keys to delete"
+    )]
     pub ids: Vec<String>,
 
     #[arg(long, short = 'y')]
@@ -31,10 +49,10 @@ pub enum KeyCommands {
     #[command(about = "List all keys")]
     List,
 
-    #[command(about = "Revoke keys")]
+    #[command(about = "Revoke one or more keys")]
     Revoke(KeyRevokeArgs),
 
-    #[command(about = "Delete keys")]
+    #[command(about = "Delete one or more keys")]
     Delete(KeyDeleteArgs),
 }
 
@@ -66,7 +84,7 @@ impl KeyCommands {
                     .context("failed to list auth keys")?;
 
                 if let Some(ApiSocketEventResponse::KeyList(rows)) = response {
-                    tracing::info!("\n{}", Table::new(rows).with(Style::modern()));
+                    tracing::info!("{}", Table::new(rows).with(Style::modern()));
                 }
             }
             KeyCommands::Revoke(args) => {
@@ -77,24 +95,17 @@ impl KeyCommands {
                     .await?;
 
                 if matches!(response, Some(ApiSocketEventResponse::KeyUpdated)) {
-                    tracing::info!("Successfully revoked key(s): [{}]", args.ids.join(", "));
+                    tracing::info!("Successfully revoked all keys");
                 }
             }
             KeyCommands::Delete(args) => {
-                if !args.yes {
-                    tracing::info!(
+                elevon_contracts::handle_cli_yes(
+                    args.yes,
+                    format!(
                         "This will delete auth key(s): [{}]. Continue? [y/N]",
                         args.ids.join(", ")
-                    );
-
-                    let mut input = String::new();
-                    std::io::stdin().read_line(&mut input)?;
-
-                    if !matches!(input.trim().to_lowercase().as_str(), "y" | "yes") {
-                        tracing::info!("Cancelled");
-                        return Ok(());
-                    }
-                }
+                    ),
+                )?;
 
                 let response: Option<ApiSocketEventResponse> = api_socket
                     .send_and_receive(ApiSocketEvent::KeyCommands(KeyCommands::Delete(
@@ -110,10 +121,4 @@ impl KeyCommands {
 
         Ok(())
     }
-}
-
-#[derive(Args, Serialize, Deserialize)]
-pub struct KeyCreateArgs {
-    #[arg(long, short, help = "A name for the key", default_value = "Default")]
-    pub name: String,
 }

@@ -185,17 +185,10 @@ pub fn run_uninstall(args: UninstallArgs) -> Result<()> {
         tracing::info!("- environment files");
     }
 
-    if !args.yes {
-        tracing::info!("This will remove Elevon files and services. Continue? [y/N]");
-
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input)?;
-
-        if !matches!(input.trim().to_lowercase().as_str(), "y" | "yes") {
-            tracing::info!("Cancelled.");
-            return Ok(());
-        }
-    }
+    elevon_contracts::handle_cli_yes(
+        args.yes,
+        "This will remove Elevon files and services. Continue? [y/N]",
+    )?;
 
     elevon_fs::agent::remove_files(
         args.keep_database,
