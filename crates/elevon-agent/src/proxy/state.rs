@@ -41,7 +41,9 @@ pub struct ProxyState {
 impl ProxyState {
     pub fn new(env: &ElevonEnv) -> anyhow::Result<Arc<Self>> {
         let Some(agent_domain) = &env.agent_domain else {
-            tracing::error!("agent domain was not provided, run `elevon-agent install` to use the new configuration");
+            tracing::error!(
+                "agent domain was not provided, run `elevon-agent install` to use the new configuration"
+            );
             std::process::exit(1);
         };
 
