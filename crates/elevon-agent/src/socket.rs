@@ -3,9 +3,11 @@ use std::{path::PathBuf, sync::Arc};
 
 use anyhow::{Context, Result, bail};
 use elevon_fs::agent::AgentPath;
+use futures_util::stream::SplitSink;
 use futures_util::{Future, SinkExt, StreamExt};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use tokio::net::unix::SocketAddr;
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
@@ -104,7 +106,7 @@ impl Socket {
         Ok(None)
     }
 
-    pub async fn listener<M, R, S, F, Fut>(&self, state: S, action: F) -> Result<()>
+    pub async fn listener<M, R, S, F, Fut>(&self, state: S, handler: F) -> Result<()>
     where
         M: DeserializeOwned + Send + 'static,
         R: Serialize + Send + 'static,
@@ -126,86 +128,11 @@ impl Socket {
 
         std::fs::set_permissions(&self.path, std::fs::Permissions::from_mode(0o660))?;
 
-        let action = Arc::new(action);
+        let handler = Arc::new(handler);
 
         loop {
-            match listener.accept().await {
-                Ok((stream, _)) => {
-                    let action = action.clone();
-                    let state = state.clone();
-
-                    tokio::spawn(async move {
-                        let (mut writer, mut reader) =
-                            Framed::new(stream, LengthDelimitedCodec::new()).split();
-
-                        while let Some(result) = reader.next().await {
-                            match result {
-                                Ok(frame) => {
-                                    let message: M = match serde_json::from_slice(&frame) {
-                                        Ok(m) => m,
-                                        Err(err) => {
-                                            tracing::error!(%err, "invalid json");
-                                            continue; // Keep listening for next frames instead of breaking the loop
-                                        }
-                                    };
-
-                                    let (sender, mut receiver) =
-                                        mpsc::channel::<SocketResponse<R>>(32);
-                                    let emitter = Emitter {
-                                        sender: sender.clone(),
-                                    };
-                                    let writer_task = tokio::spawn(async move {
-                                        while let Some(message) = receiver.recv().await {
-                                            let payload = serde_json::to_vec(&message)?;
-                                            writer.send(payload.into()).await?;
-                                        }
-
-                                        Ok::<_, anyhow::Error>(())
-                                    });
-
-                                    match action(state.clone(), message, emitter).await {
-                                        Ok(Some(res)) => {
-                                            if let Err(err) =
-                                                sender.send(SocketResponse::Data(res)).await
-                                            {
-                                                tracing::error!(%err, "failed to send response");
-                                            }
-                                        }
-                                        Ok(None) => {
-                                            if let Err(err) =
-                                                sender.send(SocketResponse::Done).await
-                                            {
-                                                tracing::error!(%err, "failed to send completion");
-                                            }
-                                        }
-                                        Err(err) => {
-                                            let _ = sender
-                                                .send(SocketResponse::Error(err.to_string()))
-                                                .await;
-                                            tracing::error!(%err, "Action execution failed")
-                                        }
-                                    }
-
-                                    drop(sender);
-                                    if let Err(err) = writer_task.await {
-                                        tracing::error!(%err, "socket writer task failed");
-                                    }
-
-                                    break;
-                                }
-                                Err(e) => {
-                                    tracing::error!(error = %e, "Failed to read framed data from client");
-                                    break;
-                                }
-                            }
-                        }
-                    });
-                }
-                Err(e) => {
-                    tracing::error!(error = %e, "Fatal error accepting socket connection");
-                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-                }
-            }
+            self.handle_stream(state.clone(), handler.clone(), listener.accept().await)
+                .await?;
         }
     }
 
@@ -227,5 +154,115 @@ impl Socket {
                 }
             }
         });
+    }
+
+    async fn handle_stream<M, R, S, F, Fut>(
+        &self,
+        state: S,
+        handler: Arc<F>,
+        listener: std::io::Result<(UnixStream, SocketAddr)>,
+    ) -> Result<()>
+    where
+        M: DeserializeOwned + Send + 'static,
+        R: Serialize + Send + 'static,
+        S: Clone + Send + Sync + 'static,
+        F: Fn(S, M, Emitter<R>) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<Option<R>, Box<dyn std::error::Error + Send + Sync>>>
+            + Send
+            + 'static,
+    {
+        match listener {
+            Ok((stream, _)) => {
+                tokio::spawn(async move {
+                    let (writer, mut reader) =
+                        Framed::new(stream, LengthDelimitedCodec::new()).split();
+
+                    while let Some(result) = reader.next().await {
+                        match result {
+                            Ok(frame) => {
+                                let message: M = match serde_json::from_slice(&frame) {
+                                    Ok(m) => m,
+                                    Err(err) => {
+                                        tracing::error!(%err, "invalid json");
+                                        continue; // Keep listening for next frames instead of breaking the loop
+                                    }
+                                };
+
+                                if let Err(error) =
+                                    Self::handle_frame(state, message, handler, writer).await
+                                {
+                                    tracing::error!(%error, "failed to handle frame");
+                                }
+
+                                break;
+                            }
+                            Err(err) => {
+                                tracing::error!(error = %err, "Failed to read framed data from client");
+                                break;
+                            }
+                        }
+                    }
+                });
+            }
+            Err(err) => {
+                tracing::error!(error = %err, "Fatal error accepting socket connection");
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_frame<M, R, S, F, Fut>(
+        state: S,
+        message: M,
+        handler: Arc<F>,
+        mut writer: SplitSink<Framed<UnixStream, LengthDelimitedCodec>, bytes::Bytes>,
+    ) -> Result<()>
+    where
+        M: DeserializeOwned + Send + 'static,
+        R: Serialize + Send + 'static,
+        S: Clone + Send + Sync + 'static,
+        F: Fn(S, M, Emitter<R>) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<Option<R>, Box<dyn std::error::Error + Send + Sync>>>
+            + Send
+            + 'static,
+    {
+        let (sender, mut receiver) = mpsc::channel::<SocketResponse<R>>(32);
+        let emitter = Emitter {
+            sender: sender.clone(),
+        };
+        let writer_task = tokio::spawn(async move {
+            while let Some(message) = receiver.recv().await {
+                let payload = serde_json::to_vec(&message)?;
+                writer.send(payload.into()).await?;
+            }
+
+            Ok::<_, anyhow::Error>(())
+        });
+
+        match handler(state, message, emitter).await {
+            Ok(Some(res)) => {
+                if let Err(err) = sender.send(SocketResponse::Data(res)).await {
+                    tracing::error!(%err, "failed to send response");
+                }
+            }
+            Ok(None) => {
+                if let Err(err) = sender.send(SocketResponse::Done).await {
+                    tracing::error!(%err, "failed to send completion");
+                }
+            }
+            Err(err) => {
+                let _ = sender.send(SocketResponse::Error(err.to_string())).await;
+                tracing::error!(%err, "Handler execution failed")
+            }
+        }
+
+        drop(sender);
+        if let Err(err) = writer_task.await {
+            tracing::error!(%err, "socket writer task failed");
+        }
+
+        Ok(())
     }
 }
