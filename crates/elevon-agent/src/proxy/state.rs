@@ -40,12 +40,17 @@ pub struct ProxyState {
 
 impl ProxyState {
     pub fn new(env: &ElevonEnv) -> anyhow::Result<Arc<Self>> {
+        let Some(agent_domain) = &env.agent_domain else {
+            tracing::error!("agent domain was not provided, run `elevon-agent install` to use the new configuration");
+            std::process::exit(1);
+        };
+
         let dynamic_cert = DynamicCert::new();
 
-        dynamic_cert.setup_agent_certs(&env.agent_domain)?;
+        dynamic_cert.setup_agent_certs(agent_domain)?;
 
         let agent_state = AgentState {
-            domain: env.agent_domain.clone(),
+            domain: agent_domain.clone(),
             port: env.agent_port,
         };
 

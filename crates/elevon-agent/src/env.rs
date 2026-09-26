@@ -7,13 +7,25 @@ use strum_macros::{EnumIter, IntoStaticStr};
 
 use crate::config::{Config, parse_port};
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ElevonEnv {
-    pub agent_domain: String,
+    pub agent_domain: Option<String>,
     pub agent_port: u16,
     pub proxy_http_port: u16,
     pub proxy_https_port: Option<u16>,
     pub turso_remote_url: Option<String>,
+}
+
+impl Default for ElevonEnv {
+    fn default() -> Self {
+        Self {
+            agent_domain: None,
+            agent_port: 3333,
+            proxy_http_port: 80,
+            proxy_https_port: Some(443),
+            turso_remote_url: None,
+        }
+    }
 }
 
 impl ElevonEnv {
@@ -25,7 +37,7 @@ impl ElevonEnv {
             .unwrap_or(Ok((80, Some(443))))?;
 
         let mut elevon_env = Self {
-            agent_domain: config.agent.domain.clone(),
+            agent_domain: Some(config.agent.domain.clone()),
             agent_port: config.agent.port,
             proxy_http_port: proxy_ports.0,
             proxy_https_port: proxy_ports.1,
@@ -51,7 +63,7 @@ impl ElevonEnv {
     // updates the in-memory field only, without touching disk
     fn apply_value(&mut self, key: ElevonEnvKey, value: String) -> Result<()> {
         match key {
-            ElevonEnvKey::AgentDomain => self.agent_domain = value,
+            ElevonEnvKey::AgentDomain => self.agent_domain = Some(value),
             ElevonEnvKey::AgentPort => self.agent_port = value.parse::<u16>()?,
             ElevonEnvKey::ProxyHttpPort => self.proxy_http_port = value.parse::<u16>()?,
             ElevonEnvKey::ProxyHttpsPort => self.proxy_https_port = Some(value.parse::<u16>()?),
@@ -76,7 +88,10 @@ impl ElevonEnv {
     }
 
     fn set_env_values(&mut self) -> Result<()> {
-        self.set_value(ElevonEnvKey::AgentDomain, self.agent_domain.clone())?;
+        if let Some(agent_domain) = &self.agent_domain {
+            self.set_value(ElevonEnvKey::AgentDomain, agent_domain.clone())?;
+        }
+
         self.set_value(ElevonEnvKey::AgentPort, self.agent_port.to_string())?;
 
         self.set_value(
