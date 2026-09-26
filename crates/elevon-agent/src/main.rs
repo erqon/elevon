@@ -16,7 +16,7 @@ fn main() {
 fn run() -> Result<()> {
     let cli = Cli::parse();
 
-    let with_level = matches!(cli.command, Commands::Api(_) | Commands::Proxy(_));
+    let with_level = matches!(cli.command, Commands::Api(_) | Commands::Proxy);
     elevon_http::init_cli_logging(with_level);
 
     if matches!(cli.command, Commands::Init) {
@@ -50,8 +50,8 @@ fn run() -> Result<()> {
             run_async(elevon_agent::api::run_api_server(args, &env))
                 .context("api command failed")?;
         }
-        Commands::Proxy(args) => {
-            elevon_agent::proxy::run_proxy(args, &env, false).context("proxy command failed")?;
+        Commands::Proxy => {
+            elevon_agent::proxy::run_proxy(&env, false).context("proxy command failed")?;
         }
     }
 

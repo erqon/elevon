@@ -10,5 +10,6 @@ agent:
 
 # proxy:
   # By default, the proxy runs on HTTP 80 and HTTPS 443.
-  # A custom port runs HTTP only, useful when running multiple agents behind a tunnel or reverse proxy.
-  # port: 6188
+  # A custom port HTTP:HTTPS where HTTPS is optional and HTTP is required if passed at all.
+  # Without HTTPS port it doesn't run on HTTPS.
+  # port: 6188:6189
