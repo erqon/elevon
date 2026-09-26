@@ -191,7 +191,7 @@ pub fn run_proxy(args: ProxyArgs, env: &ElevonEnv, upgrade: bool) -> anyhow::Res
     };
 
     // In development, run HTTP on port 6188.
-    // With --port, run HTTP on the specified port.
+    // With --port, run HTTP on the specified port and HTTPS on that port + 1.
     // Otherwise, run HTTP on 80 and HTTPS on 443.
     let (http_port, https_port): (&str, Option<&str>) = if cfg!(debug_assertions) {
         ("6188", None)
@@ -203,7 +203,7 @@ pub fn run_proxy(args: ProxyArgs, env: &ElevonEnv, upgrade: bool) -> anyhow::Res
             std::process::exit(1);
         }
 
-        (&port.to_string(), None)
+        (&port.to_string(), Some(&(port + 1).to_string()))
     } else {
         ("80", Some("443"))
     };
