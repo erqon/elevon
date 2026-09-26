@@ -24,7 +24,6 @@ use pingora::{
 };
 
 use crate::{
-    cli::ProxyArgs,
     env::ElevonEnv,
     proxy::{socket::SocketControl, state::ProxyState},
 };
@@ -183,29 +182,30 @@ impl BackgroundService for DrainJanitor {
     }
 }
 
-pub fn run_proxy(args: ProxyArgs, env: &ElevonEnv, upgrade: bool) -> anyhow::Result<()> {
-    let port: Option<u16> = match (args.port, env.proxy_port) {
-        (Some(p), _) => Some(p),    // CLI flag specified -> use CLI flag
-        (None, Some(p)) => Some(p), // No CLI flag, env set -> use env
-        _ => None,                  // Neither set -> default port
-    };
-
+pub fn run_proxy(env: &ElevonEnv, upgrade: bool) -> anyhow::Result<()> {
     // In development, run HTTP on port 6188.
-    // With --port, run HTTP on the specified port and HTTPS on that port + 1.
-    // Otherwise, run HTTP on 80 and HTTPS on 443.
-    let (http_port, https_port): (&str, Option<&str>) = if cfg!(debug_assertions) {
-        ("6188", None)
-    } else if let Some(port) = port {
-        let http = check_port(port);
+    // If ports are defined in the config file, they are used.
+    // Otherwise, runs HTTP on 80 and HTTPS on 443.
+    let (http_port, https_port): (String, Option<String>) = if cfg!(debug_assertions) {
+        ("6188".to_string(), None)
+    } else {
+        let (http_port, https_port) = (env.proxy_http_port, env.proxy_https_port);
+        let checked_http = check_port(http_port);
 
-        if http.is_none() {
-            tracing::error!("HTTP port is already taken: {}", port);
+        let Some(http_port) = checked_http else {
+            tracing::error!("HTTP port is already taken: {}", http_port);
             std::process::exit(1);
+        };
+
+        if let Some(https) = https_port {
+            let checked_https = check_port(https);
+            if checked_https.is_none() {
+                tracing::error!("HTTPS port is already taken: {}", http_port);
+                std::process::exit(1);
+            };
         }
 
-        (&port.to_string(), Some(&(port + 1).to_string()))
-    } else {
-        ("80", Some("443"))
+        (http_port.to_string(), https_port.map(|p| p.to_string()))
     };
 
     let proxy_state = ProxyState::new(env).context("failed to create proxy state")?;
@@ -233,7 +233,7 @@ pub fn run_proxy(args: ProxyArgs, env: &ElevonEnv, upgrade: bool) -> anyhow::Res
     );
 
     lb.add_tcp(&format!("0.0.0.0:{}", http_port));
-    if let Some(https_port) = https_port {
+    if let Some(https_port) = &https_port {
         let tls_settings = TlsSettings::with_callbacks(Box::new(proxy_state.dynamic_cert.clone()))
             .expect("failed to initialize TLS settings");
 
@@ -270,6 +270,13 @@ pub fn run_proxy(args: ProxyArgs, env: &ElevonEnv, upgrade: bool) -> anyhow::Res
             }
         })
     });
+
+    tracing::info!(port = %http_port, "HTTP proxy listening on");
+    if let Some(https_port) = https_port {
+        tracing::info!(port = %https_port, "HTTPS proxy listening on");
+    } else {
+        tracing::debug!("proxy is not being bound to HTTPS");
+    }
 
     server.add_service(lb);
     server.add_service(control);

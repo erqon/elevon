@@ -57,7 +57,7 @@ pub enum Commands {
     Upgrade(UpgradeArgs),
 
     #[command(about = "Run the reverse proxy for the agent")]
-    Proxy(ProxyArgs),
+    Proxy,
 
     #[command(about = "Run the agent HTTP control API")]
     Api(ApiArgs),
@@ -127,17 +127,6 @@ pub struct UpgradeArgs {
         help = "Reload running services"
     )]
     pub reload_services: bool,
-}
-
-#[derive(Args)]
-pub struct ProxyArgs {
-    #[arg(
-        short,
-        long,
-        value_name = "PORT",
-        help = "Custom ports run HTTP only. Use a tunnel or reverse proxy for public HTTPS."
-    )]
-    pub port: Option<u16>,
 }
 
 #[derive(Args)]

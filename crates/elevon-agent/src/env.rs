@@ -5,22 +5,30 @@ use elevon_fs::agent::{AppEnvOptions, add_app_env, load_app_env};
 use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, IntoStaticStr};
 
-use crate::config::Config;
+use crate::config::{Config, parse_port};
 
 #[derive(Debug, Clone, Default)]
 pub struct ElevonEnv {
     pub agent_domain: String,
     pub agent_port: u16,
-    pub proxy_port: Option<u16>,
+    pub proxy_http_port: u16,
+    pub proxy_https_port: Option<u16>,
     pub turso_remote_url: Option<String>,
 }
 
 impl ElevonEnv {
     pub fn new(config: Config) -> Result<Self> {
+        let proxy_ports = config
+            .proxy
+            .as_ref()
+            .map(|c| parse_port(c.port.clone()))
+            .unwrap_or(Ok((80, Some(443))))?;
+
         let mut elevon_env = Self {
             agent_domain: config.agent.domain.clone(),
             agent_port: config.agent.port,
-            proxy_port: config.proxy.and_then(|c| c.port),
+            proxy_http_port: proxy_ports.0,
+            proxy_https_port: proxy_ports.1,
             turso_remote_url: config.turso_remote_url,
         };
         elevon_env.set_env_values()?;
@@ -45,7 +53,8 @@ impl ElevonEnv {
         match key {
             ElevonEnvKey::AgentDomain => self.agent_domain = value,
             ElevonEnvKey::AgentPort => self.agent_port = value.parse::<u16>()?,
-            ElevonEnvKey::ProxyPort => self.proxy_port = Some(value.parse::<u16>()?),
+            ElevonEnvKey::ProxyHttpPort => self.proxy_http_port = value.parse::<u16>()?,
+            ElevonEnvKey::ProxyHttpsPort => self.proxy_https_port = Some(value.parse::<u16>()?),
             ElevonEnvKey::TursoRemoteUrl => self.turso_remote_url = Some(value),
         }
 
@@ -70,8 +79,13 @@ impl ElevonEnv {
         self.set_value(ElevonEnvKey::AgentDomain, self.agent_domain.clone())?;
         self.set_value(ElevonEnvKey::AgentPort, self.agent_port.to_string())?;
 
-        if let Some(proxy_port) = self.proxy_port {
-            self.set_value(ElevonEnvKey::ProxyPort, proxy_port.to_string())?;
+        self.set_value(
+            ElevonEnvKey::ProxyHttpPort,
+            self.proxy_http_port.to_string(),
+        )?;
+
+        if let Some(proxy_https_port) = self.proxy_https_port {
+            self.set_value(ElevonEnvKey::ProxyHttpsPort, proxy_https_port.to_string())?;
         }
 
         if let Some(turso_remote_url) = &self.turso_remote_url {
@@ -87,7 +101,8 @@ impl ElevonEnv {
 pub enum ElevonEnvKey {
     AgentDomain,
     AgentPort,
-    ProxyPort,
+    ProxyHttpPort,
+    ProxyHttpsPort,
     TursoRemoteUrl,
 }
 
