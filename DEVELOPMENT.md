@@ -28,6 +28,4 @@ proxy routing, and uninstall behavior.
 ## Releases
 
 Current release artifacts are built for the agent on Linux `x86_64`, and for
-the CLI on Linux `x86_64` and macOS `aarch64`. Other platform names are
-recognized by the archive resolver, but matching release artifacts must exist
-before those platforms are usable.
+the CLI on Linux `x86_64` and macOS `aarch64`. Other platform and architecture combinations are not currently supported.
