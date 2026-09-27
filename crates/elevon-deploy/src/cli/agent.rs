@@ -78,7 +78,7 @@ pub enum KeyCommands {
 
 impl KeyCommands {
     async fn create(agent_client: &AgentClient, args: &KeyCreateArgs) -> Result<()> {
-        let url = agent_client.absolute_url(&format!("/cli/key/{}", args.name));
+        let url = agent_client.absolute_url(&format!("/cli/keys/{}", args.name));
         let headers = agent_client.headers();
 
         let event_stream = agent_client
@@ -95,7 +95,7 @@ impl KeyCommands {
     }
 
     async fn list(agent_client: &AgentClient) -> Result<()> {
-        let url = agent_client.absolute_url("/cli/key/list");
+        let url = agent_client.absolute_url("/cli/keys/list");
         let headers = agent_client.headers();
 
         let event_stream = agent_client
@@ -112,7 +112,7 @@ impl KeyCommands {
     }
 
     async fn revoke(agent_client: &AgentClient, args: &KeyRevokeArgs) -> Result<()> {
-        let url = agent_client.absolute_url("/cli/key/revoke");
+        let url = agent_client.absolute_url("/cli/keys/revoke");
         let headers = agent_client.headers();
 
         let payload = serde_json::json!({
@@ -152,7 +152,7 @@ impl KeyCommands {
 
         elevon_contracts::handle_cli_yes(args.yes, message)?;
 
-        let url = agent_client.absolute_url("/cli/key/delete");
+        let url = agent_client.absolute_url("/cli/keys/delete");
         let headers = agent_client.headers();
 
         let payload = serde_json::json!({

@@ -298,7 +298,8 @@ async fn prune_old_releases(
     app: &App,
     just_drained_id: Option<uuid::Uuid>,
 ) -> Result<()> {
-    let deployments = Deployment::list_by_app_id(db, &app.id, app.keep_releases as usize).await?;
+    let deployments =
+        Deployment::list_by_app_id(db, &app.id, None, Some(app.keep_releases as usize)).await?;
 
     for old in deployments {
         if old.status == DeploymentStatus::Active || Some(old.id) == just_drained_id {

@@ -4,21 +4,10 @@ use tabled::Tabled;
 use uuid::Uuid;
 
 use crate::{
-    api::{db::models::AuthKey, state::SharedApiState},
-    cli::key::KeyCommands,
-    proxy::types::DeployAppData,
-    socket::Emitter,
+    api::{
+        db::models::{App, AuthKey, AuthKeyTableRow}, state::SharedApiState,
+    }, cli::key::KeyCommands, proxy::types::DeployAppData, socket::Emitter,
 };
-
-#[derive(Clone, Tabled, Serialize, Deserialize)]
-pub struct AuthKeyTableRow {
-    pub id: String,
-    pub name: String,
-    pub enabled: bool,
-    pub expires: String,
-    pub last_used: String,
-    pub revoked: String,
-}
 
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "event", content = "data")]
@@ -86,6 +75,8 @@ impl ApiSocketEvent {
         Ok(response)
     }
 }
+
+pub async fn handle_app_list(db: &mut toasty::Db) {}
 
 pub async fn handle_key_list(db: &mut toasty::Db) -> Result<Vec<AuthKeyTableRow>> {
     let result = AuthKey::all().exec(db).await?;

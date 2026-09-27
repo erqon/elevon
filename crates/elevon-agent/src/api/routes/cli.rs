@@ -1,20 +1,22 @@
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     routing::{get, post},
 };
 use elevon_contracts::deploy::StreamEvent;
 use serde::Deserialize;
 
 use crate::api::{
-    db::models::AuthKey,
+    db::models::{App, AuthKey, Deployment},
     event::{handle_key_delete, handle_key_list, handle_key_revoke},
     state::SharedApiState,
     stream::{StreamResponse, emit, spawn_streaming_task},
 };
 
 pub fn router() -> Router<SharedApiState> {
-    Router::new().nest("/key", KeyCommands::register_routes())
+    Router::new()
+        .nest("/keys", KeyCommands::register_routes())
+        .nest("/deployments", DeploymentCommands::register_routes())
 }
 
 trait CommandsTrait {
@@ -126,5 +128,53 @@ impl CommandsTrait for KeyCommands {
             .route("/list", get(KeyCommands::list))
             .route("/revoke", post(KeyCommands::revoke))
             .route("/delete", post(KeyCommands::delete))
+    }
+}
+
+struct AppCommands;
+
+impl AppCommands {
+    async fn list(_: AuthKey) -> StreamResponse {
+        spawn_streaming_task(move |tx| async move { Ok(()) })
+    }
+}
+
+impl CommandsTrait for AppCommands {
+    fn register_routes() -> Router<SharedApiState> {
+        Router::new().route("/list", get(AppCommands::list))
+    }
+}
+
+#[derive(Deserialize)]
+struct ListQueryParams {
+    limit: Option<usize>,
+    offset: Option<usize>,
+}
+
+struct DeploymentCommands;
+
+impl DeploymentCommands {
+    async fn list(
+        _: AuthKey,
+        State(state): State<SharedApiState>,
+        Path(app): Path<String>,
+        Query(query): Query<ListQueryParams>,
+    ) -> StreamResponse {
+        spawn_streaming_task(move |tx| async move {
+            let mut db = state.db.get();
+            let app = App::get_by_name(&mut db, app).await?;
+
+            let deployments =
+                Deployment::list_by_app_id(&mut state.db.get(), &app.id, query.limit, query.offset)
+                    .await?;
+
+            Ok(())
+        })
+    }
+}
+
+impl CommandsTrait for DeploymentCommands {
+    fn register_routes() -> Router<SharedApiState> {
+        Router::new().route("/list/{app}", get(DeploymentCommands::list))
     }
 }

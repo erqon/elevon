@@ -1,8 +1,12 @@
-use std::str::FromStr;
+use std::{borrow::Cow, str::FromStr};
 
 use anyhow::Result;
 use bollard::plugin::RestartPolicyNameEnum;
 use elevon_contracts::deploy::{AppPayload, AppRole, AppRuntimeOptions};
+use serde::{Deserialize, Serialize};
+use tabled::Tabled;
+
+use crate::api::db::models::TabledView;
 
 #[derive(Debug, toasty::Model)]
 pub struct App {
@@ -78,6 +82,33 @@ impl App {
         .await?;
 
         Ok(app)
+    }
+}
+
+#[derive(Tabled, Serialize, Deserialize)]
+pub struct AppTabled {
+    pub id: String,
+    pub name: String,
+    pub project: String,
+    pub domain: String,
+    pub keep_releases: String,
+    pub updated_at: String,
+    pub created_at: String,
+}
+
+impl TabledView for App {
+    type TabledType = AppTabled;
+
+    fn to_tabled(&self) -> Self::TabledType {
+        AppTabled {
+            id: self.id.to_string(),
+            name: self.name.clone(),
+            project: self.project.clone(),
+            domain: self.domain.clone().unwrap_or_else(|| "-".to_string()),
+            keep_releases: self.keep_releases.to_string(),
+            updated_at: self.updated_at.to_string(),
+            created_at: self.created_at.to_string()
+        }
     }
 }
 
@@ -164,15 +195,29 @@ impl Deployment {
     pub async fn list_by_app_id(
         db: &mut toasty::Db,
         app_id: &uuid::Uuid,
-        keep: usize,
+        limit: Option<usize>,
+        offset: Option<usize>,
     ) -> Result<Vec<Self>> {
+        let limit = limit.unwrap_or(i64::MAX as usize);
+        let offset = offset.unwrap_or(0);
+
         Ok(Deployment::filter_by_app_id(app_id)
             .latest_by(Deployment::fields().updated_at())
-            .limit(i64::MAX as usize)
-            .offset(keep)
+            .limit(limit)
+            .offset(offset)
             .exec(db)
             .await?)
     }
+}
+
+#[derive(Clone, Tabled, Serialize, Deserialize)]
+pub struct AuthKeyTableRow {
+    pub id: String,
+    pub name: String,
+    pub enabled: bool,
+    pub expires: String,
+    pub last_used: String,
+    pub revoked: String,
 }
 
 #[derive(Debug, Default, toasty::Embed)]
