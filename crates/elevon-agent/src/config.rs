@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use elevon_config::ElevonConfig;
 use elevon_contracts::deploy::{TlsConfig, TlsType};
 use elevon_fs::agent::{TlsOptions, write_tls_file};
@@ -10,9 +11,31 @@ pub struct AgentConfig {
     pub tls: Option<TlsConfig>,
 }
 
+fn default_ports() -> String {
+    "80:443".to_string()
+}
+
 #[derive(Deserialize)]
 pub struct ProxyConfig {
-    pub port: Option<u16>,
+    #[serde(default = "default_ports")]
+    pub port: String,
+}
+
+pub fn parse_port(ports: String) -> Result<(u16, Option<u16>)> {
+    let mut parts = ports.split(":");
+
+    let http = parts
+        .next()
+        .context("Missing HTTP port")?
+        .parse::<u16>()
+        .context("Invalid u16 for HTTP port")?;
+
+    let https = parts
+        .next()
+        .map(|s| s.parse::<u16>().context("Invalid u16 for HTTPS port"))
+        .transpose()?;
+
+    Ok((http, https))
 }
 
 #[derive(Deserialize)]
@@ -23,7 +46,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn setup(&self) -> anyhow::Result<()> {
+    pub fn setup(&self) -> Result<()> {
         if let Some(tls) = &self.agent.tls {
             let cert_bytes = std::fs::read(tls.cert.clone())?;
             let key_bytes = std::fs::read(tls.key.clone())?;

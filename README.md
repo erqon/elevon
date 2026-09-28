@@ -1,8 +1,13 @@
 # Elevon
 
-Elevon is an agent-driven deployment and container management system for remote
-VMs. It lets you build, publish, deploy, route, and roll back containerized
-applications without requiring SSH access to the host during normal operation.
+Elevon is a lightweight deployment platform for running containerized
+applications on your own Linux VMs. It handles the workflow from source to
+running service: building images, publishing them to a registry, deploying
+releases, routing traffic, and rolling back when needed.
+
+It is designed for teams that want a simple, self-hosted deployment workflow
+without adopting a large managed platform or operating a full container
+orchestration system.
 
 > [!IMPORTANT]
 > Elevon is beta software.
@@ -10,18 +15,15 @@ applications without requiring SSH access to the host during normal operation.
 
 ## What It Is
 
-Elevon has two main parts:
+Elevon has two components:
 
-- **The CLI** (`elevon`) runs from a developer or build machine. It reads the
-  deployment configuration, builds and pushes images, and sends deployment
-  commands to an agent.
-- **The agent** (`elevon-agent`) runs on the target VM. It owns the local state
-  and database, manages Docker workloads, exposes the control API through a
-  Unix socket, and runs the Pingora reverse proxy for application traffic.
+- **CLI:** Runs on your development machine to configure, build, publish, and
+  deploy applications.
+- **Agent:** Runs on the target VM to manage deployments, containers, routing,
+  and local state.
 
-The CLI and agent communicate through authenticated API paths; the agent's
-internal services use Unix sockets rather than opening direct database
-connections from the CLI or proxy.
+The CLI communicates with the agent through authenticated API requests. The
+agent uses Unix sockets for communication between its internal services.
 
 ## Goals
 
@@ -32,74 +34,38 @@ connections from the CLI or proxy.
 - Keep the operational model lightweight so a deployment does not require a
   large platform or a dedicated operations team.
 - Make the common deployment workflow predictable and approachable.
-- Provide a dashboard soon for monitoring and managing agents from one place.
-- Support horizontal scaling of agents and applications.
-
-## Current Features
-
-- YAML-based deployment configuration.
-- Docker image build and registry push support.
-- Application deployment and rollback commands.
-- Multiple applications in one deployment configuration.
-- Runtime environment variables and inherited environment values.
-- TLS termination with user-provided certificates.
-- Pingora-based reverse proxy routing.
-- Agent and proxy systemd services.
-- Unix-socket communication between agent components.
-- Agent auth-key management.
-- Retention of a configurable number of previous releases.
+- (SOON) Have a dedicated dashboard for monitoring and managing your applications and agents from one place.
+- And more...
 
 ## Installation
 
 Install the agent on the target VM and the CLI on your development machine:
 
-```bash
-# Agent: system-wide installation
-curl -fsSL https://elevon.erqon.dev/install-agent.sh | sudo bash
+| Component | Supported platforms             |
+| --------- | ------------------------------- |
+| CLI       | Linux `x86_64`, macOS `aarch64` |
+| Agent     | Linux `x86_64`                  |
 
-# CLI: current-user installation
+### Agent: system-wide installation
+
+```bash
+curl -fsSL https://elevon.erqon.dev/install-agent.sh | sudo bash
+```
+
+### CLI: current-user installation
+
+```bash
 curl -fsSL https://elevon.erqon.dev/install-cli.sh | bash
 ```
-
-## CLI
-
-The deployment CLI uses `.elevon/deploy.yml` by default:
-
-```text
-elevon init
-elevon check
-elevon build
-elevon push
-elevon deploy --app web
-elevon rollback --app web
-```
-
-Use `elevon --help` and `elevon <command> --help` for the current options.
-
-The agent provides the host-side lifecycle commands:
-
-```text
-elevon-agent init
-sudo elevon-agent install --enable
-elevon-agent key --help
-sudo elevon-agent uninstall
-```
-
-The agent binary is installed system-wide by the release installer, normally at
-`/usr/local/bin/elevon-agent`. The CLI is installed for the current user under
-`~/.config/elevon/bin`, with a link at `~/.local/bin/elevon`.
 
 ## Configuration
 
 A deployment configuration describes the application image, registry,
-routing, build context, environment, and app-specific runtime settings:
+routing, build context, environment, and app-specific settings:
 
 ```yaml
-name: project-name
-image: project/project-name
-
-# Number of previous releases to keep for rollback.
-keep_releases: 5
+name: elevon
+image: erqon/elevon
 
 elevon:
   agent:
@@ -107,76 +73,60 @@ elevon:
     key: $AGENT_KEY
 
 registry:
-  server: ghcr.io
   username: $GHCR_USERNAME
   password: $GHCR_PASSWORD
 
 routing:
-  domain: app.example.com
-  port: 3000
+  domain: elevon.erqon.dev
+  port: $PORT
   tls:
     cert: $TLS_CERT
     key: $TLS_KEY
 
-build:
-  path: ./dev
-  dockerfile: ./Dockerfile.dev
+build: ../
 
 env:
-  vars:
-    PORT: 3000
-    API_URL: $BASE_API_URL
   inherit:
-    - DATABASE_URL
-
-apps:
-  api:
-    role: web
-  worker:
-    role: worker
-    cmd: "deno run worker.ts"
-    runtime:
-      restart: unless-stopped
-      cpu: 2
-      memory: 512mb
-      network: my-network
+    - PORT
 ```
 
 Use [`crates/elevon-deploy/templates/config.yml`](crates/elevon-deploy/templates/config.yml)
 as the full template, including comments about defaults and environment
 variable expansion.
 
-The current release artifacts are built for Linux `x86_64`. Other platform
-names are recognized by the archive resolver, but matching release artifacts
-must exist before those platforms are usable.
+## CLI
 
-## Development Notes
-
-This is a Rust workspace. The main crates are:
-
-- `elevon-agent`: host-side API, proxy, Docker orchestration, and lifecycle.
-- `elevon-cli`: user-facing command-line entry point.
-- `elevon-deploy`: deployment configuration and image operations.
-- `elevon-fs`: agent paths, permissions, and service files.
-- `elevon-http`: shared HTTP and authentication behavior.
-- `elevon-contracts`: shared API and deployment types.
-
-Useful checks during development:
+Initialize and deploy an application with:
 
 ```bash
-cargo check --workspace
-cargo test --workspace
-bash -n scripts/install-agent.sh scripts/install-cli.sh scripts/resolve-release-archive.sh
+elevon init
+elevon check
+elevon deploy --app web
+elevon rollback --app web
 ```
 
-Automated tests are not implemented yet. Until they are added, beta validation
-also requires manual checks of installation, systemd startup and shutdown,
-deployment, rollback, proxy routing, and uninstall behavior.
+The CLI uses `.elevon/deploy.yml` by default. Run `elevon --help` for the
+complete command reference.
 
-## Status and Scope
+Manage the agent separately on the target VM:
 
-Elevon is not yet a general-purpose hosted control plane. It currently targets
-single-VM agent deployments and keeps the agent's state local to that VM.
+```bash
+elevon-agent init
+sudo elevon-agent install --enable
+elevon-agent key --help
+sudo elevon-agent uninstall
+```
 
-See [`TODO.md`](TODO.md) for deferred work, including deployment locking,
-additional operational features, and test coverage.
+See the installation and configuration sections above for setup details.
+
+## Project Status
+
+Elevon is beta software and currently targets deployments to individual Linux
+VMs. It is not yet a general-purpose hosted control plane.
+
+See [`DEVELOPMENT.md`](DEVELOPMENT.md) for workspace details and development
+checks. See [`TODO.md`](TODO.md) for planned work.
+
+## License
+
+See [`LICENSE`](LICENSE).
