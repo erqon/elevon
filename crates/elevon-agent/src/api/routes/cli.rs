@@ -6,16 +6,19 @@ use axum::{
 use elevon_contracts::deploy::StreamEvent;
 use serde::Deserialize;
 
-use crate::api::{
-    db::models::{App, AuthKey, Deployment},
-    event::{handle_key_delete, handle_key_list, handle_key_revoke},
-    state::SharedApiState,
-    stream::{StreamResponse, emit, spawn_streaming_task},
+use crate::{
+    api::{
+        db::models::{App, AppTabled, AuthKey, Deployment, TabledView},
+        state::SharedApiState,
+        stream::{StreamResponse, emit, spawn_streaming_task},
+    },
+    cli::key::{handle_key_delete, handle_key_list, handle_key_revoke},
 };
 
 pub fn router() -> Router<SharedApiState> {
     Router::new()
         .nest("/keys", KeyCommands::register_routes())
+        .nest("/apps", AppCommands::register_routes())
         .nest("/deployments", DeploymentCommands::register_routes())
 }
 
@@ -131,11 +134,41 @@ impl CommandsTrait for KeyCommands {
     }
 }
 
+#[derive(Deserialize)]
+struct ListQueryParams {
+    limit: Option<usize>,
+    offset: Option<usize>,
+}
+
 struct AppCommands;
 
 impl AppCommands {
-    async fn list(_: AuthKey) -> StreamResponse {
-        spawn_streaming_task(move |tx| async move { Ok(()) })
+    async fn list(
+        _: AuthKey,
+        State(state): State<SharedApiState>,
+        Query(query): Query<ListQueryParams>,
+    ) -> StreamResponse {
+        spawn_streaming_task(move |tx| async move {
+            let mut db = state.db.get();
+
+            let limit = query.limit.unwrap_or(25);
+
+            let apps: Vec<AppTabled> = App::all()
+                .limit(limit)
+                .offset(query.offset.unwrap_or(0))
+                .exec(&mut db)
+                .await?
+                .iter()
+                .map(|app| app.to_tabled())
+                .collect();
+
+            let mut table = tabled::Table::new(apps);
+            table.with(tabled::settings::Style::modern());
+
+            emit(&tx, StreamEvent::log(format!("{}", table))).await;
+
+            Ok(())
+        })
     }
 }
 
@@ -143,12 +176,6 @@ impl CommandsTrait for AppCommands {
     fn register_routes() -> Router<SharedApiState> {
         Router::new().route("/list", get(AppCommands::list))
     }
-}
-
-#[derive(Deserialize)]
-struct ListQueryParams {
-    limit: Option<usize>,
-    offset: Option<usize>,
 }
 
 struct DeploymentCommands;
@@ -160,12 +187,14 @@ impl DeploymentCommands {
         Path(app): Path<String>,
         Query(query): Query<ListQueryParams>,
     ) -> StreamResponse {
-        spawn_streaming_task(move |tx| async move {
+        spawn_streaming_task(move |_tx| async move {
             let mut db = state.db.get();
             let app = App::get_by_name(&mut db, app).await?;
 
-            let deployments =
-                Deployment::list_by_app_id(&mut state.db.get(), &app.id, query.limit, query.offset)
+            let limit = query.limit.unwrap_or(25);
+
+            let _deployments =
+                Deployment::list_by_app_id(&mut state.db.get(), &app.id, Some(limit), query.offset)
                     .await?;
 
             Ok(())

@@ -1,8 +1,9 @@
 use anyhow::{Result, bail};
 use axum::extract::FromRequestParts;
 use elevon_http::{auth::get_auth_token, error::AppError, token::hash};
+use serde::{Deserialize, Serialize};
 
-use crate::api::state::SharedApiState;
+use crate::api::{db::models::TabledView, state::SharedApiState};
 
 #[derive(Debug, toasty::Model)]
 pub struct AuthKey {
@@ -91,4 +92,35 @@ async fn check_auth_key(mut db: toasty::Db, auth_key: String) -> anyhow::Result<
     .await?;
 
     Ok(auth_key)
+}
+
+#[derive(Clone, Debug, tabled::Tabled, Serialize, Deserialize)]
+pub struct AuthKeyTabled {
+    pub id: String,
+    pub name: String,
+    pub enabled: bool,
+    pub expires: String,
+    pub last_used: String,
+    pub revoked: String,
+}
+
+impl TabledView for AuthKey {
+    type TabledType = AuthKeyTabled;
+
+    fn to_tabled(&self) -> Self::TabledType {
+        Self::TabledType {
+            id: self.id.to_string(),
+            name: self.name.to_string(),
+            enabled: self.enabled,
+            expires: self.expires_at.to_string(),
+            last_used: self
+                .last_used_at
+                .map(|t| t.to_string())
+                .unwrap_or_else(|| "-".to_string()),
+            revoked: self
+                .revoked_at
+                .map(|t| t.to_string())
+                .unwrap_or_else(|| "-".to_string()),
+        }
+    }
 }

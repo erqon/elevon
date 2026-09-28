@@ -1,4 +1,4 @@
-use std::{borrow::Cow, str::FromStr};
+use std::str::FromStr;
 
 use anyhow::Result;
 use bollard::plugin::RestartPolicyNameEnum;
@@ -100,14 +100,14 @@ impl TabledView for App {
     type TabledType = AppTabled;
 
     fn to_tabled(&self) -> Self::TabledType {
-        AppTabled {
+        Self::TabledType {
             id: self.id.to_string(),
             name: self.name.clone(),
             project: self.project.clone(),
             domain: self.domain.clone().unwrap_or_else(|| "-".to_string()),
             keep_releases: self.keep_releases.to_string(),
             updated_at: self.updated_at.to_string(),
-            created_at: self.created_at.to_string()
+            created_at: self.created_at.to_string(),
         }
     }
 }
@@ -211,7 +211,7 @@ impl Deployment {
 }
 
 #[derive(Clone, Tabled, Serialize, Deserialize)]
-pub struct AuthKeyTableRow {
+pub struct AuthKeyTabled {
     pub id: String,
     pub name: String,
     pub enabled: bool,
