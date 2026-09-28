@@ -5,7 +5,7 @@ use crate::{
     api::state::SharedApiState,
     cli::key::{KeyCommands, KeySocketResponse},
     proxy::types::DeployAppData,
-    socket::Emitter,
+    socket::{Emitter, SocketEventHandler},
 };
 
 #[derive(Serialize, Deserialize)]
@@ -40,26 +40,5 @@ impl ApiSocketEvent {
         };
 
         Ok(response)
-    }
-}
-
-pub trait ApiEvent {
-    type Command;
-    type Response;
-
-    fn handle_event(
-        command: Self::Command,
-        state: SharedApiState,
-        emitter: Emitter<ApiSocketEventResponse>,
-    ) -> impl Future<Output = anyhow::Result<Self::Response>> + Send;
-
-    fn emit_log(
-        emitter: Emitter<ApiSocketEventResponse>,
-        message: String,
-    ) -> impl Future<Output = anyhow::Result<()>> + Send {
-        async move {
-            emitter.log(message).await?;
-            Ok(())
-        }
     }
 }

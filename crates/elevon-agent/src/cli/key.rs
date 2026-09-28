@@ -7,10 +7,10 @@ use uuid::Uuid;
 use crate::{
     api::{
         db::models::{AuthKey, AuthKeyTabled, TabledView},
-        event::{ApiSocketEvent, ApiSocketEventResponse, ApiEvent},
+        event::{ApiSocketEvent, ApiSocketEventResponse},
         state::SharedApiState,
     },
-    socket::{Emitter, Socket, SocketType},
+    socket::{Emitter, Socket, SocketEventHandler, SocketType},
 };
 
 #[derive(Args, Serialize, Deserialize)]
@@ -152,14 +152,15 @@ impl KeyCommands {
     }
 }
 
-impl ApiEvent for KeyCommands {
+impl SocketEventHandler for KeyCommands {
     type Command = KeyCommands;
     type Response = KeySocketResponse;
+    type EventRespose = ApiSocketEventResponse;
 
     async fn handle_event(
         command: Self::Command,
         state: SharedApiState,
-        emitter: Emitter<ApiSocketEventResponse>,
+        emitter: Emitter<Self::EventRespose>,
     ) -> Result<Self::Response> {
         match command {
             KeyCommands::Create(args) => {
