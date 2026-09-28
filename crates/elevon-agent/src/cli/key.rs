@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::{
     api::{
         db::models::{AuthKey, AuthKeyTabled, TabledView},
-        event::{ApiSocketEvent, ApiSocketEventResponse, CliEvent},
+        event::{ApiSocketEvent, ApiSocketEventResponse, ApiEvent},
         state::SharedApiState,
     },
     socket::{Emitter, Socket, SocketType},
@@ -152,7 +152,7 @@ impl KeyCommands {
     }
 }
 
-impl CliEvent for KeyCommands {
+impl ApiEvent for KeyCommands {
     type Command = KeyCommands;
     type Response = KeySocketResponse;
 

@@ -43,7 +43,7 @@ impl ApiSocketEvent {
     }
 }
 
-pub trait CliEvent {
+pub trait ApiEvent {
     type Command;
     type Response;
 
