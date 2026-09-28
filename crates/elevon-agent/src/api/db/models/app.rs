@@ -9,6 +9,7 @@ use tabled::Tabled;
 use crate::api::db::models::TabledView;
 
 #[derive(Debug, toasty::Model)]
+#[unique(name, project)]
 pub struct App {
     #[key]
     #[auto]
@@ -85,7 +86,7 @@ impl App {
     }
 }
 
-#[derive(Tabled, Serialize, Deserialize)]
+#[derive(Clone, Tabled, Serialize, Deserialize)]
 pub struct AppTabled {
     pub id: String,
     pub name: String,
@@ -195,11 +196,10 @@ impl Deployment {
     pub async fn list_by_app_id(
         db: &mut toasty::Db,
         app_id: &uuid::Uuid,
-        limit: Option<usize>,
-        offset: Option<usize>,
+        limit: usize,
+        offset: usize,
     ) -> Result<Vec<Self>> {
-        let limit = limit.unwrap_or(i64::MAX as usize);
-        let offset = offset.unwrap_or(0);
+        let limit = if limit == 0 { i64::MAX as usize } else { limit };
 
         Ok(Deployment::filter_by_app_id(app_id)
             .latest_by(Deployment::fields().updated_at())

@@ -12,7 +12,10 @@ use crate::{
         state::SharedApiState,
         stream::{StreamResponse, emit, spawn_streaming_task},
     },
-    cli::key::{handle_key_delete, handle_key_list, handle_key_revoke},
+    cli::{
+        ListQueryParams,
+        key::{handle_key_delete, handle_key_list, handle_key_revoke},
+    },
 };
 
 pub fn router() -> Router<SharedApiState> {
@@ -134,12 +137,6 @@ impl CommandsTrait for KeyCommands {
     }
 }
 
-#[derive(Deserialize)]
-struct ListQueryParams {
-    limit: Option<usize>,
-    offset: Option<usize>,
-}
-
 struct AppCommands;
 
 impl AppCommands {
@@ -151,11 +148,9 @@ impl AppCommands {
         spawn_streaming_task(move |tx| async move {
             let mut db = state.db.get();
 
-            let limit = query.limit.unwrap_or(25);
-
             let apps: Vec<AppTabled> = App::all()
-                .limit(limit)
-                .offset(query.offset.unwrap_or(0))
+                .limit(query.limit)
+                .offset(query.offset)
                 .exec(&mut db)
                 .await?
                 .iter()
@@ -191,10 +186,8 @@ impl DeploymentCommands {
             let mut db = state.db.get();
             let app = App::get_by_name(&mut db, app).await?;
 
-            let limit = query.limit.unwrap_or(25);
-
             let _deployments =
-                Deployment::list_by_app_id(&mut state.db.get(), &app.id, Some(limit), query.offset)
+                Deployment::list_by_app_id(&mut state.db.get(), &app.id, query.limit, query.offset)
                     .await?;
 
             Ok(())

@@ -67,17 +67,13 @@ impl KeyCommands {
 
         match command {
             KeyCommands::Create(args) => {
-                let name = args.name.clone();
-
-                tracing::info!("Creating auth key: {}", name);
-
                 let response: Option<ApiSocketEventResponse> = api_socket
                     .send_and_receive(ApiSocketEvent::KeyCommands(KeyCommands::Create(args)))
                     .await
                     .context("failed to contact the API server through api.sock")?;
 
                 if let Some(response) = response
-                    && let ApiSocketEventResponse::KeysResponse(KeySocketResponse::KeyCreate(key)) =
+                    && let ApiSocketEventResponse::KeyResponse(KeySocketResponse::KeyCreate(key)) =
                         response
                 {
                     tracing::info!("Save your API Key: {}", key);
@@ -89,9 +85,8 @@ impl KeyCommands {
                     .await
                     .context("failed to list auth keys")?;
 
-                if let Some(ApiSocketEventResponse::KeysResponse(KeySocketResponse::KeyList(
-                    rows,
-                ))) = response
+                if let Some(ApiSocketEventResponse::KeyResponse(KeySocketResponse::KeyList(rows))) =
+                    response
                 {
                     tracing::info!("{}", Table::new(rows).with(Style::modern()));
                 }
@@ -105,7 +100,7 @@ impl KeyCommands {
 
                 if matches!(
                     response,
-                    Some(ApiSocketEventResponse::KeysResponse(
+                    Some(ApiSocketEventResponse::KeyResponse(
                         KeySocketResponse::KeyUpdated
                     ))
                 ) {
@@ -139,7 +134,7 @@ impl KeyCommands {
 
                 if matches!(
                     response,
-                    Some(ApiSocketEventResponse::KeysResponse(
+                    Some(ApiSocketEventResponse::KeyResponse(
                         KeySocketResponse::KeyUpdated
                     ))
                 ) {
@@ -150,6 +145,14 @@ impl KeyCommands {
 
         Ok(())
     }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(tag = "key", content = "data")]
+pub enum KeySocketResponse {
+    KeyCreate(String),
+    KeyList(Vec<AuthKeyTabled>),
+    KeyUpdated,
 }
 
 impl SocketEventHandler for KeyCommands {
@@ -192,14 +195,6 @@ impl SocketEventHandler for KeyCommands {
             }
         }
     }
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(tag = "key_socket", content = "data")]
-pub enum KeySocketResponse {
-    KeyCreate(String),
-    KeyList(Vec<AuthKeyTabled>),
-    KeyUpdated,
 }
 
 pub async fn handle_key_list(db: &mut toasty::Db) -> Result<Vec<AuthKeyTabled>> {

@@ -33,6 +33,7 @@ pub struct DeployArgs {
     #[arg(
         short,
         long,
+        global = true,
         conflicts_with = "config",
         help = "Project name used to find deploy.<name>.yml"
     )]
@@ -41,6 +42,7 @@ pub struct DeployArgs {
     #[arg(
         short,
         long,
+        global = true,
         conflicts_with = "project",
         help = "Path to the deploy configuration file (defaults to .elevon/deploy.yml)"
     )]

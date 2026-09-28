@@ -7,6 +7,7 @@ use clap::{
     Args, Parser, Subcommand,
     builder::styling::{AnsiColor, Styles},
 };
+use serde::{Deserialize, Serialize};
 
 const STYLES: Styles = Styles::styled()
     .header(AnsiColor::Yellow.on_default())
@@ -67,6 +68,12 @@ pub enum Commands {
     Key {
         #[command(subcommand)]
         subcommand: key::KeyCommands,
+    },
+
+    #[command(about = "App specific commands")]
+    App {
+        #[command(subcommand)]
+        subcommand: app::AppCommands,
     },
 }
 
@@ -151,4 +158,18 @@ pub struct ApiArgs {
         help = "Port to listen to"
     )]
     pub port: u16,
+}
+
+#[derive(Args, Serialize, Deserialize)]
+pub struct ListQueryParams {
+    #[arg(
+        short,
+        long,
+        default_value_t = 25,
+        help = "Limit the results. Set 0 to make it unlimited"
+    )]
+    pub limit: usize,
+
+    #[arg(short, long, default_value_t = 0, help = "Starting offset")]
+    pub offset: usize,
 }
