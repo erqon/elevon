@@ -8,7 +8,7 @@ use serde::Deserialize;
 
 use crate::{
     api::{
-        db::models::{App, AppTabled, AuthKey, Deployment, TabledView},
+        db::models::{App, AppTabled, AuthKey, Deployment, TabledView, app::DeploymentTabled},
         state::SharedApiState,
         stream::{StreamResponse, emit, spawn_streaming_task},
     },
@@ -145,16 +145,16 @@ impl AppCommands {
         spawn_streaming_task(move |tx| async move {
             let mut db = state.db.get();
 
-            let apps: Vec<AppTabled> = App::all()
+            let data: Vec<AppTabled> = App::all()
                 .limit(query.limit)
                 .offset(query.offset)
                 .exec(&mut db)
                 .await?
                 .iter()
-                .map(|app| app.to_tabled())
+                .map(|r| r.to_tabled())
                 .collect();
 
-            let mut table = tabled::Table::new(apps);
+            let mut table = tabled::Table::new(data);
             table.with(tabled::settings::Style::modern());
 
             emit(&tx, StreamEvent::log(format!("{}", table))).await;
@@ -176,16 +176,25 @@ impl DeploymentCommands {
     async fn list(
         _: AuthKey,
         State(state): State<SharedApiState>,
-        Path(app): Path<String>,
         Query(query): Query<ListQueryParams>,
     ) -> StreamResponse {
-        spawn_streaming_task(move |_tx| async move {
+        spawn_streaming_task(move |tx| async move {
             let mut db = state.db.get();
-            let app = App::get_by_name(&mut db, app).await?;
 
-            let _deployments =
-                Deployment::list_by_app_id(&mut state.db.get(), &app.id, query.limit, query.offset)
-                    .await?;
+            let data: Vec<DeploymentTabled> = Deployment::all()
+                .include(Deployment::fields().app())
+                .limit(query.limit)
+                .offset(query.offset)
+                .exec(&mut db)
+                .await?
+                .into_iter()
+                .map(|r| r.to_tabled())
+                .collect();
+
+            let mut table = tabled::Table::new(data);
+            table.with(tabled::settings::Style::modern());
+
+            emit(&tx, StreamEvent::log(format!("{}", table))).await;
 
             Ok(())
         })
@@ -194,6 +203,6 @@ impl DeploymentCommands {
 
 impl CommandsTrait for DeploymentCommands {
     fn register_routes() -> Router<SharedApiState> {
-        Router::new().route("/list/{app}", get(DeploymentCommands::list))
+        Router::new().route("/list", get(DeploymentCommands::list))
     }
 }

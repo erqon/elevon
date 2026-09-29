@@ -29,9 +29,11 @@ impl Commands {
                 KeyCommands::Delete(args) => KeyCommands::delete(&agent_client, args).await?,
             },
             Commands::App { command } => match command {
-                AppCommands::List(params) => AppCommands::list(&agent_client).await?,
+                AppCommands::List(params) => AppCommands::list(&agent_client, params).await?,
                 AppCommands::Deployment { command } => match command {
-                    DeploymentCommands::List(params) => {}
+                    DeploymentCommands::List(params) => {
+                        DeploymentCommands::list(&agent_client, params).await?;
+                    }
                 },
             },
         }
@@ -106,22 +108,23 @@ pub struct KeyDeleteArgs {
     pub yes: bool,
 }
 
-trait ApiCommands {
+trait AgentCommandsTrait {
     fn exec_list(
         agent_client: &AgentClient,
         base_endpoint: &str,
+        query_params: Option<&ListQueryParams>,
     ) -> impl Future<Output = Result<()>> {
         async move {
             let url = agent_client.absolute_url(&format!("/cli/{base_endpoint}/list"));
             let headers = agent_client.headers();
 
-            let event_stream = agent_client
-                .client
-                .get(url)
-                .headers(headers)
-                .send()
-                .await?
-                .bytes_stream();
+            let mut req_builder = agent_client.client.get(url);
+
+            if let Some(query_params) = query_params {
+                req_builder = req_builder.query(query_params);
+            }
+
+            let event_stream = req_builder.headers(headers).send().await?.bytes_stream();
 
             log_stream_events(event_stream).await?;
 
@@ -228,29 +231,18 @@ impl KeyCommands {
     }
 }
 
-impl ApiCommands for AppCommands {}
+impl AgentCommandsTrait for AppCommands {}
 
 impl AppCommands {
-    async fn list(agent_client: &AgentClient) -> Result<()> {
-        Self::exec_list(agent_client, "apps").await
+    async fn list(agent_client: &AgentClient, params: &ListQueryParams) -> Result<()> {
+        Self::exec_list(agent_client, "apps", Some(params)).await
     }
 }
 
+impl AgentCommandsTrait for DeploymentCommands {}
+
 impl DeploymentCommands {
-    async fn list(agent_client: &AgentClient) -> Result<()> {
-        let url = agent_client.absolute_url("/cli/deployments/list");
-        let headers = agent_client.headers();
-
-        let event_stream = agent_client
-            .client
-            .get(url)
-            .headers(headers)
-            .send()
-            .await?
-            .bytes_stream();
-
-        log_stream_events(event_stream).await?;
-
-        Ok(())
+    async fn list(agent_client: &AgentClient, params: &ListQueryParams) -> Result<()> {
+        Self::exec_list(agent_client, "deployments", Some(params)).await
     }
 }

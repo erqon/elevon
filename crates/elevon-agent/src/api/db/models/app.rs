@@ -201,8 +201,6 @@ impl Deployment {
         limit: usize,
         offset: usize,
     ) -> Result<Vec<Self>> {
-        let limit = if limit == 0 { i64::MAX as usize } else { limit };
-
         Ok(Deployment::filter_by_app_id(app_id)
             .latest_by(Deployment::fields().updated_at())
             .limit(limit)
