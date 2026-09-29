@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     api::state::SharedApiState,
     cli::{
-        app::{AppCommands, AppSocketResponse},
+        app::{AppCommands, AppSocketResponse, DeploymentCommands, DeploymentSocketResponse},
         key::{KeyCommands, KeySocketResponse},
     },
     proxy::types::DeployAppData,
@@ -17,6 +17,7 @@ pub enum ApiSocketEvent {
     RunningContainers,
     KeyCommands(KeyCommands),
     AppCommands(AppCommands),
+    DeploymentCommands(DeploymentCommands),
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -25,6 +26,7 @@ pub enum ApiSocketEventResponse {
     RunningContainers(Vec<DeployAppData>),
     KeyResponse(KeySocketResponse),
     AppResponse(AppSocketResponse),
+    DeploymentResponse(DeploymentSocketResponse),
 }
 
 impl ApiSocketEvent {
@@ -44,6 +46,11 @@ impl ApiSocketEvent {
             ApiSocketEvent::AppCommands(command) => Some(ApiSocketEventResponse::AppResponse(
                 AppCommands::handle_event(command, state, emitter).await?,
             )),
+            ApiSocketEvent::DeploymentCommands(command) => {
+                Some(ApiSocketEventResponse::DeploymentResponse(
+                    DeploymentCommands::handle_event(command, state, emitter).await?,
+                ))
+            }
         };
 
         Ok(response)

@@ -10,7 +10,8 @@ use crate::{
         event::{ApiSocketEvent, ApiSocketEventResponse},
         state::SharedApiState,
     },
-    socket::{Emitter, Socket, SocketEventHandler, SocketType},
+    cli::CliComponent,
+    socket::{Emitter, SocketEventHandler},
 };
 
 #[derive(Args, Serialize, Deserialize)]
@@ -61,9 +62,9 @@ pub enum KeyCommands {
     Delete(KeyDeleteArgs),
 }
 
-impl KeyCommands {
-    pub async fn run(command: Self) -> Result<()> {
-        let api_socket = Socket::new(SocketType::Api)?;
+impl CliComponent for KeyCommands {
+    async fn run(command: Self) -> Result<()> {
+        let api_socket = Self::get_socket()?;
 
         match command {
             KeyCommands::Create(args) => {

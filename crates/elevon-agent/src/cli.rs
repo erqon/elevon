@@ -7,7 +7,8 @@ use clap::{
     Args, Parser, Subcommand,
     builder::styling::{AnsiColor, Styles},
 };
-use serde::{Deserialize, Serialize};
+
+use crate::socket::{Socket, SocketType};
 
 const STYLES: Styles = Styles::styled()
     .header(AnsiColor::Yellow.on_default())
@@ -149,16 +150,10 @@ pub struct ApiArgs {
     pub port: u16,
 }
 
-#[derive(Args, Serialize, Deserialize)]
-pub struct ListQueryParams {
-    #[arg(
-        short,
-        long,
-        default_value_t = 25,
-        help = "Limit the results. Set 0 to make it unlimited"
-    )]
-    pub limit: usize,
+pub trait CliComponent {
+    fn run(command: Self) -> impl Future<Output = anyhow::Result<()>>;
 
-    #[arg(short, long, default_value_t = 0, help = "Starting offset")]
-    pub offset: usize,
+    fn get_socket() -> anyhow::Result<Socket> {
+        Socket::new(SocketType::Api)
+    }
 }

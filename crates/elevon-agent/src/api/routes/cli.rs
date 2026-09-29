@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, Query, State},
     routing::{get, post},
 };
-use elevon_contracts::deploy::StreamEvent;
+use elevon_contracts::deploy::{ListQueryParams, StreamEvent};
 use serde::Deserialize;
 
 use crate::{
@@ -12,10 +12,7 @@ use crate::{
         state::SharedApiState,
         stream::{StreamResponse, emit, spawn_streaming_task},
     },
-    cli::{
-        ListQueryParams,
-        key::{handle_key_delete, handle_key_list, handle_key_revoke},
-    },
+    cli::key::{handle_key_delete, handle_key_list, handle_key_revoke},
 };
 
 pub fn router() -> Router<SharedApiState> {

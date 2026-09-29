@@ -4,6 +4,7 @@ use anyhow::Result;
 use bollard::plugin::RestartPolicyNameEnum;
 use elevon_contracts::deploy::{AppPayload, AppRole, AppRuntimeOptions};
 use serde::{Deserialize, Serialize};
+use strum_macros::{Display, EnumString};
 use tabled::Tabled;
 
 use crate::api::db::models::TabledView;
@@ -105,7 +106,7 @@ impl TabledView for App {
             id: self.id.to_string(),
             name: self.name.clone(),
             project: self.project.clone(),
-            domain: self.domain.clone().unwrap_or_else(|| "-".to_string()),
+            domain: self.domain.clone().unwrap_or_else(Self::default_value),
             keep_releases: self.keep_releases.to_string(),
             updated_at: self.updated_at.to_string(),
             created_at: self.created_at.to_string(),
@@ -113,7 +114,8 @@ impl TabledView for App {
     }
 }
 
-#[derive(Debug, toasty::Embed, PartialEq, Eq)]
+#[derive(Debug, toasty::Embed, PartialEq, Eq, Display, EnumString)]
+#[strum(serialize_all = "lowercase")]
 pub enum DeploymentStatus {
     Pending,
     Active,
@@ -211,13 +213,34 @@ impl Deployment {
 }
 
 #[derive(Clone, Tabled, Serialize, Deserialize)]
-pub struct AuthKeyTabled {
+pub struct DeploymentTabled {
     pub id: String,
-    pub name: String,
-    pub enabled: bool,
-    pub expires: String,
-    pub last_used: String,
-    pub revoked: String,
+    pub app: String,
+    pub container_id: String,
+    pub port: String,
+    pub status: String,
+    pub updated_at: String,
+    pub created_at: String,
+}
+
+impl TabledView for Deployment {
+    type TabledType = DeploymentTabled;
+
+    fn to_tabled(&self) -> Self::TabledType {
+        Self::TabledType {
+            id: self.id.to_string(),
+            app: self.app.get().name.clone(),
+            container_id: self
+                .container_id
+                .as_deref()
+                .map(|s| s[..12.min(s.len())].to_string())
+                .unwrap_or_else(Self::default_value),
+            port: self.port.to_string(),
+            status: self.status.to_string(),
+            updated_at: self.updated_at.to_string(),
+            created_at: self.created_at.to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Default, toasty::Embed)]

@@ -10,4 +10,8 @@ pub trait TabledView {
     type TabledType;
 
     fn to_tabled(&self) -> Self::TabledType;
+
+    fn default_value() -> String {
+        "-".to_string()
+    }
 }

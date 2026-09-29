@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use elevon_agent::{
-    cli::{Cli, Commands, app::AppCommands, key::KeyCommands},
+    cli::{Cli, CliComponent, Commands, app::AppCommands, key::KeyCommands},
     env::ElevonEnv,
 };
 use elevon_http::runtime::run_async;
