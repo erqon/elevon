@@ -266,3 +266,25 @@ impl Socket {
         Ok(())
     }
 }
+
+pub trait SocketEventHandler {
+    type Command;
+    type Response;
+    type EventRespose: Send;
+
+    fn handle_event(
+        command: Self::Command,
+        state: SharedApiState,
+        emitter: Emitter<Self::EventRespose>,
+    ) -> impl Future<Output = anyhow::Result<Self::Response>> + Send;
+
+    fn emit_log(
+        emitter: Emitter<Self::EventRespose>,
+        message: String,
+    ) -> impl Future<Output = anyhow::Result<()>> + Send {
+        async move {
+            emitter.log(message).await?;
+            Ok(())
+        }
+    }
+}

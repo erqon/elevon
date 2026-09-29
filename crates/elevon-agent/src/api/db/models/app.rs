@@ -3,8 +3,14 @@ use std::str::FromStr;
 use anyhow::Result;
 use bollard::plugin::RestartPolicyNameEnum;
 use elevon_contracts::deploy::{AppPayload, AppRole, AppRuntimeOptions};
+use serde::{Deserialize, Serialize};
+use strum_macros::{Display, EnumString};
+use tabled::Tabled;
+
+use crate::api::db::models::TabledView;
 
 #[derive(Debug, toasty::Model)]
+#[unique(name, project)]
 pub struct App {
     #[key]
     #[auto]
@@ -81,7 +87,35 @@ impl App {
     }
 }
 
-#[derive(Debug, toasty::Embed, PartialEq, Eq)]
+#[derive(Clone, Tabled, Serialize, Deserialize)]
+pub struct AppTabled {
+    pub id: String,
+    pub name: String,
+    pub project: String,
+    pub domain: String,
+    pub keep_releases: String,
+    pub updated_at: String,
+    pub created_at: String,
+}
+
+impl TabledView for App {
+    type TabledType = AppTabled;
+
+    fn to_tabled(&self) -> Self::TabledType {
+        Self::TabledType {
+            id: self.id.to_string(),
+            name: self.name.clone(),
+            project: self.project.clone(),
+            domain: self.domain.clone().unwrap_or_else(Self::default_value),
+            keep_releases: self.keep_releases.to_string(),
+            updated_at: self.updated_at.to_string(),
+            created_at: self.created_at.to_string(),
+        }
+    }
+}
+
+#[derive(Debug, toasty::Embed, PartialEq, Eq, Display, EnumString)]
+#[strum(serialize_all = "lowercase")]
 pub enum DeploymentStatus {
     Pending,
     Active,
@@ -164,14 +198,46 @@ impl Deployment {
     pub async fn list_by_app_id(
         db: &mut toasty::Db,
         app_id: &uuid::Uuid,
-        keep: usize,
+        limit: usize,
+        offset: usize,
     ) -> Result<Vec<Self>> {
         Ok(Deployment::filter_by_app_id(app_id)
             .latest_by(Deployment::fields().updated_at())
-            .limit(i64::MAX as usize)
-            .offset(keep)
+            .limit(limit)
+            .offset(offset)
             .exec(db)
             .await?)
+    }
+}
+
+#[derive(Clone, Tabled, Serialize, Deserialize)]
+pub struct DeploymentTabled {
+    pub id: String,
+    pub app: String,
+    pub container_id: String,
+    pub port: String,
+    pub status: String,
+    pub updated_at: String,
+    pub created_at: String,
+}
+
+impl TabledView for Deployment {
+    type TabledType = DeploymentTabled;
+
+    fn to_tabled(&self) -> Self::TabledType {
+        Self::TabledType {
+            id: self.id.to_string(),
+            app: self.app.get().name.clone(),
+            container_id: self
+                .container_id
+                .as_deref()
+                .map(|s| s[..12.min(s.len())].to_string())
+                .unwrap_or_else(Self::default_value),
+            port: self.port.to_string(),
+            status: self.status.to_string(),
+            updated_at: self.updated_at.to_string(),
+            created_at: self.created_at.to_string(),
+        }
     }
 }
 

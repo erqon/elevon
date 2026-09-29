@@ -1,3 +1,4 @@
+pub mod app;
 pub mod init;
 pub mod install;
 pub mod key;
@@ -6,6 +7,8 @@ use clap::{
     Args, Parser, Subcommand,
     builder::styling::{AnsiColor, Styles},
 };
+
+use crate::socket::{Socket, SocketType};
 
 const STYLES: Styles = Styles::styled()
     .header(AnsiColor::Yellow.on_default())
@@ -66,6 +69,12 @@ pub enum Commands {
     Key {
         #[command(subcommand)]
         subcommand: key::KeyCommands,
+    },
+
+    #[command(about = "App specific commands")]
+    App {
+        #[command(subcommand)]
+        subcommand: app::AppCommands,
     },
 }
 
@@ -139,4 +148,12 @@ pub struct ApiArgs {
         help = "Port to listen to"
     )]
     pub port: u16,
+}
+
+pub trait CliComponent {
+    fn run(command: Self) -> impl Future<Output = anyhow::Result<()>>;
+
+    fn get_socket() -> anyhow::Result<Socket> {
+        Socket::new(SocketType::Api)
+    }
 }

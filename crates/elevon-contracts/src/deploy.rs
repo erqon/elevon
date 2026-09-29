@@ -1,12 +1,13 @@
-use core::fmt;
 use std::collections::HashMap;
 
 use anyhow::Result;
 use bollard::plugin::RestartPolicyNameEnum;
 use bytes::Bytes;
+use clap::Args;
 use elevon_config::{ConfigError, ResolveEnvCredentials, resolve_env_or_literal};
 use futures_util::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
+use strum_macros::{Display, EnumString};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -93,7 +94,8 @@ where
     Ok(())
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
+#[strum(serialize_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum AppRole {
     #[default]
@@ -101,29 +103,8 @@ pub enum AppRole {
     Worker,
 }
 
-impl fmt::Display for AppRole {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AppRole::Web => write!(f, "web"),
-            AppRole::Worker => write!(f, "worker"),
-        }
-    }
-}
-
 #[derive(Debug, PartialEq, Eq)]
 pub struct ParseAppRoleError;
-
-impl std::str::FromStr for AppRole {
-    type Err = ParseAppRoleError;
-
-    fn from_str(s: &str) -> std::prelude::v1::Result<Self, Self::Err> {
-        match s {
-            "web" => Ok(AppRole::Web),
-            "worker" => Ok(AppRole::Worker),
-            _ => Err(ParseAppRoleError),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebApp {
@@ -199,6 +180,33 @@ impl TlsType {
         match self {
             TlsType::Cert => "cert.pem",
             TlsType::Key => "key.pem",
+        }
+    }
+}
+
+#[derive(Args, Serialize, Deserialize)]
+pub struct ListQueryParams {
+    #[arg(
+        short,
+        long,
+        default_value_t = 25,
+        help = "Limit the results. Set 0 to make it unlimited"
+    )]
+    pub limit: usize,
+
+    #[arg(short, long, default_value_t = 0, help = "Starting offset")]
+    pub offset: usize,
+}
+
+impl ListQueryParams {
+    pub fn get_params(&self) -> Self {
+        Self {
+            limit: if self.limit == 0 {
+                i64::MAX as usize
+            } else {
+                self.limit
+            },
+            offset: self.offset,
         }
     }
 }

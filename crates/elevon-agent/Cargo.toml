@@ -7,8 +7,6 @@ default-run = "elevon-agent"
 [dependencies]
 arc-swap = "1.9.2"
 dashmap = "6.2.1"
-strum = "0.28.0"
-strum_macros = "0.28.0"
 tokio-stream = "0.1.19"
 tabled = "0.22.0"
 
@@ -22,6 +20,8 @@ futures-util.workspace = true
 jiff.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+strum.workspace = true
+strum_macros.workspace = true
 pingora = { version = "0.8.1", features = ["lb", "proxy", "boringssl"] }
 tokio = { workspace = true, features = ["net"] }
 tokio-util = { workspace = true, features = ["codec"] }

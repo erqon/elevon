@@ -1,20 +1,25 @@
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     routing::{get, post},
 };
-use elevon_contracts::deploy::StreamEvent;
+use elevon_contracts::deploy::{ListQueryParams, StreamEvent};
 use serde::Deserialize;
 
-use crate::api::{
-    db::models::AuthKey,
-    event::{handle_key_delete, handle_key_list, handle_key_revoke},
-    state::SharedApiState,
-    stream::{StreamResponse, emit, spawn_streaming_task},
+use crate::{
+    api::{
+        db::models::{App, AppTabled, AuthKey, Deployment, TabledView, app::DeploymentTabled},
+        state::SharedApiState,
+        stream::{StreamResponse, emit, spawn_streaming_task},
+    },
+    cli::key::{handle_key_delete, handle_key_list, handle_key_revoke},
 };
 
 pub fn router() -> Router<SharedApiState> {
-    Router::new().nest("/key", KeyCommands::register_routes())
+    Router::new()
+        .nest("/keys", KeyCommands::register_routes())
+        .nest("/apps", AppCommands::register_routes())
+        .nest("/deployments", DeploymentCommands::register_routes())
 }
 
 trait CommandsTrait {
@@ -126,5 +131,78 @@ impl CommandsTrait for KeyCommands {
             .route("/list", get(KeyCommands::list))
             .route("/revoke", post(KeyCommands::revoke))
             .route("/delete", post(KeyCommands::delete))
+    }
+}
+
+struct AppCommands;
+
+impl AppCommands {
+    async fn list(
+        _: AuthKey,
+        State(state): State<SharedApiState>,
+        Query(query): Query<ListQueryParams>,
+    ) -> StreamResponse {
+        spawn_streaming_task(move |tx| async move {
+            let mut db = state.db.get();
+
+            let data: Vec<AppTabled> = App::all()
+                .limit(query.limit)
+                .offset(query.offset)
+                .exec(&mut db)
+                .await?
+                .iter()
+                .map(|r| r.to_tabled())
+                .collect();
+
+            let mut table = tabled::Table::new(data);
+            table.with(tabled::settings::Style::modern());
+
+            emit(&tx, StreamEvent::log(format!("{}", table))).await;
+
+            Ok(())
+        })
+    }
+}
+
+impl CommandsTrait for AppCommands {
+    fn register_routes() -> Router<SharedApiState> {
+        Router::new().route("/list", get(AppCommands::list))
+    }
+}
+
+struct DeploymentCommands;
+
+impl DeploymentCommands {
+    async fn list(
+        _: AuthKey,
+        State(state): State<SharedApiState>,
+        Query(query): Query<ListQueryParams>,
+    ) -> StreamResponse {
+        spawn_streaming_task(move |tx| async move {
+            let mut db = state.db.get();
+
+            let data: Vec<DeploymentTabled> = Deployment::all()
+                .include(Deployment::fields().app())
+                .limit(query.limit)
+                .offset(query.offset)
+                .exec(&mut db)
+                .await?
+                .into_iter()
+                .map(|r| r.to_tabled())
+                .collect();
+
+            let mut table = tabled::Table::new(data);
+            table.with(tabled::settings::Style::modern());
+
+            emit(&tx, StreamEvent::log(format!("{}", table))).await;
+
+            Ok(())
+        })
+    }
+}
+
+impl CommandsTrait for DeploymentCommands {
+    fn register_routes() -> Router<SharedApiState> {
+        Router::new().route("/list", get(DeploymentCommands::list))
     }
 }

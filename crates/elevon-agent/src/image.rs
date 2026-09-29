@@ -298,7 +298,8 @@ async fn prune_old_releases(
     app: &App,
     just_drained_id: Option<uuid::Uuid>,
 ) -> Result<()> {
-    let deployments = Deployment::list_by_app_id(db, &app.id, app.keep_releases as usize).await?;
+    let deployments =
+        Deployment::list_by_app_id(db, &app.id, 0, app.keep_releases as usize).await?;
 
     for old in deployments {
         if old.status == DeploymentStatus::Active || Some(old.id) == just_drained_id {
@@ -361,6 +362,7 @@ async fn deploy_app(
     )
     .await;
 
+    // TODO: Fix port is not necessary on 'worker' applications
     let port = get_free_port().await?;
 
     emit(
