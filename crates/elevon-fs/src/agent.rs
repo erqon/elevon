@@ -112,7 +112,7 @@ pub struct TlsOptions {
 
 pub fn get_tls_file(ty: TlsType, options: TlsOptions) -> Result<PathBuf> {
     let file_dir_name = match options.app {
-        Some(app) => format!("projects/{}/{app}", &options.project),
+        Some(app) => format!("projects/{}/{app}", options.project),
         None => options.project,
     };
 
