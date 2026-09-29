@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use elevon_contracts::deploy::log_stream_events;
+use elevon_contracts::deploy::{ListQueryParams, log_stream_events};
 
 use crate::agent::AgentClient;
 
@@ -10,6 +10,12 @@ pub enum Commands {
     Key {
         #[command(subcommand)]
         command: KeyCommands,
+    },
+
+    #[command(about = "App related commands")]
+    App {
+        #[command(subcommand)]
+        command: AppCommands,
     },
 }
 
@@ -22,10 +28,49 @@ impl Commands {
                 KeyCommands::Revoke(args) => KeyCommands::revoke(&agent_client, args).await?,
                 KeyCommands::Delete(args) => KeyCommands::delete(&agent_client, args).await?,
             },
+            Commands::App { command } => match command {
+                AppCommands::List(params) => AppCommands::list(&agent_client).await?,
+                AppCommands::Deployment { command } => match command {
+                    DeploymentCommands::List(params) => {}
+                },
+            },
         }
 
         Ok(())
     }
+}
+
+#[derive(Subcommand)]
+pub enum KeyCommands {
+    #[command(about = "Create a new key")]
+    Create(KeyCreateArgs),
+
+    #[command(about = "List all keys")]
+    List,
+
+    #[command(about = "Revoke one or more keys")]
+    Revoke(KeyRevokeArgs),
+
+    #[command(about = "Delete one or more keys")]
+    Delete(KeyDeleteArgs),
+}
+
+#[derive(Subcommand)]
+pub enum AppCommands {
+    #[command(about = "List apps")]
+    List(ListQueryParams),
+
+    #[command(about = "Deployment commands")]
+    Deployment {
+        #[command(subcommand)]
+        command: DeploymentCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum DeploymentCommands {
+    #[command(about = "List deployments")]
+    List(ListQueryParams),
 }
 
 #[derive(Args)]
@@ -61,19 +106,28 @@ pub struct KeyDeleteArgs {
     pub yes: bool,
 }
 
-#[derive(Subcommand)]
-pub enum KeyCommands {
-    #[command(about = "Create a new key")]
-    Create(KeyCreateArgs),
+trait ApiCommands {
+    fn exec_list(
+        agent_client: &AgentClient,
+        base_endpoint: &str,
+    ) -> impl Future<Output = Result<()>> {
+        async move {
+            let url = agent_client.absolute_url(&format!("/cli/{base_endpoint}/list"));
+            let headers = agent_client.headers();
 
-    #[command(about = "List all keys")]
-    List,
+            let event_stream = agent_client
+                .client
+                .get(url)
+                .headers(headers)
+                .send()
+                .await?
+                .bytes_stream();
 
-    #[command(about = "Revoke one or more keys")]
-    Revoke(KeyRevokeArgs),
+            log_stream_events(event_stream).await?;
 
-    #[command(about = "Delete one or more keys")]
-    Delete(KeyDeleteArgs),
+            Ok(())
+        }
+    }
 }
 
 impl KeyCommands {
@@ -164,6 +218,33 @@ impl KeyCommands {
             .post(url)
             .headers(headers)
             .json(&payload)
+            .send()
+            .await?
+            .bytes_stream();
+
+        log_stream_events(event_stream).await?;
+
+        Ok(())
+    }
+}
+
+impl ApiCommands for AppCommands {}
+
+impl AppCommands {
+    async fn list(agent_client: &AgentClient) -> Result<()> {
+        Self::exec_list(agent_client, "apps").await
+    }
+}
+
+impl DeploymentCommands {
+    async fn list(agent_client: &AgentClient) -> Result<()> {
+        let url = agent_client.absolute_url("/cli/deployments/list");
+        let headers = agent_client.headers();
+
+        let event_stream = agent_client
+            .client
+            .get(url)
+            .headers(headers)
             .send()
             .await?
             .bytes_stream();
