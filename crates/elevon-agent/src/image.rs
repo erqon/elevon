@@ -362,6 +362,7 @@ async fn deploy_app(
     )
     .await;
 
+    // TODO: Fix port is not necessary on 'worker; applications
     let port = get_free_port().await?;
 
     emit(
