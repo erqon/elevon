@@ -119,6 +119,10 @@ sudo elevon-agent uninstall
 
 See the installation and configuration sections above for setup details.
 
+## GitHub Actions
+
+CI-ready CLI setup: [`erqon/setup-elevon`](https://github.com/erqon/setup-elevon).
+
 ## Project Status
 
 Elevon is beta software and currently targets deployments to individual Linux
