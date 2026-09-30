@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, Query, State},
     routing::{get, post},
 };
-use elevon_contracts::deploy::{ListQueryParams, StreamEvent};
+use elevon_contracts::{cli::ListQueryParams, deploy::StreamEvent};
 use serde::Deserialize;
 
 use crate::{

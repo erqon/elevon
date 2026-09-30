@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
-use clap::Subcommand;
-use elevon_contracts::deploy::ListQueryParams;
+use elevon_contracts::cli::{
+    ListQueryParams,
+    app::{AppCommands, DeploymentCommands},
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -11,18 +13,6 @@ use crate::{
     cli::CliComponent,
     socket::SocketEventHandler,
 };
-
-#[derive(Subcommand, Serialize, Deserialize)]
-pub enum AppCommands {
-    #[command(about = "List apps")]
-    List(ListQueryParams),
-
-    #[command(about = "Deployment commands")]
-    Deployment {
-        #[command(subcommand)]
-        subcommand: DeploymentCommands,
-    },
-}
 
 impl CliComponent for AppCommands {
     async fn run(command: Self) -> Result<()> {
@@ -44,9 +34,12 @@ impl CliComponent for AppCommands {
                     );
                 }
             }
+
             AppCommands::Deployment { subcommand } => {
                 DeploymentCommands::run(subcommand).await?;
             }
+
+            AppCommands::Remove(_args) => {}
         }
 
         Ok(())
@@ -69,16 +62,22 @@ impl SocketEventHandler for AppCommands {
         command: Self::Command,
         state: crate::api::state::SharedApiState,
         emitter: crate::socket::Emitter<Self::EventRespose>,
-    ) -> Result<Self::Response> {
+    ) -> Result<Option<Self::Response>> {
         match command {
             AppCommands::List(params) => {
                 let data = handle_app_list(&mut state.db.get(), params.get_params()).await?;
-                Ok(AppSocketResponse::List(data))
+                Ok(Some(AppSocketResponse::List(data)))
             }
+
             AppCommands::Deployment { subcommand } => {
                 let result = DeploymentCommands::handle_event(subcommand, state, emitter).await?;
-                Ok(AppSocketResponse::Deployment(result))
+                if let Some(res) = result {
+                    return Ok(Some(AppSocketResponse::Deployment(res)));
+                }
+                Ok(None)
             }
+
+            AppCommands::Remove(_args) => Ok(None),
         }
     }
 }
@@ -95,12 +94,6 @@ pub async fn handle_app_list(
     let rows: Vec<AppTabled> = result.into_iter().map(|key| key.to_tabled()).collect();
 
     Ok(rows)
-}
-
-#[derive(Subcommand, Serialize, Deserialize)]
-pub enum DeploymentCommands {
-    #[command(about = "List deployments")]
-    List(ListQueryParams),
 }
 
 impl CliComponent for DeploymentCommands {
@@ -147,11 +140,11 @@ impl SocketEventHandler for DeploymentCommands {
         command: Self::Command,
         state: crate::api::state::SharedApiState,
         _emitter: crate::socket::Emitter<Self::EventRespose>,
-    ) -> Result<Self::Response> {
+    ) -> Result<Option<Self::Response>> {
         match command {
             DeploymentCommands::List(params) => {
                 let data = handle_deployment_list(&mut state.db.get(), params.get_params()).await?;
-                Ok(DeploymentSocketResponse::List(data))
+                Ok(Some(DeploymentSocketResponse::List(data)))
             }
         }
     }

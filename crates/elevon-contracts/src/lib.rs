@@ -1,3 +1,4 @@
+pub mod cli;
 pub mod deploy;
 
 pub fn handle_cli_yes(yes: bool, initial_log_message: impl Into<String>) -> anyhow::Result<()> {

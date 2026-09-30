@@ -1,10 +1,11 @@
 use anyhow::Result;
+use elevon_contracts::cli::app::{AppCommands, DeploymentCommands};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     api::state::SharedApiState,
     cli::{
-        app::{AppCommands, AppSocketResponse, DeploymentCommands, DeploymentSocketResponse},
+        app::{AppSocketResponse, DeploymentSocketResponse},
         key::{KeyCommands, KeySocketResponse},
     },
     proxy::types::DeployAppData,
@@ -40,16 +41,20 @@ impl ApiSocketEvent {
                 let result = state.get_running_route_containers().await?;
                 Some(ApiSocketEventResponse::RunningContainers(result))
             }
-            ApiSocketEvent::KeyCommands(command) => Some(ApiSocketEventResponse::KeyResponse(
-                KeyCommands::handle_event(command, state, emitter).await?,
-            )),
-            ApiSocketEvent::AppCommands(command) => Some(ApiSocketEventResponse::AppResponse(
-                AppCommands::handle_event(command, state, emitter).await?,
-            )),
+            ApiSocketEvent::KeyCommands(command) => {
+                KeyCommands::handle_event(command, state, emitter)
+                    .await?
+                    .map(ApiSocketEventResponse::KeyResponse)
+            }
+            ApiSocketEvent::AppCommands(command) => {
+                AppCommands::handle_event(command, state, emitter)
+                    .await?
+                    .map(ApiSocketEventResponse::AppResponse)
+            }
             ApiSocketEvent::DeploymentCommands(command) => {
-                Some(ApiSocketEventResponse::DeploymentResponse(
-                    DeploymentCommands::handle_event(command, state, emitter).await?,
-                ))
+                DeploymentCommands::handle_event(command, state, emitter)
+                    .await?
+                    .map(ApiSocketEventResponse::DeploymentResponse)
             }
         };
 

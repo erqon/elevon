@@ -74,7 +74,7 @@ pub enum Commands {
     #[command(about = "App specific commands")]
     App {
         #[command(subcommand)]
-        subcommand: app::AppCommands,
+        subcommand: elevon_contracts::cli::app::AppCommands,
     },
 }
 

@@ -165,18 +165,18 @@ impl SocketEventHandler for KeyCommands {
         command: Self::Command,
         state: SharedApiState,
         emitter: Emitter<Self::EventRespose>,
-    ) -> Result<Self::Response> {
+    ) -> Result<Option<Self::Response>> {
         match command {
             KeyCommands::Create(args) => {
                 emitter
                     .log(format!("Creating auth key: {}", args.name))
                     .await?;
                 let result = AuthKey::create_key(&mut state.db.get(), &args.name).await?;
-                Ok(KeySocketResponse::KeyCreate(result))
+                Ok(Some(KeySocketResponse::KeyCreate(result)))
             }
             KeyCommands::List => {
                 let data = handle_key_list(&mut state.db.get()).await?;
-                Ok(KeySocketResponse::KeyList(data))
+                Ok(Some(KeySocketResponse::KeyList(data)))
             }
             KeyCommands::Revoke(args) => {
                 emitter.log("Revoking auth key(s)").await?;
@@ -184,7 +184,7 @@ impl SocketEventHandler for KeyCommands {
                     Self::emit_log(emitter.clone(), message)
                 })
                 .await?;
-                Ok(KeySocketResponse::KeyUpdated)
+                Ok(Some(KeySocketResponse::KeyUpdated))
             }
             KeyCommands::Delete(args) => {
                 handle_key_delete(args.ids, &mut state.db.get(), move |message| {
@@ -192,7 +192,7 @@ impl SocketEventHandler for KeyCommands {
                 })
                 .await
                 .context("auth key deletion failed")?;
-                Ok(KeySocketResponse::KeyUpdated)
+                Ok(Some(KeySocketResponse::KeyUpdated))
             }
         }
     }

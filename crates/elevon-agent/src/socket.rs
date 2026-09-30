@@ -276,7 +276,7 @@ pub trait SocketEventHandler {
         command: Self::Command,
         state: SharedApiState,
         emitter: Emitter<Self::EventRespose>,
-    ) -> impl Future<Output = anyhow::Result<Self::Response>> + Send;
+    ) -> impl Future<Output = anyhow::Result<Option<Self::Response>>> + Send;
 
     fn emit_log(
         emitter: Emitter<Self::EventRespose>,
