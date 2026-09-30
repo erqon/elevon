@@ -121,7 +121,8 @@ See the installation and configuration sections above for setup details.
 
 ## GitHub Actions
 
-CI-ready CLI setup: [`erqon/setup-elevon`](https://github.com/erqon/setup-elevon).
+Install the Elevon CLI in GitHub Actions with
+[`erqon/setup-elevon`](https://github.com/erqon/setup-elevon).
 
 ## Project Status
 
