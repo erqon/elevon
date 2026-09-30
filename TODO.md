@@ -45,7 +45,7 @@ Markers for features before the release
 
 - [x] Upgrade the binary
 - [ ] Running infrastructure Docker services (Postgres, Redis, etc.) **(N)**
-- [ ] Deployment history and audit trail
+- [x] Deployment history <s>and audit trail</s>
 
 ## Elevon Deploy
 
