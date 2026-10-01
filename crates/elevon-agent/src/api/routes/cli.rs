@@ -86,15 +86,7 @@ impl KeyCommands {
         Json(payload): Json<KeyListPayload>,
     ) -> StreamResponse {
         spawn_streaming_task(move |tx| async move {
-            handle_key_revoke(payload.data, &mut state.db.get(), move |message| {
-                let tx = tx.clone();
-                async move {
-                    emit(&tx, StreamEvent::log(message)).await;
-                    Ok(())
-                }
-            })
-            .await?;
-
+            handle_key_revoke(payload.data, &mut state.db.get(), &tx).await?;
             Ok(())
         })
     }
@@ -105,15 +97,7 @@ impl KeyCommands {
         Json(payload): Json<KeyListPayload>,
     ) -> StreamResponse {
         spawn_streaming_task(move |tx| async move {
-            handle_key_delete(payload.data, &mut state.db.get(), move |message| {
-                let tx = tx.clone();
-                async move {
-                    emit(&tx, StreamEvent::log(message)).await;
-                    Ok(())
-                }
-            })
-            .await?;
-
+            handle_key_delete(payload.data, &mut state.db.get(), &tx).await?;
             Ok(())
         })
     }

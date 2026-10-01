@@ -13,6 +13,8 @@ use elevon_fs::agent::AgentPath;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio_stream::wrappers::ReceiverStream;
 
+use crate::logger::ActionLogger;
+
 type StreamItem = Result<Event, Infallible>;
 pub type StreamSender = Sender<StreamItem>;
 pub type StreamReceiver = Receiver<StreamItem>;
@@ -25,6 +27,13 @@ pub fn create_stream_channel() -> (StreamSender, StreamReceiver) {
 pub async fn emit(tx: &StreamSender, event: StreamEvent) {
     let line = serde_json::to_string(&event).unwrap();
     let _ = tx.send(Ok(Event::default().data(line))).await;
+}
+
+impl ActionLogger for StreamSender {
+    async fn log(&self, message: String) -> anyhow::Result<()> {
+        emit(self, StreamEvent::log(message)).await;
+        Ok(())
+    }
 }
 
 pub async fn emit_error(tx: &StreamSender, message: String) {

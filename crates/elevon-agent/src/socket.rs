@@ -1,10 +1,12 @@
+use std::future::Future;
 use std::os::unix::fs::PermissionsExt;
 use std::{path::PathBuf, sync::Arc};
 
 use anyhow::{Context, Result, bail};
 use elevon_fs::agent::AgentPath;
+use futures_util::future::BoxFuture;
 use futures_util::stream::SplitSink;
-use futures_util::{Future, SinkExt, StreamExt};
+use futures_util::{SinkExt, StreamExt};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tokio::net::unix::SocketAddr;
@@ -15,6 +17,7 @@ use tokio_util::codec::{Framed, FramedWrite, LengthDelimitedCodec};
 
 use crate::api::event::ApiSocketEvent;
 use crate::api::state::SharedApiState;
+use crate::logger::ActionLogger;
 
 pub enum SocketType {
     Proxy,
@@ -29,9 +32,16 @@ pub enum SocketResponse<R> {
     Error(String),
 }
 
-#[derive(Clone)]
 pub struct Emitter<R> {
     sender: mpsc::Sender<SocketResponse<R>>,
+}
+
+impl<R> Clone for Emitter<R> {
+    fn clone(&self) -> Self {
+        Self {
+            sender: self.sender.clone(),
+        }
+    }
 }
 
 impl<R> Emitter<R> {
@@ -40,6 +50,12 @@ impl<R> Emitter<R> {
             .send(SocketResponse::Log(message.into()))
             .await
             .map_err(|_| anyhow::anyhow!("failed to emit socket log"))
+    }
+}
+
+impl<R: Send + 'static> ActionLogger for Emitter<R> {
+    async fn log(&self, message: String) -> Result<()> {
+        Emitter::log(self, message).await
     }
 }
 
@@ -270,21 +286,20 @@ impl Socket {
 pub trait SocketEventHandler {
     type Command;
     type Response;
-    type EventRespose: Send;
+    type EventRespose: Send + 'static;
 
     fn handle_event(
         command: Self::Command,
         state: SharedApiState,
         emitter: Emitter<Self::EventRespose>,
-    ) -> impl Future<Output = anyhow::Result<Option<Self::Response>>> + Send;
+    ) -> impl Future<Output = Result<Option<Self::Response>>> + Send;
 
-    fn emit_log(
+    fn log(
         emitter: Emitter<Self::EventRespose>,
-        message: String,
-    ) -> impl Future<Output = anyhow::Result<()>> + Send {
-        async move {
-            emitter.log(message).await?;
-            Ok(())
+    ) -> impl Fn(String) -> BoxFuture<'static, Result<()>> {
+        move |message| {
+            let emitter = emitter.clone();
+            Box::pin(async move { emitter.log(message).await })
         }
     }
 }

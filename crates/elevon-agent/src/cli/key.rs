@@ -2,7 +2,6 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use serde::{Deserialize, Serialize};
 use tabled::{Table, settings::Style};
-use uuid::Uuid;
 
 use crate::{
     api::{
@@ -11,6 +10,7 @@ use crate::{
         state::SharedApiState,
     },
     cli::CliComponent,
+    logger::ActionLogger,
     socket::{Emitter, SocketEventHandler},
 };
 
@@ -27,21 +27,21 @@ pub struct KeyCreateArgs {
 #[derive(Args, Clone, Serialize, Deserialize)]
 pub struct KeyRevokeArgs {
     #[arg(
-        value_name = "ID",
+        value_name = "KEY",
         required = true,
-        help = "An ID or list of IDs of the keys to revoke"
+        help = "A key ID/name or list of key IDs/names to revoke"
     )]
-    pub ids: Vec<String>,
+    pub keys: Vec<String>,
 }
 
 #[derive(Args, Clone, Serialize, Deserialize)]
 pub struct KeyDeleteArgs {
     #[arg(
-        value_name = "ID",
+        value_name = "KEY",
         required = true,
-        help = "An ID or list of IDs of the keys to delete"
+        help = "A key ID/name or list of key IDs/names to delete"
     )]
-    pub ids: Vec<String>,
+    pub keys: Vec<String>,
 
     #[arg(long, short = 'y')]
     pub yes: bool,
@@ -66,6 +66,7 @@ impl CliComponent for KeyCommands {
     async fn run(command: Self) -> Result<()> {
         let api_socket = Self::get_socket()?;
 
+        // TODO: Switch the whole cli commands to axum unix socket just like deploy communcates with it.
         match command {
             KeyCommands::Create(args) => {
                 let response: Option<ApiSocketEventResponse> = api_socket
@@ -110,7 +111,7 @@ impl CliComponent for KeyCommands {
             }
             KeyCommands::Delete(args) => {
                 let formatted_keys: String = args
-                    .ids
+                    .keys
                     .iter()
                     .map(|id| format!("- {}", id))
                     .collect::<Vec<_>>()
@@ -127,33 +128,16 @@ impl CliComponent for KeyCommands {
 
                 elevon_contracts::handle_cli_yes(args.yes, message)?;
 
-                let response: Option<ApiSocketEventResponse> = api_socket
+                let _: Option<ApiSocketEventResponse> = api_socket
                     .send_and_receive(ApiSocketEvent::KeyCommands(KeyCommands::Delete(
                         args.clone(),
                     )))
                     .await?;
-
-                if matches!(
-                    response,
-                    Some(ApiSocketEventResponse::KeyResponse(
-                        KeySocketResponse::KeyUpdated
-                    ))
-                ) {
-                    tracing::info!("Successfully deleted key(s): [{}]", args.ids.join(", "));
-                }
             }
         }
 
         Ok(())
     }
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(tag = "key", content = "data")]
-pub enum KeySocketResponse {
-    KeyCreate(String),
-    KeyList(Vec<AuthKeyTabled>),
-    KeyUpdated,
 }
 
 impl SocketEventHandler for KeyCommands {
@@ -180,22 +164,25 @@ impl SocketEventHandler for KeyCommands {
             }
             KeyCommands::Revoke(args) => {
                 emitter.log("Revoking auth key(s)").await?;
-                handle_key_revoke(args.ids, &mut state.db.get(), move |message| {
-                    Self::emit_log(emitter.clone(), message)
-                })
-                .await?;
+                handle_key_revoke(args.keys, &mut state.db.get(), &emitter).await?;
                 Ok(Some(KeySocketResponse::KeyUpdated))
             }
             KeyCommands::Delete(args) => {
-                handle_key_delete(args.ids, &mut state.db.get(), move |message| {
-                    Self::emit_log(emitter.clone(), message)
-                })
-                .await
-                .context("auth key deletion failed")?;
+                handle_key_delete(args.keys, &mut state.db.get(), &emitter)
+                    .await
+                    .context("auth key deletion failed")?;
                 Ok(Some(KeySocketResponse::KeyUpdated))
             }
         }
     }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(tag = "key", content = "data")]
+pub enum KeySocketResponse {
+    KeyCreate(String),
+    KeyList(Vec<AuthKeyTabled>),
+    KeyUpdated,
 }
 
 pub async fn handle_key_list(db: &mut toasty::Db) -> Result<Vec<AuthKeyTabled>> {
@@ -204,20 +191,15 @@ pub async fn handle_key_list(db: &mut toasty::Db) -> Result<Vec<AuthKeyTabled>> 
     Ok(rows)
 }
 
-pub async fn handle_key_revoke<F, Fut>(
+pub async fn handle_key_revoke(
     keys: Vec<String>,
     db: &mut toasty::Db,
-    log_action: F,
-) -> Result<()>
-where
-    F: Fn(String) -> Fut,
-    Fut: Future<Output = Result<()>>,
-{
+    logger: &impl ActionLogger,
+) -> Result<()> {
     for key in keys {
-        let key_id = Uuid::parse_str(&key).context("failed to parse ID")?;
-        let mut auth_key = AuthKey::get_by_id(db, key_id)
+        let mut auth_key = AuthKey::get_by_name_or_id(db, &key)
             .await
-            .context("invalid ID key not found")?;
+            .context("failed to find key")?;
 
         if auth_key.revoked_at.is_some() {
             bail!("key is already revoked");
@@ -230,34 +212,29 @@ where
             .exec(db)
             .await?;
 
-        log_action(format!("Revoked auth key: '{key}'")).await?;
+        logger.log(format!("Revoked auth key: '{key}'")).await?;
     }
 
     Ok(())
 }
 
-pub async fn handle_key_delete<F, Fut>(
+pub async fn handle_key_delete(
     keys: Vec<String>,
     db: &mut toasty::Db,
-    log_action: F,
-) -> Result<()>
-where
-    F: Fn(String) -> Fut,
-    Fut: Future<Output = Result<()>>,
-{
+    logger: &impl ActionLogger,
+) -> Result<()> {
     for key in keys {
-        let key_id = Uuid::parse_str(&key).context("invalid UUID")?;
-        let auth_key = AuthKey::get_by_id(db, key_id)
+        let auth_key = AuthKey::get_by_name_or_id(db, &key)
             .await
-            .context("invalid ID, key not found")?;
+            .context("failed to find key")?;
 
         auth_key
             .delete()
             .exec(db)
             .await
-            .with_context(|| format!("failed to delete key: {key}"))?;
+            .context(format!("failed to delete key: {key}"))?;
 
-        log_action(format!("Deleted auth key: '{key}'")).await?;
+        logger.log(format!("Deleted auth key: '{key}'")).await?;
     }
 
     Ok(())

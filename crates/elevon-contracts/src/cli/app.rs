@@ -28,4 +28,7 @@ pub enum DeploymentCommands {
 pub struct RemoveCommandArgs {
     #[arg(long, help = "Name of the app you want to remove")]
     pub name: String,
+
+    #[arg(short, long, help = "Forces removal when the app is running")]
+    pub force: bool,
 }

@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use elevon_contracts::cli::{
     ListQueryParams,
     app::{AppCommands, DeploymentCommands},
@@ -39,7 +39,12 @@ impl CliComponent for AppCommands {
                 DeploymentCommands::run(subcommand).await?;
             }
 
-            AppCommands::Remove(_args) => {}
+            AppCommands::Remove(args) => {
+                api_socket
+                    .send(ApiSocketEvent::AppCommands(AppCommands::Remove(args)))
+                    .await
+                    .context("failed to remove app")?;
+            }
         }
 
         Ok(())
@@ -63,9 +68,11 @@ impl SocketEventHandler for AppCommands {
         state: crate::api::state::SharedApiState,
         emitter: crate::socket::Emitter<Self::EventRespose>,
     ) -> Result<Option<Self::Response>> {
+        let mut db = state.db.get();
+
         match command {
             AppCommands::List(params) => {
-                let data = handle_app_list(&mut state.db.get(), params.get_params()).await?;
+                let data = handle_app_list(&mut db, params.get_params()).await?;
                 Ok(Some(AppSocketResponse::List(data)))
             }
 
@@ -77,7 +84,10 @@ impl SocketEventHandler for AppCommands {
                 Ok(None)
             }
 
-            AppCommands::Remove(_args) => Ok(None),
+            AppCommands::Remove(args) => {
+                handle_app_removal(&mut db, args.name).await?;
+                Ok(None)
+            }
         }
     }
 }
@@ -162,4 +172,14 @@ pub async fn handle_deployment_list(
         .await?;
     let rows: Vec<DeploymentTabled> = result.into_iter().map(|r| r.to_tabled()).collect();
     Ok(rows)
+}
+
+pub async fn handle_app_removal(db: &mut toasty::Db, app_name: String) -> Result<()> {
+    let app = App::get_by_name(db, app_name).await.ok();
+
+    let Some(_app) = app else {
+        bail!("app not found");
+    };
+
+    Ok(())
 }

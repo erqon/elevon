@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use axum::extract::FromRequestParts;
 use elevon_http::{auth::get_auth_token, error::AppError, token::hash};
 use serde::{Deserialize, Serialize};
@@ -55,6 +55,29 @@ impl AuthKey {
         .await?;
 
         Ok(key)
+    }
+
+    pub async fn get_by_name_or_id(db: &mut toasty::Db, key: &str) -> Result<Self> {
+        let name_err = match Self::get_by_name(db, key).await {
+            Ok(k) => return Ok(k),
+            Err(e) => e,
+        };
+
+        let id = match uuid::Uuid::parse_str(key) {
+            Ok(id) => id,
+            Err(_) => {
+                return Err(name_err).with_context(|| {
+                    format!("no key found with name '{key}' (and it is not a valid UUID)")
+                });
+            }
+        };
+
+        match AuthKey::get_by_id(db, id).await {
+            Ok(k) => Ok(k),
+            Err(id_err) => {
+                anyhow::bail!("key '{key}' not found by name ({name_err:#}) or by ID ({id_err:#})")
+            }
+        }
     }
 }
 

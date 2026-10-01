@@ -39,7 +39,7 @@ Markers for features before the release
 - <s>[ ] Health-check gated promotion (switch traffic only after new container is healthy) **(N)** </s>
 - <s>[ ] Rollback-on-failure policy (auto rollback on health-check failure or deploy timeout) </s>
 
-## Stable release (Deadline 30th Sep)
+## Stable release (Deadline 10th Oct)
 
 ## Elevon Agent
 

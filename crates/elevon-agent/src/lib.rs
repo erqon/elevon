@@ -3,5 +3,6 @@ pub mod cli;
 pub mod config;
 pub mod env;
 pub mod image;
+pub mod logger;
 pub mod proxy;
 pub mod socket;
