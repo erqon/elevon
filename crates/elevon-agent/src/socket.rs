@@ -73,7 +73,6 @@ impl Socket {
         if path.exists() {
             match std::fs::remove_file(&path) {
                 Ok(()) => {}
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
                 Err(err) => return Err(err.into()),
             }
         }
