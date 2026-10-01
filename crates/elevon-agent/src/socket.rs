@@ -70,6 +70,14 @@ impl Socket {
             SocketType::Api => AgentPath::ApiSocket.ensure_parent_dir()?,
         };
 
+        if path.exists() {
+            match std::fs::remove_file(&path) {
+                Ok(()) => {}
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                Err(err) => return Err(err.into()),
+            }
+        }
+
         Ok(Self { path })
     }
 
@@ -132,12 +140,6 @@ impl Socket {
             + Send
             + 'static,
     {
-        match std::fs::remove_file(&self.path) {
-            Ok(()) => {}
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => return Err(err.into()),
-        }
-
         tracing::info!(path = %self.path.display(), "binding socket");
         let listener = UnixListener::bind(&self.path)
             .with_context(|| format!("failed to bind {}", self.path.display()))?;
