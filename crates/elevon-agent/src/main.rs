@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use elevon_agent::{
-    cli::{Cli, CliComponent, Commands, key::KeyCommands},
+    cli::{Cli, CliCommand, Commands, key::KeyCommands},
     env::ElevonEnv,
 };
 use elevon_contracts::cli::app::AppCommands;

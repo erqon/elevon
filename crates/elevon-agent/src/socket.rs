@@ -64,13 +64,13 @@ pub struct Socket {
 }
 
 impl Socket {
-    pub fn new(ty: SocketType) -> Result<Self> {
+    pub fn new(ty: SocketType, delete: bool) -> Result<Self> {
         let path = match ty {
             SocketType::Proxy => AgentPath::ProxySocket.ensure_parent_dir()?,
             SocketType::Api => AgentPath::ApiSocket.ensure_parent_dir()?,
         };
 
-        if path.exists() {
+        if path.exists() && delete {
             match std::fs::remove_file(&path) {
                 Ok(()) => {}
                 Err(err) => return Err(err.into()),
@@ -302,5 +302,29 @@ pub trait SocketEventHandler {
             let emitter = emitter.clone();
             Box::pin(async move { emitter.log(message).await })
         }
+    }
+}
+
+pub struct UnixClient {
+    pub client: reqwest::Client,
+}
+
+impl UnixClient {
+    pub fn new() -> Result<Self> {
+        let socket = Socket::new(SocketType::Api, false)?;
+        let client = reqwest::Client::builder()
+            .unix_socket(socket.path)
+            .build()?;
+
+        Ok(Self { client })
+    }
+
+    pub fn resolve_url(&self, url: &str) -> String {
+        let base_url = self.base_url();
+        format!("{}{}", base_url, url)
+    }
+
+    fn base_url(&self) -> String {
+        "http://localhost".to_string()
     }
 }

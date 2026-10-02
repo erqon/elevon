@@ -1,20 +1,19 @@
 pub mod db;
 pub mod event;
-mod routes;
+mod middleware;
+pub mod routes;
 pub mod state;
 pub mod stream;
 
+use std::os::unix::fs::PermissionsExt;
 use std::{net::SocketAddr, sync::Arc};
 
 use anyhow::{Context, Result};
 use axum::Router;
 use tokio::task::JoinSet;
 
-use crate::{
-    cli::ApiArgs,
-    env::ElevonEnv,
-    socket::{Socket, SocketType},
-};
+use crate::api::middleware::UdsConnectInfo;
+use crate::{cli::ApiArgs, env::ElevonEnv};
 
 pub async fn run_api_server(args: ApiArgs, env: &ElevonEnv) -> Result<()> {
     let state = Arc::new(state::ApiState::new(env).await?);
@@ -25,19 +24,23 @@ pub async fn run_api_server(args: ApiArgs, env: &ElevonEnv) -> Result<()> {
 
     let mut set = JoinSet::new();
 
-    Socket::create_api_listener_handle(&mut set, state.api_socket.clone(), state.clone());
+    // Socket::create_api_listener_handle(&mut set, state.api_socket.clone(), state.clone());
 
     let addr = format!("127.0.0.1:{}", args.port);
-    let socket_path = Socket::new(SocketType::Api)?;
 
     let tcp = tokio::net::TcpListener::bind(&addr)
         .await
         .context(format!("failed to bind API listener to {}", addr))?;
 
-    let unix = tokio::net::UnixListener::bind(&socket_path.path).context(format!(
+    let unix = tokio::net::UnixListener::bind(&state.api_socket.path).context(format!(
         "failed to bind API listener to UNIX Socket {}",
-        socket_path.path.display(),
+        state.api_socket.path.display(),
     ))?;
+
+    std::fs::set_permissions(
+        &state.api_socket.path,
+        std::fs::Permissions::from_mode(0o660),
+    )?;
 
     tracing::info!("listening on {}", tcp.local_addr()?);
 
@@ -54,7 +57,12 @@ pub async fn run_api_server(args: ApiArgs, env: &ElevonEnv) -> Result<()> {
     });
 
     set.spawn(async move {
-        if let Err(err) = axum::serve(unix, app).await {
+        if let Err(err) = axum::serve(
+            unix,
+            app.into_make_service_with_connect_info::<UdsConnectInfo>(),
+        )
+        .await
+        {
             tracing::error!(error = %err, "API UNIX server failed");
         }
     });

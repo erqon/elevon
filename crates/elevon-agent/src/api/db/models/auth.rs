@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::{db::models::TabledView, state::SharedApiState};
 
-#[derive(Debug, toasty::Model)]
+#[derive(Debug, Clone, toasty::Model)]
 pub struct AuthKey {
     #[key]
     #[auto]
@@ -97,7 +97,10 @@ impl FromRequestParts<SharedApiState> for AuthKey {
     }
 }
 
-async fn check_auth_key(mut db: toasty::Db, auth_key: String) -> anyhow::Result<AuthKey, AppError> {
+pub async fn check_auth_key(
+    mut db: toasty::Db,
+    auth_key: String,
+) -> anyhow::Result<AuthKey, AppError> {
     let hashed_key = hash(&auth_key);
 
     let mut auth_key = AuthKey::get_by_key_hash(&mut db, hashed_key)

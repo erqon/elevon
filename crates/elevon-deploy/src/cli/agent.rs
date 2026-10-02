@@ -147,23 +147,6 @@ impl KeyCommands {
 
         Ok(())
     }
-    //
-    //     async fn list(agent_client: &AgentClient) -> Result<()> {
-    //         let url = agent_client.absolute_url("/cli/keys/list");
-    //         let headers = agent_client.headers();
-    //
-    //         let event_stream = agent_client
-    //             .client
-    //             .get(url)
-    //             .headers(headers)
-    //             .send()
-    //             .await?
-    //             .bytes_stream();
-    //
-    //         log_stream_events(event_stream).await?;
-    //
-    //         Ok(())
-    //     }
 
     async fn revoke(agent_client: &AgentClient, args: &KeyRevokeArgs) -> Result<()> {
         let url = agent_client.absolute_url("/cli/keys/revoke");

@@ -10,29 +10,29 @@ use crate::{
         db::models::{App, AppTabled, Deployment, TabledView, app::DeploymentTabled},
         event::{ApiSocketEvent, ApiSocketEventResponse},
     },
-    cli::CliComponent,
+    cli::CliCommand,
     socket::SocketEventHandler,
 };
 
-impl CliComponent for AppCommands {
+impl CliCommand for AppCommands {
     async fn run(command: Self) -> Result<()> {
-        let api_socket = Self::get_socket()?;
+        // let api_socket = Self::get_socket()?;
 
         match command {
             AppCommands::List(params) => {
-                let response: Option<ApiSocketEventResponse> = api_socket
-                    .send_and_receive(ApiSocketEvent::AppCommands(AppCommands::List(params)))
-                    .await
-                    .context("failed to list auth keys")?;
-
-                if let Some(ApiSocketEventResponse::AppResponse(AppSocketResponse::List(rows))) =
-                    response
-                {
-                    tracing::info!(
-                        "{}",
-                        tabled::Table::new(rows).with(tabled::settings::Style::modern())
-                    );
-                }
+                //                 let response: Option<ApiSocketEventResponse> = api_socket
+                //                     .send_and_receive(ApiSocketEvent::AppCommands(AppCommands::List(params)))
+                //                     .await
+                //                     .context("failed to list auth keys")?;
+                //
+                //                 if let Some(ApiSocketEventResponse::AppResponse(AppSocketResponse::List(rows))) =
+                //                     response
+                //                 {
+                //                     tracing::info!(
+                //                         "{}",
+                //                         tabled::Table::new(rows).with(tabled::settings::Style::modern())
+                //                     );
+                //                 }
             }
 
             AppCommands::Deployment { subcommand } => {
@@ -40,10 +40,10 @@ impl CliComponent for AppCommands {
             }
 
             AppCommands::Remove(args) => {
-                api_socket
-                    .send(ApiSocketEvent::AppCommands(AppCommands::Remove(args)))
-                    .await
-                    .context("failed to remove app")?;
+                // api_socket
+                //     .send(ApiSocketEvent::AppCommands(AppCommands::Remove(args)))
+                //     .await
+                //     .context("failed to remove app")?;
             }
         }
 
@@ -106,28 +106,28 @@ pub async fn handle_app_list(
     Ok(rows)
 }
 
-impl CliComponent for DeploymentCommands {
+impl CliCommand for DeploymentCommands {
     async fn run(command: Self) -> Result<()> {
-        let api_socket = Self::get_socket()?;
+        // let api_socket = Self::get_socket()?;
 
         match command {
             DeploymentCommands::List(params) => {
-                let response: Option<ApiSocketEventResponse> = api_socket
-                    .send_and_receive(ApiSocketEvent::DeploymentCommands(
-                        DeploymentCommands::List(params),
-                    ))
-                    .await
-                    .context("failed to list auth keys")?;
-
-                if let Some(ApiSocketEventResponse::DeploymentResponse(
-                    DeploymentSocketResponse::List(rows),
-                )) = response
-                {
-                    tracing::info!(
-                        "{}",
-                        tabled::Table::new(rows).with(tabled::settings::Style::modern())
-                    );
-                }
+                //                 let response: Option<ApiSocketEventResponse> = api_socket
+                //                     .send_and_receive(ApiSocketEvent::DeploymentCommands(
+                //                         DeploymentCommands::List(params),
+                //                     ))
+                //                     .await
+                //                     .context("failed to list auth keys")?;
+                //
+                //                 if let Some(ApiSocketEventResponse::DeploymentResponse(
+                //                     DeploymentSocketResponse::List(rows),
+                //                 )) = response
+                //                 {
+                //                     tracing::info!(
+                //                         "{}",
+                //                         tabled::Table::new(rows).with(tabled::settings::Style::modern())
+                //                     );
+                //                 }
             }
         }
 

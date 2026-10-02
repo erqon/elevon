@@ -4,10 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     api::state::SharedApiState,
-    cli::{
-        app::{AppSocketResponse, DeploymentSocketResponse},
-        key::{KeyCommands, KeySocketResponse},
-    },
+    cli::app::{AppSocketResponse, DeploymentSocketResponse},
     proxy::types::DeployAppData,
     socket::{Emitter, SocketEventHandler},
 };
@@ -16,7 +13,6 @@ use crate::{
 #[serde(tag = "event", content = "data")]
 pub enum ApiSocketEvent {
     RunningContainers,
-    KeyCommands(KeyCommands),
     AppCommands(AppCommands),
     DeploymentCommands(DeploymentCommands),
 }
@@ -25,7 +21,6 @@ pub enum ApiSocketEvent {
 #[serde(tag = "event", content = "data")]
 pub enum ApiSocketEventResponse {
     RunningContainers(Vec<DeployAppData>),
-    KeyResponse(KeySocketResponse),
     AppResponse(AppSocketResponse),
     DeploymentResponse(DeploymentSocketResponse),
 }
@@ -40,11 +35,6 @@ impl ApiSocketEvent {
             ApiSocketEvent::RunningContainers => {
                 let result = state.get_running_route_containers().await?;
                 Some(ApiSocketEventResponse::RunningContainers(result))
-            }
-            ApiSocketEvent::KeyCommands(command) => {
-                KeyCommands::handle_event(command, state, emitter)
-                    .await?
-                    .map(ApiSocketEventResponse::KeyResponse)
             }
             ApiSocketEvent::AppCommands(command) => {
                 AppCommands::handle_event(command, state, emitter)

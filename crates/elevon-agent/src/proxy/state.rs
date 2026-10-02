@@ -56,8 +56,8 @@ impl ProxyState {
             port: env.agent_port,
         };
 
-        let proxy_socket = Socket::new(SocketType::Proxy)?;
-        let api_socket = Socket::new(SocketType::Api)?;
+        let proxy_socket = Socket::new(SocketType::Proxy, false)?;
+        let api_socket = Socket::new(SocketType::Api, false)?;
 
         Ok(Arc::new(ProxyState {
             agent: agent_state,

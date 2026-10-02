@@ -1,17 +1,17 @@
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
+use elevon_contracts::deploy::log_stream_events;
 use serde::{Deserialize, Serialize};
-use tabled::{Table, settings::Style};
+use serde_json::json;
 
 use crate::{
     api::{
         db::models::{AuthKey, AuthKeyTabled, TabledView},
-        event::{ApiSocketEvent, ApiSocketEventResponse},
-        state::SharedApiState,
+        routes::cli::KeyListPayload,
     },
-    cli::CliComponent,
+    cli::CliCommand,
     logger::ActionLogger,
-    socket::{Emitter, SocketEventHandler},
+    socket::UnixClient,
 };
 
 #[derive(Args, Serialize, Deserialize)]
@@ -32,6 +32,9 @@ pub struct KeyRevokeArgs {
         help = "A key ID/name or list of key IDs/names to revoke"
     )]
     pub keys: Vec<String>,
+
+    #[arg(long, short = 'y')]
+    pub yes: bool,
 }
 
 #[derive(Args, Clone, Serialize, Deserialize)]
@@ -62,77 +65,67 @@ pub enum KeyCommands {
     Delete(KeyDeleteArgs),
 }
 
-impl CliComponent for KeyCommands {
+impl CliCommand for KeyCommands {
     async fn run(command: Self) -> Result<()> {
-        let api_socket = Self::get_socket()?;
+        let unix_client = UnixClient::new()?;
+        const BASE_PATH: &str = "/cli/keys/local";
 
-        // TODO: Switch the whole cli commands to axum unix socket just like deploy communcates with it.
         match command {
             KeyCommands::Create(args) => {
-                let response: Option<ApiSocketEventResponse> = api_socket
-                    .send_and_receive(ApiSocketEvent::KeyCommands(KeyCommands::Create(args)))
-                    .await
-                    .context("failed to contact the API server through api.sock")?;
+                let event_stream = unix_client
+                    .client
+                    .post(unix_client.resolve_url(BASE_PATH))
+                    .json(&json!({
+                        "name": &args.name
+                    }))
+                    .send()
+                    .await?
+                    .bytes_stream();
 
-                if let Some(response) = response
-                    && let ApiSocketEventResponse::KeyResponse(KeySocketResponse::KeyCreate(key)) =
-                        response
-                {
-                    tracing::info!("Save your API Key: {}", key);
-                }
+                log_stream_events(event_stream).await?;
             }
             KeyCommands::List => {
-                let response: Option<ApiSocketEventResponse> = api_socket
-                    .send_and_receive(ApiSocketEvent::KeyCommands(KeyCommands::List))
-                    .await
-                    .context("failed to list auth keys")?;
+                let path = format!("{BASE_PATH}/list");
+                let event_stream = unix_client
+                    .client
+                    .get(unix_client.resolve_url(&path))
+                    .send()
+                    .await?
+                    .bytes_stream();
 
-                if let Some(ApiSocketEventResponse::KeyResponse(KeySocketResponse::KeyList(rows))) =
-                    response
-                {
-                    tracing::info!("{}", Table::new(rows).with(Style::modern()));
-                }
+                log_stream_events(event_stream).await?;
             }
             KeyCommands::Revoke(args) => {
-                let response: Option<ApiSocketEventResponse> = api_socket
-                    .send_and_receive(ApiSocketEvent::KeyCommands(KeyCommands::Revoke(
-                        args.clone(),
-                    )))
-                    .await?;
+                verify_action(args.yes, &args.keys, "revoke")?;
 
-                if matches!(
-                    response,
-                    Some(ApiSocketEventResponse::KeyResponse(
-                        KeySocketResponse::KeyUpdated
-                    ))
-                ) {
-                    tracing::info!("Successfully revoked all keys");
-                }
+                let path = format!("{BASE_PATH}/revoke");
+                let payload = KeyListPayload { data: args.keys };
+
+                let event_stream = unix_client
+                    .client
+                    .post(unix_client.resolve_url(&path))
+                    .json(&payload)
+                    .send()
+                    .await?
+                    .bytes_stream();
+
+                log_stream_events(event_stream).await?;
             }
             KeyCommands::Delete(args) => {
-                let formatted_keys: String = args
-                    .keys
-                    .iter()
-                    .map(|id| format!("- {}", id))
-                    .collect::<Vec<_>>()
-                    .join("\n");
+                verify_action(args.yes, &args.keys, "delete")?;
 
-                let message = [
-                    "This will delete auth key(s):",
-                    "",
-                    &formatted_keys,
-                    "",
-                    "Continue? [y/N]",
-                ]
-                .join("\n");
+                let path = format!("{BASE_PATH}/delete");
+                let payload = KeyListPayload { data: args.keys };
 
-                elevon_contracts::handle_cli_yes(args.yes, message)?;
+                let event_stream = unix_client
+                    .client
+                    .post(unix_client.resolve_url(&path))
+                    .json(&payload)
+                    .send()
+                    .await?
+                    .bytes_stream();
 
-                let _: Option<ApiSocketEventResponse> = api_socket
-                    .send_and_receive(ApiSocketEvent::KeyCommands(KeyCommands::Delete(
-                        args.clone(),
-                    )))
-                    .await?;
+                log_stream_events(event_stream).await?;
             }
         }
 
@@ -140,49 +133,23 @@ impl CliComponent for KeyCommands {
     }
 }
 
-impl SocketEventHandler for KeyCommands {
-    type Command = KeyCommands;
-    type Response = KeySocketResponse;
-    type EventRespose = ApiSocketEventResponse;
+fn verify_action(yes: bool, keys: &[String], action: &str) -> Result<()> {
+    let formatted_keys: String = keys
+        .iter()
+        .map(|id| format!("- {}", id))
+        .collect::<Vec<_>>()
+        .join("\n");
 
-    async fn handle_event(
-        command: Self::Command,
-        state: SharedApiState,
-        emitter: Emitter<Self::EventRespose>,
-    ) -> Result<Option<Self::Response>> {
-        match command {
-            KeyCommands::Create(args) => {
-                emitter
-                    .log(format!("Creating auth key: {}", args.name))
-                    .await?;
-                let result = AuthKey::create_key(&mut state.db.get(), &args.name).await?;
-                Ok(Some(KeySocketResponse::KeyCreate(result)))
-            }
-            KeyCommands::List => {
-                let data = handle_key_list(&mut state.db.get()).await?;
-                Ok(Some(KeySocketResponse::KeyList(data)))
-            }
-            KeyCommands::Revoke(args) => {
-                emitter.log("Revoking auth key(s)").await?;
-                handle_key_revoke(args.keys, &mut state.db.get(), &emitter).await?;
-                Ok(Some(KeySocketResponse::KeyUpdated))
-            }
-            KeyCommands::Delete(args) => {
-                handle_key_delete(args.keys, &mut state.db.get(), &emitter)
-                    .await
-                    .context("auth key deletion failed")?;
-                Ok(Some(KeySocketResponse::KeyUpdated))
-            }
-        }
-    }
-}
+    let message = [
+        &format!("This will {action} auth key(s):"),
+        "",
+        &formatted_keys,
+        "",
+        "Continue? [y/N]",
+    ]
+    .join("\n");
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(tag = "key", content = "data")]
-pub enum KeySocketResponse {
-    KeyCreate(String),
-    KeyList(Vec<AuthKeyTabled>),
-    KeyUpdated,
+    elevon_contracts::handle_cli_yes(yes, message)
 }
 
 pub async fn handle_key_list(db: &mut toasty::Db) -> Result<Vec<AuthKeyTabled>> {
