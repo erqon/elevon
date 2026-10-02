@@ -178,11 +178,15 @@ impl AppCommands {
             Ok(())
         })
     }
+
+    async fn remove(State(_state): State<SharedApiState>) {}
 }
 
 impl CommandsTrait for AppCommands {
     fn create_router() -> Router<SharedApiState> {
-        Router::new().route("/list", get(AppCommands::list))
+        Router::new()
+            .route("/list", get(AppCommands::list))
+            .route("/remove", post(AppCommands::remove))
     }
 }
 
