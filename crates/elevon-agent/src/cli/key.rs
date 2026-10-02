@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
-use elevon_contracts::deploy::log_stream_events;
+use elevon_contracts::{cli_verify_action_with_items, deploy::log_stream_events};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -96,7 +96,7 @@ impl CliCommand for KeyCommands {
                 log_stream_events(event_stream).await?;
             }
             KeyCommands::Revoke(args) => {
-                verify_action(args.yes, &args.keys, "revoke")?;
+                cli_verify_action_with_items(args.yes, &args.keys, "This will revoke auth key(s)")?;
 
                 let path = format!("{BASE_PATH}/revoke");
                 let payload = KeyListPayload { data: args.keys };
@@ -112,7 +112,7 @@ impl CliCommand for KeyCommands {
                 log_stream_events(event_stream).await?;
             }
             KeyCommands::Delete(args) => {
-                verify_action(args.yes, &args.keys, "delete")?;
+                cli_verify_action_with_items(args.yes, &args.keys, "This will delete auth key(s)")?;
 
                 let path = format!("{BASE_PATH}/delete");
                 let payload = KeyListPayload { data: args.keys };
@@ -131,25 +131,6 @@ impl CliCommand for KeyCommands {
 
         Ok(())
     }
-}
-
-fn verify_action(yes: bool, keys: &[String], action: &str) -> Result<()> {
-    let formatted_keys: String = keys
-        .iter()
-        .map(|id| format!("- {}", id))
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    let message = [
-        &format!("This will {action} auth key(s):"),
-        "",
-        &formatted_keys,
-        "",
-        "Continue? [y/N]",
-    ]
-    .join("\n");
-
-    elevon_contracts::handle_cli_yes(yes, message)
 }
 
 pub async fn handle_key_list(db: &mut toasty::Db) -> Result<Vec<AuthKeyTabled>> {

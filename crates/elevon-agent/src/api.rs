@@ -1,5 +1,4 @@
 pub mod db;
-pub mod event;
 mod middleware;
 pub mod routes;
 pub mod state;
@@ -23,8 +22,6 @@ pub async fn run_api_server(args: ApiArgs, env: &ElevonEnv) -> Result<()> {
     let app = Router::new().merge(router);
 
     let mut set = JoinSet::new();
-
-    // Socket::create_api_listener_handle(&mut set, state.api_socket.clone(), state.clone());
 
     let addr = format!("127.0.0.1:{}", args.port);
 

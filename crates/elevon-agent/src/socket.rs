@@ -4,7 +4,6 @@ use std::{path::PathBuf, sync::Arc};
 
 use anyhow::{Context, Result, bail};
 use elevon_fs::agent::AgentPath;
-use futures_util::future::BoxFuture;
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use serde::de::DeserializeOwned;
@@ -12,12 +11,7 @@ use serde::{Deserialize, Serialize};
 use tokio::net::unix::SocketAddr;
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::mpsc;
-use tokio::task::JoinSet;
 use tokio_util::codec::{Framed, FramedWrite, LengthDelimitedCodec};
-
-use crate::api::event::ApiSocketEvent;
-use crate::api::state::SharedApiState;
-use crate::logger::ActionLogger;
 
 pub enum SocketType {
     Proxy,
@@ -30,33 +24,6 @@ pub enum SocketResponse<R> {
     Data(R),
     Done,
     Error(String),
-}
-
-pub struct Emitter<R> {
-    sender: mpsc::Sender<SocketResponse<R>>,
-}
-
-impl<R> Clone for Emitter<R> {
-    fn clone(&self) -> Self {
-        Self {
-            sender: self.sender.clone(),
-        }
-    }
-}
-
-impl<R> Emitter<R> {
-    pub async fn log(&self, message: impl Into<String>) -> Result<()> {
-        self.sender
-            .send(SocketResponse::Log(message.into()))
-            .await
-            .map_err(|_| anyhow::anyhow!("failed to emit socket log"))
-    }
-}
-
-impl<R: Send + 'static> ActionLogger for Emitter<R> {
-    async fn log(&self, message: String) -> Result<()> {
-        Emitter::log(self, message).await
-    }
 }
 
 pub struct Socket {
@@ -134,7 +101,7 @@ impl Socket {
         M: DeserializeOwned + Send + 'static,
         R: Serialize + Send + 'static,
         S: Clone + Send + Sync + 'static,
-        F: Fn(S, M, Emitter<R>) -> Fut + Send + Sync + 'static,
+        F: Fn(S, M) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<Option<R>, Box<dyn std::error::Error + Send + Sync>>>
             + Send
             + 'static,
@@ -153,26 +120,6 @@ impl Socket {
         }
     }
 
-    pub fn create_api_listener_handle(
-        set: &mut JoinSet<()>,
-        socket: Arc<Socket>,
-        state: SharedApiState,
-    ) {
-        set.spawn(async move {
-            match socket
-                .listener(state, |state, msg: ApiSocketEvent, emitter| async move {
-                    Ok(ApiSocketEvent::handle(msg, state, emitter).await?)
-                })
-                .await
-            {
-                Ok(()) => {}
-                Err(err) => {
-                    tracing::error!(%err, "proxy socket listener failed");
-                }
-            }
-        });
-    }
-
     async fn handle_stream<M, R, S, F, Fut>(
         &self,
         state: S,
@@ -183,7 +130,7 @@ impl Socket {
         M: DeserializeOwned + Send + 'static,
         R: Serialize + Send + 'static,
         S: Clone + Send + Sync + 'static,
-        F: Fn(S, M, Emitter<R>) -> Fut + Send + Sync + 'static,
+        F: Fn(S, M) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<Option<R>, Box<dyn std::error::Error + Send + Sync>>>
             + Send
             + 'static,
@@ -240,15 +187,12 @@ impl Socket {
         M: DeserializeOwned + Send + 'static,
         R: Serialize + Send + 'static,
         S: Clone + Send + Sync + 'static,
-        F: Fn(S, M, Emitter<R>) -> Fut + Send + Sync + 'static,
+        F: Fn(S, M) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<Option<R>, Box<dyn std::error::Error + Send + Sync>>>
             + Send
             + 'static,
     {
         let (sender, mut receiver) = mpsc::channel::<SocketResponse<R>>(32);
-        let emitter = Emitter {
-            sender: sender.clone(),
-        };
         let writer_task = tokio::spawn(async move {
             while let Some(message) = receiver.recv().await {
                 let payload = serde_json::to_vec(&message)?;
@@ -258,7 +202,7 @@ impl Socket {
             Ok::<_, anyhow::Error>(())
         });
 
-        match handler(state, message, emitter).await {
+        match handler(state, message).await {
             Ok(Some(res)) => {
                 if let Err(err) = sender.send(SocketResponse::Data(res)).await {
                     tracing::error!(%err, "failed to send response");
@@ -281,27 +225,6 @@ impl Socket {
         }
 
         Ok(())
-    }
-}
-
-pub trait SocketEventHandler {
-    type Command;
-    type Response;
-    type EventRespose: Send + 'static;
-
-    fn handle_event(
-        command: Self::Command,
-        state: SharedApiState,
-        emitter: Emitter<Self::EventRespose>,
-    ) -> impl Future<Output = Result<Option<Self::Response>>> + Send;
-
-    fn log(
-        emitter: Emitter<Self::EventRespose>,
-    ) -> impl Fn(String) -> BoxFuture<'static, Result<()>> {
-        move |message| {
-            let emitter = emitter.clone();
-            Box::pin(async move { emitter.log(message).await })
-        }
     }
 }
 

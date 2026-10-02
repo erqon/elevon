@@ -13,13 +13,12 @@ use dashmap::DashMap;
 use pingora::lb::{LoadBalancer, health_check::TcpHealthCheck, selection::RoundRobin};
 
 use crate::{
-    api::event::{ApiSocketEvent, ApiSocketEventResponse},
     env::ElevonEnv,
     proxy::{
         tls::DynamicCert,
         types::{BackendRuntime, DeployAppData, DeployAppState, RouteBackendRuntime},
     },
-    socket::{Socket, SocketType},
+    socket::{Socket, SocketType, UnixClient},
 };
 
 pub struct AgentState {
@@ -72,32 +71,34 @@ impl ProxyState {
     }
 
     pub async fn load_conainters(&self) -> Result<()> {
+        let unix_client = UnixClient::new()?;
+
         for _ in 0..20 {
-            let response: Result<Option<ApiSocketEventResponse>> = self
-                .api_socket
-                .send_and_receive(ApiSocketEvent::RunningContainers)
+            let response = unix_client
+                .client
+                .get(unix_client.resolve_url("/deploy/local/containers"))
+                .send()
                 .await;
 
             match response {
-                Ok(Some(res)) => {
-                    if let ApiSocketEventResponse::RunningContainers(containers) = res {
-                        if containers.is_empty() {
-                            return Ok(());
-                        }
+                Ok(res) => {
+                    let containers: Vec<DeployAppData> = res.json().await?;
 
-                        tracing::info!(
-                            "Found {} running containers, upserting them...",
-                            containers.len()
-                        );
-
-                        for container in containers {
-                            self.upsert_route(container);
-                        }
-
+                    if containers.is_empty() {
                         return Ok(());
                     }
+
+                    tracing::info!(
+                        "Found {} running containers, upserting them...",
+                        containers.len()
+                    );
+
+                    for container in containers {
+                        self.upsert_route(container);
+                    }
+
+                    return Ok(());
                 }
-                Ok(None) => {}
                 Err(err) => {
                     tracing::warn!(%err, "proxy containers request error, retrying");
                 }

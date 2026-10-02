@@ -1,12 +1,12 @@
 use axum::{
     Json, Router,
-    extract::{Path, Query, State},
+    extract::{Query, State},
     middleware,
     response::Result,
     routing::{get, post},
 };
 use elevon_contracts::{cli::ListQueryParams, deploy::StreamEvent};
-use elevon_http::error::{AppError, ClientAppError};
+use elevon_http::error::AppError;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -155,7 +155,6 @@ struct AppCommands;
 
 impl AppCommands {
     async fn list(
-        _: AuthKey,
         State(state): State<SharedApiState>,
         Query(query): Query<ListQueryParams>,
     ) -> StreamResponse {
@@ -191,7 +190,6 @@ struct DeploymentCommands;
 
 impl DeploymentCommands {
     async fn list(
-        _: AuthKey,
         State(state): State<SharedApiState>,
         Query(query): Query<ListQueryParams>,
     ) -> StreamResponse {

@@ -1,45 +1,42 @@
-use anyhow::{Context, Result, bail};
-use elevon_contracts::cli::{
-    ListQueryParams,
-    app::{AppCommands, DeploymentCommands},
+use anyhow::{Result, bail};
+use elevon_contracts::{
+    cli::{
+        ListQueryParams,
+        app::{AppCommands, DeploymentCommands},
+    },
+    deploy::log_stream_events,
 };
-use serde::{Deserialize, Serialize};
 
 use crate::{
-    api::{
-        db::models::{App, AppTabled, Deployment, TabledView, app::DeploymentTabled},
-        event::{ApiSocketEvent, ApiSocketEventResponse},
-    },
+    api::db::models::{App, AppTabled, Deployment, TabledView, app::DeploymentTabled},
     cli::CliCommand,
-    socket::SocketEventHandler,
+    socket::UnixClient,
 };
 
 impl CliCommand for AppCommands {
     async fn run(command: Self) -> Result<()> {
-        // let api_socket = Self::get_socket()?;
+        let unix_client = UnixClient::new()?;
+        const BASE_PATH: &str = "/cli/apps/local";
 
         match command {
             AppCommands::List(params) => {
-                //                 let response: Option<ApiSocketEventResponse> = api_socket
-                //                     .send_and_receive(ApiSocketEvent::AppCommands(AppCommands::List(params)))
-                //                     .await
-                //                     .context("failed to list auth keys")?;
-                //
-                //                 if let Some(ApiSocketEventResponse::AppResponse(AppSocketResponse::List(rows))) =
-                //                     response
-                //                 {
-                //                     tracing::info!(
-                //                         "{}",
-                //                         tabled::Table::new(rows).with(tabled::settings::Style::modern())
-                //                     );
-                //                 }
+                let path = format!("{BASE_PATH}/list");
+                let stream = unix_client
+                    .client
+                    .get(unix_client.resolve_url(&path))
+                    .query(&params)
+                    .send()
+                    .await?
+                    .bytes_stream();
+
+                log_stream_events(stream).await?;
             }
 
             AppCommands::Deployment { subcommand } => {
                 DeploymentCommands::run(subcommand).await?;
             }
 
-            AppCommands::Remove(args) => {
+            AppCommands::Remove(_args) => {
                 // api_socket
                 //     .send(ApiSocketEvent::AppCommands(AppCommands::Remove(args)))
                 //     .await
@@ -48,47 +45,6 @@ impl CliCommand for AppCommands {
         }
 
         Ok(())
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(tag = "key", content = "data")]
-pub enum AppSocketResponse {
-    List(Vec<AppTabled>),
-    Deployment(DeploymentSocketResponse),
-}
-
-impl SocketEventHandler for AppCommands {
-    type Command = AppCommands;
-    type Response = AppSocketResponse;
-    type EventRespose = ApiSocketEventResponse;
-
-    async fn handle_event(
-        command: Self::Command,
-        state: crate::api::state::SharedApiState,
-        emitter: crate::socket::Emitter<Self::EventRespose>,
-    ) -> Result<Option<Self::Response>> {
-        let mut db = state.db.get();
-
-        match command {
-            AppCommands::List(params) => {
-                let data = handle_app_list(&mut db, params.get_params()).await?;
-                Ok(Some(AppSocketResponse::List(data)))
-            }
-
-            AppCommands::Deployment { subcommand } => {
-                let result = DeploymentCommands::handle_event(subcommand, state, emitter).await?;
-                if let Some(res) = result {
-                    return Ok(Some(AppSocketResponse::Deployment(res)));
-                }
-                Ok(None)
-            }
-
-            AppCommands::Remove(args) => {
-                handle_app_removal(&mut db, args.name).await?;
-                Ok(None)
-            }
-        }
     }
 }
 
@@ -108,55 +64,25 @@ pub async fn handle_app_list(
 
 impl CliCommand for DeploymentCommands {
     async fn run(command: Self) -> Result<()> {
-        // let api_socket = Self::get_socket()?;
+        let unix_client = UnixClient::new()?;
+        const BASE_PATH: &str = "/cli/deployments/local";
 
         match command {
             DeploymentCommands::List(params) => {
-                //                 let response: Option<ApiSocketEventResponse> = api_socket
-                //                     .send_and_receive(ApiSocketEvent::DeploymentCommands(
-                //                         DeploymentCommands::List(params),
-                //                     ))
-                //                     .await
-                //                     .context("failed to list auth keys")?;
-                //
-                //                 if let Some(ApiSocketEventResponse::DeploymentResponse(
-                //                     DeploymentSocketResponse::List(rows),
-                //                 )) = response
-                //                 {
-                //                     tracing::info!(
-                //                         "{}",
-                //                         tabled::Table::new(rows).with(tabled::settings::Style::modern())
-                //                     );
-                //                 }
+                let path = format!("{BASE_PATH}/list");
+                let stream = unix_client
+                    .client
+                    .get(unix_client.resolve_url(&path))
+                    .query(&params)
+                    .send()
+                    .await?
+                    .bytes_stream();
+
+                log_stream_events(stream).await?;
             }
         }
 
         Ok(())
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(tag = "key", content = "data")]
-pub enum DeploymentSocketResponse {
-    List(Vec<DeploymentTabled>),
-}
-
-impl SocketEventHandler for DeploymentCommands {
-    type Command = DeploymentCommands;
-    type Response = DeploymentSocketResponse;
-    type EventRespose = ApiSocketEventResponse;
-
-    async fn handle_event(
-        command: Self::Command,
-        state: crate::api::state::SharedApiState,
-        _emitter: crate::socket::Emitter<Self::EventRespose>,
-    ) -> Result<Option<Self::Response>> {
-        match command {
-            DeploymentCommands::List(params) => {
-                let data = handle_deployment_list(&mut state.db.get(), params.get_params()).await?;
-                Ok(Some(DeploymentSocketResponse::List(data)))
-            }
-        }
     }
 }
 
