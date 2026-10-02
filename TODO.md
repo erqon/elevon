@@ -39,13 +39,14 @@ Markers for features before the release
 - <s>[ ] Health-check gated promotion (switch traffic only after new container is healthy) **(N)** </s>
 - <s>[ ] Rollback-on-failure policy (auto rollback on health-check failure or deploy timeout) </s>
 
-## Stable release (Deadline 30th Sep)
+## Stable release (Deadline 10th Oct)
 
 ## Elevon Agent
 
 - [x] Upgrade the binary
 - [ ] Running infrastructure Docker services (Postgres, Redis, etc.) **(N)**
 - [x] Deployment history <s>and audit trail</s>
+- [ ] Add app remove command
 
 ## Elevon Deploy
 

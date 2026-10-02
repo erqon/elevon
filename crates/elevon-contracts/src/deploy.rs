@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use anyhow::Result;
 use bollard::plugin::RestartPolicyNameEnum;
 use bytes::Bytes;
-use clap::Args;
 use elevon_config::{ConfigError, ResolveEnvCredentials, resolve_env_or_literal};
 use futures_util::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -180,33 +179,6 @@ impl TlsType {
         match self {
             TlsType::Cert => "cert.pem",
             TlsType::Key => "key.pem",
-        }
-    }
-}
-
-#[derive(Args, Serialize, Deserialize)]
-pub struct ListQueryParams {
-    #[arg(
-        short,
-        long,
-        default_value_t = 25,
-        help = "Limit the results. Set 0 to make it unlimited"
-    )]
-    pub limit: usize,
-
-    #[arg(short, long, default_value_t = 0, help = "Starting offset")]
-    pub offset: usize,
-}
-
-impl ListQueryParams {
-    pub fn get_params(&self) -> Self {
-        Self {
-            limit: if self.limit == 0 {
-                i64::MAX as usize
-            } else {
-                self.limit
-            },
-            offset: self.offset,
         }
     }
 }

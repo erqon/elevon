@@ -8,8 +8,6 @@ use clap::{
     builder::styling::{AnsiColor, Styles},
 };
 
-use crate::socket::{Socket, SocketType};
-
 const STYLES: Styles = Styles::styled()
     .header(AnsiColor::Yellow.on_default())
     .usage(AnsiColor::Green.on_default())
@@ -74,7 +72,7 @@ pub enum Commands {
     #[command(about = "App specific commands")]
     App {
         #[command(subcommand)]
-        subcommand: app::AppCommands,
+        subcommand: elevon_contracts::cli::app::AppCommands,
     },
 }
 
@@ -150,10 +148,6 @@ pub struct ApiArgs {
     pub port: u16,
 }
 
-pub trait CliComponent {
+pub trait CliCommand {
     fn run(command: Self) -> impl Future<Output = anyhow::Result<()>>;
-
-    fn get_socket() -> anyhow::Result<Socket> {
-        Socket::new(SocketType::Api)
-    }
 }

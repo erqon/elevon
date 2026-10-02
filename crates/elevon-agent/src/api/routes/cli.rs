@@ -1,40 +1,75 @@
 use axum::{
     Json, Router,
-    extract::{Path, Query, State},
+    extract::{Query, State},
+    middleware,
+    response::Result,
     routing::{get, post},
 };
-use elevon_contracts::deploy::{ListQueryParams, StreamEvent};
-use serde::Deserialize;
+use elevon_contracts::{cli::ListQueryParams, deploy::StreamEvent};
+use elevon_http::error::AppError;
+use reqwest::StatusCode;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::{
     api::{
         db::models::{App, AppTabled, AuthKey, Deployment, TabledView, app::DeploymentTabled},
+        middleware::{auth_middleware, require_unix_socket},
         state::SharedApiState,
         stream::{StreamResponse, emit, spawn_streaming_task},
     },
     cli::key::{handle_key_delete, handle_key_list, handle_key_revoke},
 };
 
-pub fn router() -> Router<SharedApiState> {
+pub fn router(state: SharedApiState) -> Router<SharedApiState> {
     Router::new()
-        .nest("/keys", KeyCommands::register_routes())
-        .nest("/apps", AppCommands::register_routes())
-        .nest("/deployments", DeploymentCommands::register_routes())
+        .nest("/keys", KeyCommands::register_routes(state.clone()))
+        .nest("/apps", AppCommands::register_routes(state.clone()))
+        .nest(
+            "/deployments",
+            DeploymentCommands::register_routes(state.clone()),
+        )
 }
 
 trait CommandsTrait {
-    fn register_routes() -> Router<SharedApiState>;
+    fn create_router() -> Router<SharedApiState>;
+
+    fn register_routes(state: SharedApiState) -> Router<SharedApiState> {
+        let base_router = Self::create_router();
+
+        let unix_router = base_router
+            .clone()
+            .route_layer(middleware::from_fn(require_unix_socket));
+
+        let auth_router = base_router.route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
+        ));
+
+        Router::new().nest("/local", unix_router).merge(auth_router)
+    }
 }
 
 struct KeyCommands;
 
 impl KeyCommands {
     async fn create(
-        _: AuthKey,
         State(state): State<SharedApiState>,
-        Path(name): Path<String>,
-    ) -> StreamResponse {
-        spawn_streaming_task(move |tx| async move {
+        Json(payload): Json<Value>,
+    ) -> Result<StreamResponse, AppError> {
+        let Some(name) = payload
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+        else {
+            return Err(AppError::client(
+                StatusCode::BAD_REQUEST,
+                "bad_request",
+                "Missing or invalid 'name' field",
+            ));
+        };
+
+        Ok(spawn_streaming_task(move |tx| async move {
             emit(
                 &tx,
                 StreamEvent::log(format!("Creating auth key: {}", name)),
@@ -65,10 +100,10 @@ impl KeyCommands {
             .await;
 
             Ok(())
-        })
+        }))
     }
 
-    async fn list(_: AuthKey, State(state): State<SharedApiState>) -> StreamResponse {
+    async fn list(State(state): State<SharedApiState>) -> StreamResponse {
         spawn_streaming_task(move |tx| async move {
             let keys = handle_key_list(&mut state.db.get()).await?;
             let mut table = tabled::Table::new(keys);
@@ -81,64 +116,45 @@ impl KeyCommands {
     }
 
     async fn revoke(
-        _: AuthKey,
         State(state): State<SharedApiState>,
         Json(payload): Json<KeyListPayload>,
     ) -> StreamResponse {
         spawn_streaming_task(move |tx| async move {
-            handle_key_revoke(payload.data, &mut state.db.get(), move |message| {
-                let tx = tx.clone();
-                async move {
-                    emit(&tx, StreamEvent::log(message)).await;
-                    Ok(())
-                }
-            })
-            .await?;
-
+            handle_key_revoke(payload.data, &mut state.db.get(), &tx).await?;
             Ok(())
         })
     }
 
     async fn delete(
-        _: AuthKey,
         State(state): State<SharedApiState>,
         Json(payload): Json<KeyListPayload>,
     ) -> StreamResponse {
         spawn_streaming_task(move |tx| async move {
-            handle_key_delete(payload.data, &mut state.db.get(), move |message| {
-                let tx = tx.clone();
-                async move {
-                    emit(&tx, StreamEvent::log(message)).await;
-                    Ok(())
-                }
-            })
-            .await?;
-
+            handle_key_delete(payload.data, &mut state.db.get(), &tx).await?;
             Ok(())
         })
     }
 }
 
-#[derive(Deserialize)]
-struct KeyListPayload {
-    pub data: Vec<String>,
-}
-
 impl CommandsTrait for KeyCommands {
-    fn register_routes() -> Router<SharedApiState> {
+    fn create_router() -> Router<SharedApiState> {
         Router::new()
-            .route("/{name}", post(KeyCommands::create))
+            .route("/", post(KeyCommands::create))
             .route("/list", get(KeyCommands::list))
             .route("/revoke", post(KeyCommands::revoke))
             .route("/delete", post(KeyCommands::delete))
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct KeyListPayload {
+    pub data: Vec<String>,
+}
+
 struct AppCommands;
 
 impl AppCommands {
     async fn list(
-        _: AuthKey,
         State(state): State<SharedApiState>,
         Query(query): Query<ListQueryParams>,
     ) -> StreamResponse {
@@ -165,7 +181,7 @@ impl AppCommands {
 }
 
 impl CommandsTrait for AppCommands {
-    fn register_routes() -> Router<SharedApiState> {
+    fn create_router() -> Router<SharedApiState> {
         Router::new().route("/list", get(AppCommands::list))
     }
 }
@@ -174,7 +190,6 @@ struct DeploymentCommands;
 
 impl DeploymentCommands {
     async fn list(
-        _: AuthKey,
         State(state): State<SharedApiState>,
         Query(query): Query<ListQueryParams>,
     ) -> StreamResponse {
@@ -202,7 +217,7 @@ impl DeploymentCommands {
 }
 
 impl CommandsTrait for DeploymentCommands {
-    fn register_routes() -> Router<SharedApiState> {
+    fn create_router() -> Router<SharedApiState> {
         Router::new().route("/list", get(DeploymentCommands::list))
     }
 }

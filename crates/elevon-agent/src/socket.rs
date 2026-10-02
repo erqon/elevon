@@ -1,20 +1,17 @@
+use std::future::Future;
 use std::os::unix::fs::PermissionsExt;
 use std::{path::PathBuf, sync::Arc};
 
 use anyhow::{Context, Result, bail};
 use elevon_fs::agent::AgentPath;
 use futures_util::stream::SplitSink;
-use futures_util::{Future, SinkExt, StreamExt};
+use futures_util::{SinkExt, StreamExt};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tokio::net::unix::SocketAddr;
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::mpsc;
-use tokio::task::JoinSet;
 use tokio_util::codec::{Framed, FramedWrite, LengthDelimitedCodec};
-
-use crate::api::event::ApiSocketEvent;
-use crate::api::state::SharedApiState;
 
 pub enum SocketType {
     Proxy,
@@ -29,30 +26,23 @@ pub enum SocketResponse<R> {
     Error(String),
 }
 
-#[derive(Clone)]
-pub struct Emitter<R> {
-    sender: mpsc::Sender<SocketResponse<R>>,
-}
-
-impl<R> Emitter<R> {
-    pub async fn log(&self, message: impl Into<String>) -> Result<()> {
-        self.sender
-            .send(SocketResponse::Log(message.into()))
-            .await
-            .map_err(|_| anyhow::anyhow!("failed to emit socket log"))
-    }
-}
-
 pub struct Socket {
     pub path: PathBuf,
 }
 
 impl Socket {
-    pub fn new(ty: SocketType) -> Result<Self> {
+    pub fn new(ty: SocketType, delete: bool) -> Result<Self> {
         let path = match ty {
             SocketType::Proxy => AgentPath::ProxySocket.ensure_parent_dir()?,
             SocketType::Api => AgentPath::ApiSocket.ensure_parent_dir()?,
         };
+
+        if path.exists() && delete {
+            match std::fs::remove_file(&path) {
+                Ok(()) => {}
+                Err(err) => return Err(err.into()),
+            }
+        }
 
         Ok(Self { path })
     }
@@ -111,17 +101,11 @@ impl Socket {
         M: DeserializeOwned + Send + 'static,
         R: Serialize + Send + 'static,
         S: Clone + Send + Sync + 'static,
-        F: Fn(S, M, Emitter<R>) -> Fut + Send + Sync + 'static,
+        F: Fn(S, M) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<Option<R>, Box<dyn std::error::Error + Send + Sync>>>
             + Send
             + 'static,
     {
-        match std::fs::remove_file(&self.path) {
-            Ok(()) => {}
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => return Err(err.into()),
-        }
-
         tracing::info!(path = %self.path.display(), "binding socket");
         let listener = UnixListener::bind(&self.path)
             .with_context(|| format!("failed to bind {}", self.path.display()))?;
@@ -136,26 +120,6 @@ impl Socket {
         }
     }
 
-    pub fn create_api_listener_handle(
-        set: &mut JoinSet<()>,
-        socket: Arc<Socket>,
-        state: SharedApiState,
-    ) {
-        set.spawn(async move {
-            match socket
-                .listener(state, |state, msg: ApiSocketEvent, emitter| async move {
-                    Ok(ApiSocketEvent::handle(msg, state, emitter).await?)
-                })
-                .await
-            {
-                Ok(()) => {}
-                Err(err) => {
-                    tracing::error!(%err, "proxy socket listener failed");
-                }
-            }
-        });
-    }
-
     async fn handle_stream<M, R, S, F, Fut>(
         &self,
         state: S,
@@ -166,7 +130,7 @@ impl Socket {
         M: DeserializeOwned + Send + 'static,
         R: Serialize + Send + 'static,
         S: Clone + Send + Sync + 'static,
-        F: Fn(S, M, Emitter<R>) -> Fut + Send + Sync + 'static,
+        F: Fn(S, M) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<Option<R>, Box<dyn std::error::Error + Send + Sync>>>
             + Send
             + 'static,
@@ -223,15 +187,12 @@ impl Socket {
         M: DeserializeOwned + Send + 'static,
         R: Serialize + Send + 'static,
         S: Clone + Send + Sync + 'static,
-        F: Fn(S, M, Emitter<R>) -> Fut + Send + Sync + 'static,
+        F: Fn(S, M) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<Option<R>, Box<dyn std::error::Error + Send + Sync>>>
             + Send
             + 'static,
     {
         let (sender, mut receiver) = mpsc::channel::<SocketResponse<R>>(32);
-        let emitter = Emitter {
-            sender: sender.clone(),
-        };
         let writer_task = tokio::spawn(async move {
             while let Some(message) = receiver.recv().await {
                 let payload = serde_json::to_vec(&message)?;
@@ -241,7 +202,7 @@ impl Socket {
             Ok::<_, anyhow::Error>(())
         });
 
-        match handler(state, message, emitter).await {
+        match handler(state, message).await {
             Ok(Some(res)) => {
                 if let Err(err) = sender.send(SocketResponse::Data(res)).await {
                     tracing::error!(%err, "failed to send response");
@@ -267,24 +228,26 @@ impl Socket {
     }
 }
 
-pub trait SocketEventHandler {
-    type Command;
-    type Response;
-    type EventRespose: Send;
+pub struct UnixClient {
+    pub client: reqwest::Client,
+}
 
-    fn handle_event(
-        command: Self::Command,
-        state: SharedApiState,
-        emitter: Emitter<Self::EventRespose>,
-    ) -> impl Future<Output = anyhow::Result<Self::Response>> + Send;
+impl UnixClient {
+    pub fn new() -> Result<Self> {
+        let socket = Socket::new(SocketType::Api, false)?;
+        let client = reqwest::Client::builder()
+            .unix_socket(socket.path)
+            .build()?;
 
-    fn emit_log(
-        emitter: Emitter<Self::EventRespose>,
-        message: String,
-    ) -> impl Future<Output = anyhow::Result<()>> + Send {
-        async move {
-            emitter.log(message).await?;
-            Ok(())
-        }
+        Ok(Self { client })
+    }
+
+    pub fn resolve_url(&self, url: &str) -> String {
+        let base_url = self.base_url();
+        format!("{}{}", base_url, url)
+    }
+
+    fn base_url(&self) -> String {
+        "http://localhost".to_string()
     }
 }

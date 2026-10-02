@@ -1529,6 +1529,7 @@ dependencies = [
  "futures-util",
  "jiff",
  "pingora",
+ "reqwest",
  "serde",
  "serde_json",
  "strum 0.28.0",

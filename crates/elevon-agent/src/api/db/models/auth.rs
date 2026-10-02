@@ -1,11 +1,11 @@
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use axum::extract::FromRequestParts;
 use elevon_http::{auth::get_auth_token, error::AppError, token::hash};
 use serde::{Deserialize, Serialize};
 
 use crate::api::{db::models::TabledView, state::SharedApiState};
 
-#[derive(Debug, toasty::Model)]
+#[derive(Debug, Clone, toasty::Model)]
 pub struct AuthKey {
     #[key]
     #[auto]
@@ -56,6 +56,29 @@ impl AuthKey {
 
         Ok(key)
     }
+
+    pub async fn get_by_name_or_id(db: &mut toasty::Db, key: &str) -> Result<Self> {
+        let name_err = match Self::get_by_name(db, key).await {
+            Ok(k) => return Ok(k),
+            Err(e) => e,
+        };
+
+        let id = match uuid::Uuid::parse_str(key) {
+            Ok(id) => id,
+            Err(_) => {
+                return Err(name_err).with_context(|| {
+                    format!("no key found with name '{key}' (and it is not a valid UUID)")
+                });
+            }
+        };
+
+        match AuthKey::get_by_id(db, id).await {
+            Ok(k) => Ok(k),
+            Err(id_err) => {
+                anyhow::bail!("key '{key}' not found by name ({name_err:#}) or by ID ({id_err:#})")
+            }
+        }
+    }
 }
 
 impl FromRequestParts<SharedApiState> for AuthKey {
@@ -74,7 +97,10 @@ impl FromRequestParts<SharedApiState> for AuthKey {
     }
 }
 
-async fn check_auth_key(mut db: toasty::Db, auth_key: String) -> anyhow::Result<AuthKey, AppError> {
+pub async fn check_auth_key(
+    mut db: toasty::Db,
+    auth_key: String,
+) -> anyhow::Result<AuthKey, AppError> {
     let hashed_key = hash(&auth_key);
 
     let mut auth_key = AuthKey::get_by_key_hash(&mut db, hashed_key)

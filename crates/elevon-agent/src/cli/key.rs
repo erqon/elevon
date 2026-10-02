@@ -1,17 +1,17 @@
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
+use elevon_contracts::{cli_verify_action_with_items, deploy::log_stream_events};
 use serde::{Deserialize, Serialize};
-use tabled::{Table, settings::Style};
-use uuid::Uuid;
+use serde_json::json;
 
 use crate::{
     api::{
         db::models::{AuthKey, AuthKeyTabled, TabledView},
-        event::{ApiSocketEvent, ApiSocketEventResponse},
-        state::SharedApiState,
+        routes::cli::KeyListPayload,
     },
-    cli::CliComponent,
-    socket::{Emitter, SocketEventHandler},
+    cli::CliCommand,
+    logger::ActionLogger,
+    socket::UnixClient,
 };
 
 #[derive(Args, Serialize, Deserialize)]
@@ -27,21 +27,24 @@ pub struct KeyCreateArgs {
 #[derive(Args, Clone, Serialize, Deserialize)]
 pub struct KeyRevokeArgs {
     #[arg(
-        value_name = "ID",
+        value_name = "KEY",
         required = true,
-        help = "An ID or list of IDs of the keys to revoke"
+        help = "A key ID/name or list of key IDs/names to revoke"
     )]
-    pub ids: Vec<String>,
+    pub keys: Vec<String>,
+
+    #[arg(long, short = 'y')]
+    pub yes: bool,
 }
 
 #[derive(Args, Clone, Serialize, Deserialize)]
 pub struct KeyDeleteArgs {
     #[arg(
-        value_name = "ID",
+        value_name = "KEY",
         required = true,
-        help = "An ID or list of IDs of the keys to delete"
+        help = "A key ID/name or list of key IDs/names to delete"
     )]
-    pub ids: Vec<String>,
+    pub keys: Vec<String>,
 
     #[arg(long, short = 'y')]
     pub yes: bool,
@@ -62,139 +65,71 @@ pub enum KeyCommands {
     Delete(KeyDeleteArgs),
 }
 
-impl CliComponent for KeyCommands {
+impl CliCommand for KeyCommands {
     async fn run(command: Self) -> Result<()> {
-        let api_socket = Self::get_socket()?;
+        let unix_client = UnixClient::new()?;
+        const BASE_PATH: &str = "/cli/keys/local";
 
         match command {
             KeyCommands::Create(args) => {
-                let response: Option<ApiSocketEventResponse> = api_socket
-                    .send_and_receive(ApiSocketEvent::KeyCommands(KeyCommands::Create(args)))
-                    .await
-                    .context("failed to contact the API server through api.sock")?;
+                let event_stream = unix_client
+                    .client
+                    .post(unix_client.resolve_url(BASE_PATH))
+                    .json(&json!({
+                        "name": &args.name
+                    }))
+                    .send()
+                    .await?
+                    .bytes_stream();
 
-                if let Some(response) = response
-                    && let ApiSocketEventResponse::KeyResponse(KeySocketResponse::KeyCreate(key)) =
-                        response
-                {
-                    tracing::info!("Save your API Key: {}", key);
-                }
+                log_stream_events(event_stream).await?;
             }
             KeyCommands::List => {
-                let response: Option<ApiSocketEventResponse> = api_socket
-                    .send_and_receive(ApiSocketEvent::KeyCommands(KeyCommands::List))
-                    .await
-                    .context("failed to list auth keys")?;
+                let path = format!("{BASE_PATH}/list");
+                let event_stream = unix_client
+                    .client
+                    .get(unix_client.resolve_url(&path))
+                    .send()
+                    .await?
+                    .bytes_stream();
 
-                if let Some(ApiSocketEventResponse::KeyResponse(KeySocketResponse::KeyList(rows))) =
-                    response
-                {
-                    tracing::info!("{}", Table::new(rows).with(Style::modern()));
-                }
+                log_stream_events(event_stream).await?;
             }
             KeyCommands::Revoke(args) => {
-                let response: Option<ApiSocketEventResponse> = api_socket
-                    .send_and_receive(ApiSocketEvent::KeyCommands(KeyCommands::Revoke(
-                        args.clone(),
-                    )))
-                    .await?;
+                cli_verify_action_with_items(args.yes, &args.keys, "This will revoke auth key(s)")?;
 
-                if matches!(
-                    response,
-                    Some(ApiSocketEventResponse::KeyResponse(
-                        KeySocketResponse::KeyUpdated
-                    ))
-                ) {
-                    tracing::info!("Successfully revoked all keys");
-                }
+                let path = format!("{BASE_PATH}/revoke");
+                let payload = KeyListPayload { data: args.keys };
+
+                let event_stream = unix_client
+                    .client
+                    .post(unix_client.resolve_url(&path))
+                    .json(&payload)
+                    .send()
+                    .await?
+                    .bytes_stream();
+
+                log_stream_events(event_stream).await?;
             }
             KeyCommands::Delete(args) => {
-                let formatted_keys: String = args
-                    .ids
-                    .iter()
-                    .map(|id| format!("- {}", id))
-                    .collect::<Vec<_>>()
-                    .join("\n");
+                cli_verify_action_with_items(args.yes, &args.keys, "This will delete auth key(s)")?;
 
-                let message = [
-                    "This will delete auth key(s):",
-                    "",
-                    &formatted_keys,
-                    "",
-                    "Continue? [y/N]",
-                ]
-                .join("\n");
+                let path = format!("{BASE_PATH}/delete");
+                let payload = KeyListPayload { data: args.keys };
 
-                elevon_contracts::handle_cli_yes(args.yes, message)?;
+                let event_stream = unix_client
+                    .client
+                    .post(unix_client.resolve_url(&path))
+                    .json(&payload)
+                    .send()
+                    .await?
+                    .bytes_stream();
 
-                let response: Option<ApiSocketEventResponse> = api_socket
-                    .send_and_receive(ApiSocketEvent::KeyCommands(KeyCommands::Delete(
-                        args.clone(),
-                    )))
-                    .await?;
-
-                if matches!(
-                    response,
-                    Some(ApiSocketEventResponse::KeyResponse(
-                        KeySocketResponse::KeyUpdated
-                    ))
-                ) {
-                    tracing::info!("Successfully deleted key(s): [{}]", args.ids.join(", "));
-                }
+                log_stream_events(event_stream).await?;
             }
         }
 
         Ok(())
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(tag = "key", content = "data")]
-pub enum KeySocketResponse {
-    KeyCreate(String),
-    KeyList(Vec<AuthKeyTabled>),
-    KeyUpdated,
-}
-
-impl SocketEventHandler for KeyCommands {
-    type Command = KeyCommands;
-    type Response = KeySocketResponse;
-    type EventRespose = ApiSocketEventResponse;
-
-    async fn handle_event(
-        command: Self::Command,
-        state: SharedApiState,
-        emitter: Emitter<Self::EventRespose>,
-    ) -> Result<Self::Response> {
-        match command {
-            KeyCommands::Create(args) => {
-                emitter
-                    .log(format!("Creating auth key: {}", args.name))
-                    .await?;
-                let result = AuthKey::create_key(&mut state.db.get(), &args.name).await?;
-                Ok(KeySocketResponse::KeyCreate(result))
-            }
-            KeyCommands::List => {
-                let data = handle_key_list(&mut state.db.get()).await?;
-                Ok(KeySocketResponse::KeyList(data))
-            }
-            KeyCommands::Revoke(args) => {
-                emitter.log("Revoking auth key(s)").await?;
-                handle_key_revoke(args.ids, &mut state.db.get(), move |message| {
-                    Self::emit_log(emitter.clone(), message)
-                })
-                .await?;
-                Ok(KeySocketResponse::KeyUpdated)
-            }
-            KeyCommands::Delete(args) => {
-                handle_key_delete(args.ids, &mut state.db.get(), move |message| {
-                    Self::emit_log(emitter.clone(), message)
-                })
-                .await
-                .context("auth key deletion failed")?;
-                Ok(KeySocketResponse::KeyUpdated)
-            }
-        }
     }
 }
 
@@ -204,20 +139,15 @@ pub async fn handle_key_list(db: &mut toasty::Db) -> Result<Vec<AuthKeyTabled>> 
     Ok(rows)
 }
 
-pub async fn handle_key_revoke<F, Fut>(
+pub async fn handle_key_revoke(
     keys: Vec<String>,
     db: &mut toasty::Db,
-    log_action: F,
-) -> Result<()>
-where
-    F: Fn(String) -> Fut,
-    Fut: Future<Output = Result<()>>,
-{
+    logger: &impl ActionLogger,
+) -> Result<()> {
     for key in keys {
-        let key_id = Uuid::parse_str(&key).context("failed to parse ID")?;
-        let mut auth_key = AuthKey::get_by_id(db, key_id)
+        let mut auth_key = AuthKey::get_by_name_or_id(db, &key)
             .await
-            .context("invalid ID key not found")?;
+            .context("failed to find key")?;
 
         if auth_key.revoked_at.is_some() {
             bail!("key is already revoked");
@@ -230,34 +160,29 @@ where
             .exec(db)
             .await?;
 
-        log_action(format!("Revoked auth key: '{key}'")).await?;
+        logger.log(format!("Revoked auth key: '{key}'")).await?;
     }
 
     Ok(())
 }
 
-pub async fn handle_key_delete<F, Fut>(
+pub async fn handle_key_delete(
     keys: Vec<String>,
     db: &mut toasty::Db,
-    log_action: F,
-) -> Result<()>
-where
-    F: Fn(String) -> Fut,
-    Fut: Future<Output = Result<()>>,
-{
+    logger: &impl ActionLogger,
+) -> Result<()> {
     for key in keys {
-        let key_id = Uuid::parse_str(&key).context("invalid UUID")?;
-        let auth_key = AuthKey::get_by_id(db, key_id)
+        let auth_key = AuthKey::get_by_name_or_id(db, &key)
             .await
-            .context("invalid ID, key not found")?;
+            .context("failed to find key")?;
 
         auth_key
             .delete()
             .exec(db)
             .await
-            .with_context(|| format!("failed to delete key: {key}"))?;
+            .context(format!("failed to delete key: {key}"))?;
 
-        log_action(format!("Deleted auth key: '{key}'")).await?;
+        logger.log(format!("Deleted auth key: '{key}'")).await?;
     }
 
     Ok(())

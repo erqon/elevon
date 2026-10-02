@@ -1,9 +1,10 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use elevon_agent::{
-    cli::{Cli, CliComponent, Commands, app::AppCommands, key::KeyCommands},
+    cli::{Cli, CliCommand, Commands, key::KeyCommands},
     env::ElevonEnv,
 };
+use elevon_contracts::cli::app::AppCommands;
 use elevon_http::runtime::run_async;
 
 fn main() {
@@ -44,17 +45,21 @@ fn run() -> Result<()> {
         Commands::Upgrade(_) => unreachable!(),
         Commands::Key { subcommand: _ } => unreachable!(),
         Commands::App { subcommand: _ } => unreachable!(),
+
         Commands::Install(args) => {
             run_async(elevon_agent::cli::install::run_install(cli.args, args))
                 .context("install command failed")?;
         }
+
         Commands::Uninstall(args) => {
             elevon_agent::cli::install::run_uninstall(args).context("uninstall command failed")?;
         }
+
         Commands::Api(args) => {
             run_async(elevon_agent::api::run_api_server(args, &env))
                 .context("api command failed")?;
         }
+
         Commands::Proxy => {
             elevon_agent::proxy::run_proxy(&env, false).context("proxy command failed")?;
         }
