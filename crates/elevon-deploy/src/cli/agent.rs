@@ -3,8 +3,9 @@ use clap::{Args, Subcommand};
 use elevon_contracts::{
     cli::{
         ListQueryParams,
-        app::{AppCommands, DeploymentCommands},
+        app::{AppCommands, DeploymentCommands, RemoveAppCommandArgs},
     },
+    cli_verify_action_with_items,
     deploy::log_stream_events,
 };
 
@@ -37,7 +38,7 @@ impl Commands {
 
             Commands::App { command } => match command {
                 AppCommands::List(params) => {
-                    AppCommands::list(&agent_client, "apps", Some(params)).await?
+                    AppCommands::list(&agent_client, "apps", Some(params)).await?;
                 }
 
                 AppCommands::Deployment { subcommand } => match subcommand {
@@ -47,7 +48,9 @@ impl Commands {
                     }
                 },
 
-                AppCommands::Remove(_args) => {}
+                AppCommands::Stop(args) => {
+                    AppCommands::stop(&agent_client, args).await?;
+                }
             },
         }
 
@@ -171,23 +174,7 @@ impl KeyCommands {
     }
 
     async fn delete(agent_client: &AgentClient, args: &KeyDeleteArgs) -> Result<()> {
-        let formatted_keys: String = args
-            .ids
-            .iter()
-            .map(|id| format!("- {}", id))
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        let message = [
-            "This will delete auth key(s):",
-            "",
-            &formatted_keys,
-            "",
-            "Continue? [y/N]",
-        ]
-        .join("\n");
-
-        elevon_contracts::handle_cli_yes(args.yes, message)?;
+        cli_verify_action_with_items(args.yes, &args.ids, "This will delete auth key(s)")?;
 
         let url = agent_client.absolute_url("/cli/keys/delete");
         let headers = agent_client.headers();
@@ -211,6 +198,34 @@ impl KeyCommands {
     }
 }
 
+trait AppCommandsTrait {
+    async fn stop(agent_client: &AgentClient, args: &RemoveAppCommandArgs) -> Result<()> {
+        cli_verify_action_with_items(
+            args.force,
+            &args.apps,
+            "This will stop running appication(s)",
+        )?;
+
+        let url = agent_client.absolute_url("/cli/apps/stop");
+        let headers = agent_client.headers();
+
+        let event_stream = agent_client
+            .client
+            .post(url)
+            .headers(headers)
+            .json(&args)
+            .send()
+            .await?
+            .bytes_stream();
+
+        log_stream_events(event_stream).await?;
+
+        Ok(())
+    }
+}
+
 impl AgentCommandsTrait for AppCommands {}
+
+impl AppCommandsTrait for AppCommands {}
 
 impl AgentCommandsTrait for DeploymentCommands {}

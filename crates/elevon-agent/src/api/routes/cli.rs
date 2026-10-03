@@ -24,7 +24,7 @@ use crate::{
         stream::{StreamResponse, emit, spawn_streaming_task},
     },
     cli::{
-        app::handle_app_removal,
+        app::handle_app_stop,
         key::{handle_key_delete, handle_key_list, handle_key_revoke},
     },
 };
@@ -185,12 +185,12 @@ impl AppCommands {
         })
     }
 
-    async fn remove(
+    async fn stop(
         State(state): State<SharedApiState>,
         Json(payload): Json<RemoveAppCommandArgs>,
     ) -> StreamResponse {
         spawn_streaming_task(move |tx| async move {
-            handle_app_removal(payload.apps, payload.force, state, &tx).await
+            handle_app_stop(payload.apps, payload.force, state, &tx).await
         })
     }
 }
@@ -199,7 +199,7 @@ impl CommandsTrait for AppCommands {
     fn create_router() -> Router<SharedApiState> {
         Router::new()
             .route("/list", get(AppCommands::list))
-            .route("/remove", post(AppCommands::remove))
+            .route("/stop", post(AppCommands::stop))
     }
 }
 

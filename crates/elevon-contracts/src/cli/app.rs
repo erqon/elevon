@@ -14,8 +14,8 @@ pub enum AppCommands {
         subcommand: DeploymentCommands,
     },
 
-    #[command(alias = "rm", about = "Remove application")]
-    Remove(RemoveAppCommandArgs),
+    #[command(about = "Stop application")]
+    Stop(RemoveAppCommandArgs),
 }
 
 #[derive(Subcommand, Serialize, Deserialize)]

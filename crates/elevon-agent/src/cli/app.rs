@@ -4,6 +4,7 @@ use elevon_contracts::{
         ListQueryParams,
         app::{AppCommands, DeploymentCommands},
     },
+    cli_verify_action_with_items,
     deploy::{WebApp, log_stream_events},
 };
 
@@ -41,8 +42,10 @@ impl CliCommand for AppCommands {
                 DeploymentCommands::run(subcommand).await?;
             }
 
-            AppCommands::Remove(args) => {
-                let path = format!("{BASE_PATH}/remove");
+            AppCommands::Stop(args) => {
+                cli_verify_action_with_items(args.force, &args.apps, "This stops running app(s)")?;
+
+                let path = format!("{BASE_PATH}/stop");
                 let stream = unix_client
                     .client
                     .post(unix_client.resolve_url(&path))
@@ -111,8 +114,8 @@ pub async fn handle_deployment_list(
     Ok(rows)
 }
 
-/// Removes running apps from traffic and stops their containers
-pub async fn handle_app_removal(
+/// Marks running apps to be drained
+pub async fn handle_app_stop(
     apps: Vec<String>,
     force: bool,
     state: SharedApiState,
@@ -136,7 +139,7 @@ pub async fn handle_app_removal(
         if !force {
             logger
                 .log(format!(
-                    "App '{}' is running and cant be removed without being forced",
+                    "App '{}' is running and cant be stopped without being forced",
                     app.name
                 ))
                 .await?;
@@ -166,11 +169,14 @@ pub async fn handle_app_removal(
 
         if web_app.is_some() {
             logger
-                .log(format!("App '{}' was marked to be drained", app.name))
+                .log(format!(
+                    "App '{}' was marked to be drained and will be stopped soon",
+                    app.name
+                ))
                 .await?;
         } else {
             logger
-                .log(format!("App '{}' was removed", app.name))
+                .log(format!("App '{}' was stopped", app.name))
                 .await?;
         }
     }
