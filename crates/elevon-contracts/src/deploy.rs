@@ -93,9 +93,7 @@ where
     Ok(())
 }
 
-#[derive(
-    Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Display, EnumString,
-)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Display, EnumString)]
 #[strum(serialize_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum AppRole {
