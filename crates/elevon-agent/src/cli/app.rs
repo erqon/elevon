@@ -1,16 +1,13 @@
 use anyhow::{Context, Result};
 use elevon_contracts::{
-    cli::{
-        ListQueryParams,
-        app::{AppCommands, DeploymentCommands},
-    },
+    cli::app::{AppCommands, DeploymentCommands},
     cli_verify_action_with_items,
     deploy::{WebApp, log_stream_events},
 };
 
 use crate::{
     api::{
-        db::models::{App, AppTabled, Deployment, TabledView, deployment::DeploymentTabled},
+        db::models::{App, Deployment},
         state::SharedApiState,
     },
     cli::CliCommand,
@@ -62,20 +59,6 @@ impl CliCommand for AppCommands {
     }
 }
 
-pub async fn handle_app_list(
-    db: &mut toasty::Db,
-    params: ListQueryParams,
-) -> Result<Vec<AppTabled>> {
-    let result = App::all()
-        .limit(params.limit)
-        .offset(params.offset)
-        .exec(db)
-        .await?;
-    let rows: Vec<AppTabled> = result.into_iter().map(|key| key.to_tabled()).collect();
-
-    Ok(rows)
-}
-
 impl CliCommand for DeploymentCommands {
     async fn run(command: Self) -> Result<()> {
         let unix_client = UnixClient::new()?;
@@ -98,20 +81,6 @@ impl CliCommand for DeploymentCommands {
 
         Ok(())
     }
-}
-
-pub async fn handle_deployment_list(
-    db: &mut toasty::Db,
-    params: ListQueryParams,
-) -> Result<Vec<DeploymentTabled>> {
-    let result = Deployment::all()
-        .include(Deployment::fields().app())
-        .limit(params.limit)
-        .offset(params.offset)
-        .exec(db)
-        .await?;
-    let rows: Vec<DeploymentTabled> = result.into_iter().map(|r| r.to_tabled()).collect();
-    Ok(rows)
 }
 
 /// Marks running apps to be drained

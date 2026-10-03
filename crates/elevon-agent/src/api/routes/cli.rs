@@ -13,11 +13,13 @@ use elevon_http::error::AppError;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tabled::settings::panel::Footer;
 
 use crate::{
     api::{
         db::models::{
-            App, AppTabled, AuthKey, Deployment, TabledView, deployment::DeploymentTabled,
+            App, AppTabled, AuthKey, AuthKeyTabled, Deployment, TabledView,
+            deployment::DeploymentTabled,
         },
         middleware::{auth_middleware, require_unix_socket},
         state::SharedApiState,
@@ -25,7 +27,7 @@ use crate::{
     },
     cli::{
         app::handle_app_stop,
-        key::{handle_key_delete, handle_key_list, handle_key_revoke},
+        key::{handle_key_delete, handle_key_revoke},
     },
 };
 
@@ -111,11 +113,30 @@ impl KeyCommands {
         }))
     }
 
-    async fn list(State(state): State<SharedApiState>) -> StreamResponse {
+    async fn list(
+        State(state): State<SharedApiState>,
+        Query(query): Query<ListQueryParams>,
+    ) -> StreamResponse {
+        let mut db = state.db.get();
+
         spawn_streaming_task(move |tx| async move {
-            let keys = handle_key_list(&mut state.db.get()).await?;
-            let mut table = tabled::Table::new(keys);
+            let count = AuthKey::all().count().exec(&mut db).await?;
+            let (limit, total_pages, offset) = query.get_limits(count);
+
+            let data: Vec<AuthKeyTabled> = AuthKey::all()
+                .limit(limit)
+                .offset(offset)
+                .exec(&mut db)
+                .await?
+                .iter()
+                .map(|r| r.to_tabled())
+                .collect();
+
+            let mut table = tabled::Table::new(data);
             table.with(tabled::settings::Style::modern());
+
+            let footer_text = format!("Page {}/{}", query.page, total_pages);
+            table.with(Footer::new(footer_text));
 
             emit(&tx, StreamEvent::log(format!("{}", table))).await;
 
@@ -164,12 +185,15 @@ impl AppCommands {
         State(state): State<SharedApiState>,
         Query(query): Query<ListQueryParams>,
     ) -> StreamResponse {
+        let mut db = state.db.get();
+
         spawn_streaming_task(move |tx| async move {
-            let mut db = state.db.get();
+            let count = App::all().count().exec(&mut db).await?;
+            let (limit, total_pages, offset) = query.get_limits(count);
 
             let data: Vec<AppTabled> = App::all()
-                .limit(query.limit)
-                .offset(query.offset)
+                .limit(limit)
+                .offset(offset)
                 .exec(&mut db)
                 .await?
                 .iter()
@@ -178,6 +202,9 @@ impl AppCommands {
 
             let mut table = tabled::Table::new(data);
             table.with(tabled::settings::Style::modern());
+
+            let footer_text = format!("Page {}/{}", query.page, total_pages);
+            table.with(Footer::new(footer_text));
 
             emit(&tx, StreamEvent::log(format!("{}", table))).await;
 
@@ -210,13 +237,16 @@ impl DeploymentCommands {
         State(state): State<SharedApiState>,
         Query(query): Query<ListQueryParams>,
     ) -> StreamResponse {
+        let mut db = state.db.get();
+
         spawn_streaming_task(move |tx| async move {
-            let mut db = state.db.get();
+            let count = Deployment::all().count().exec(&mut db).await?;
+            let (limit, total_pages, offset) = query.get_limits(count);
 
             let data: Vec<DeploymentTabled> = Deployment::all()
                 .include(Deployment::fields().app())
-                .limit(query.limit)
-                .offset(query.offset)
+                .limit(limit)
+                .offset(offset)
                 .exec(&mut db)
                 .await?
                 .into_iter()
@@ -225,6 +255,9 @@ impl DeploymentCommands {
 
             let mut table = tabled::Table::new(data);
             table.with(tabled::settings::Style::modern());
+
+            let footer_text = format!("Page {}/{}", query.page, total_pages);
+            table.with(Footer::new(footer_text));
 
             emit(&tx, StreamEvent::log(format!("{}", table))).await;
 

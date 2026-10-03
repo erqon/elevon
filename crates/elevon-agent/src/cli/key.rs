@@ -1,14 +1,13 @@
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
-use elevon_contracts::{cli_verify_action_with_items, deploy::log_stream_events};
+use elevon_contracts::{
+    cli::ListQueryParams, cli_verify_action_with_items, deploy::log_stream_events,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::{
-    api::{
-        db::models::{AuthKey, AuthKeyTabled, TabledView},
-        routes::cli::KeyListPayload,
-    },
+    api::{db::models::AuthKey, routes::cli::KeyListPayload},
     cli::CliCommand,
     logger::ActionLogger,
     socket::UnixClient,
@@ -56,7 +55,7 @@ pub enum KeyCommands {
     Create(KeyCreateArgs),
 
     #[command(about = "List all keys")]
-    List,
+    List(ListQueryParams),
 
     #[command(about = "Revoke one or more keys")]
     Revoke(KeyRevokeArgs),
@@ -84,11 +83,12 @@ impl CliCommand for KeyCommands {
 
                 log_stream_events(event_stream).await?;
             }
-            KeyCommands::List => {
+            KeyCommands::List(params) => {
                 let path = format!("{BASE_PATH}/list");
                 let event_stream = unix_client
                     .client
                     .get(unix_client.resolve_url(&path))
+                    .query(&params)
                     .send()
                     .await?
                     .bytes_stream();
@@ -131,12 +131,6 @@ impl CliCommand for KeyCommands {
 
         Ok(())
     }
-}
-
-pub async fn handle_key_list(db: &mut toasty::Db) -> Result<Vec<AuthKeyTabled>> {
-    let result = AuthKey::all().exec(db).await?;
-    let rows: Vec<AuthKeyTabled> = result.into_iter().map(|key| key.to_tabled()).collect();
-    Ok(rows)
 }
 
 pub async fn handle_key_revoke(

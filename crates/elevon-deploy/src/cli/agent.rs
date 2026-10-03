@@ -31,7 +31,9 @@ impl Commands {
         match self {
             Commands::Key { command } => match command {
                 KeyCommands::Create(args) => KeyCommands::create(&agent_client, args).await?,
-                KeyCommands::List => KeyCommands::list(&agent_client, "keys", None).await?,
+                KeyCommands::List(params) => {
+                    KeyCommands::list(&agent_client, "keys", Some(params)).await?
+                }
                 KeyCommands::Revoke(args) => KeyCommands::revoke(&agent_client, args).await?,
                 KeyCommands::Delete(args) => KeyCommands::delete(&agent_client, args).await?,
             },
@@ -64,7 +66,7 @@ pub enum KeyCommands {
     Create(KeyCreateArgs),
 
     #[command(about = "List all keys")]
-    List,
+    List(ListQueryParams),
 
     #[command(about = "Revoke one or more keys")]
     Revoke(KeyRevokeArgs),
