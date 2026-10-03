@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "event", content = "data")]
 pub enum AgentEvent {
     UpsertRoute(DeployAppData),
-    DrainApp(DeployAppData),
+    DrainApp(String, Option<WebApp>),
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]

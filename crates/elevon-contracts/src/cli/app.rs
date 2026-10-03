@@ -14,8 +14,8 @@ pub enum AppCommands {
         subcommand: DeploymentCommands,
     },
 
-    #[command(about = "Remove application")]
-    Remove(RemoveCommandArgs),
+    #[command(alias = "rm", about = "Remove application")]
+    Remove(RemoveAppCommandArgs),
 }
 
 #[derive(Subcommand, Serialize, Deserialize)]
@@ -25,9 +25,13 @@ pub enum DeploymentCommands {
 }
 
 #[derive(Args, Serialize, Deserialize)]
-pub struct RemoveCommandArgs {
-    #[arg(long, help = "Name of the app you want to remove")]
-    pub name: String,
+pub struct RemoveAppCommandArgs {
+    #[arg(
+        value_name = "APP",
+        required = true,
+        help = "An app ID/name or list of app IDs/names to remove"
+    )]
+    pub apps: Vec<String>,
 
     #[arg(short, long, help = "Forces removal when the app is running")]
     pub force: bool,

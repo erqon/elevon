@@ -2,7 +2,7 @@ use std::future::Future;
 use std::os::unix::fs::PermissionsExt;
 use std::{path::PathBuf, sync::Arc};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use elevon_fs::agent::AgentPath;
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
@@ -10,7 +10,6 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tokio::net::unix::SocketAddr;
 use tokio::net::{UnixListener, UnixStream};
-use tokio::sync::mpsc;
 use tokio_util::codec::{Framed, FramedWrite, LengthDelimitedCodec};
 
 pub enum SocketType {
@@ -58,42 +57,6 @@ impl Socket {
         writer.send(payload_bytes.into()).await?;
 
         Ok(())
-    }
-
-    pub async fn send_and_receive<M, R>(&self, msg: M) -> Result<Option<R>>
-    where
-        M: Serialize + Send + 'static,
-        R: DeserializeOwned,
-    {
-        let stream = UnixStream::connect(&self.path).await?;
-        let mut framed = Framed::new(stream, LengthDelimitedCodec::new());
-
-        let payload_bytes = serde_json::to_vec(&msg)?;
-        framed.send(payload_bytes.into()).await?;
-
-        while let Some(frame) = framed.next().await {
-            match frame {
-                Ok(frame) => {
-                    let message: SocketResponse<R> = serde_json::from_slice(&frame)?;
-
-                    match message {
-                        SocketResponse::Log(message) => {
-                            tracing::info!("{message}")
-                        }
-                        SocketResponse::Data(response) => {
-                            return Ok(Some(response));
-                        }
-                        SocketResponse::Done => {
-                            return Ok(None);
-                        }
-                        SocketResponse::Error(message) => bail!(message),
-                    }
-                }
-                Err(err) => return Err(err.into()),
-            }
-        }
-
-        Ok(None)
     }
 
     pub async fn listener<M, R, S, F, Fut>(&self, state: S, handler: F) -> Result<()>
@@ -192,36 +155,17 @@ impl Socket {
             + Send
             + 'static,
     {
-        let (sender, mut receiver) = mpsc::channel::<SocketResponse<R>>(32);
-        let writer_task = tokio::spawn(async move {
-            while let Some(message) = receiver.recv().await {
-                let payload = serde_json::to_vec(&message)?;
-                writer.send(payload.into()).await?;
-            }
-
-            Ok::<_, anyhow::Error>(())
-        });
-
         match handler(state, message).await {
             Ok(Some(res)) => {
-                if let Err(err) = sender.send(SocketResponse::Data(res)).await {
+                let payload = serde_json::to_vec(&res)?;
+                if let Err(err) = writer.send(payload.into()).await {
                     tracing::error!(%err, "failed to send response");
                 }
             }
-            Ok(None) => {
-                if let Err(err) = sender.send(SocketResponse::Done).await {
-                    tracing::error!(%err, "failed to send completion");
-                }
-            }
+            Ok(_) => {}
             Err(err) => {
-                let _ = sender.send(SocketResponse::Error(err.to_string())).await;
                 tracing::error!(%err, "Handler execution failed")
             }
-        }
-
-        drop(sender);
-        if let Err(err) = writer_task.await {
-            tracing::error!(%err, "socket writer task failed");
         }
 
         Ok(())

@@ -6,6 +6,8 @@ use std::process::Command;
 pub fn get_image_tag() -> std::io::Result<String> {
     // TODO: Handle non git and no git commit repos
 
+    // TODO: Ignore changes in files that are ignored in either .gitignore or .dockerignore files
+
     let commit_sha = Command::new("git")
         .args(["rev-parse", "--short", "HEAD"])
         .output()

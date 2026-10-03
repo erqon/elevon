@@ -85,8 +85,8 @@ impl ApiState {
         for mut deployment in deployments {
             let app = deployment.app.get();
 
-            let (Some(container_id), Some(domain)) =
-                (deployment.container_id.clone(), app.domain.clone())
+            let (Some(container_id), Some(web_deployment)) =
+                (deployment.container_id.clone(), deployment.web.clone())
             else {
                 continue;
             };
@@ -131,8 +131,8 @@ impl ApiState {
                 }
 
                 let web_app = Some(WebApp {
-                    domain,
-                    port: deployment.port,
+                    domain: web_deployment.domain,
+                    port: web_deployment.port,
                 });
 
                 let route_config = DeployAppData {

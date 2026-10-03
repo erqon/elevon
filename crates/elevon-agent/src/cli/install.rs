@@ -167,6 +167,8 @@ pub async fn run_install(cli_args: CliArgs, args: InstallArgs) -> Result<()> {
         }
     }
 
+    tracing::info!("Elevon Agent was installed and started successfully!");
+
     Ok(())
 }
 

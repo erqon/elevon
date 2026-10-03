@@ -22,11 +22,12 @@ use crate::{
     api::{
         db::models::{
             App, Deployment, DeploymentRuntimeOption, DeploymentRuntimeOptions, DeploymentStatus,
+            deployment::DeploymentWeb,
         },
         state::SharedApiState,
         stream::{StreamSender, emit},
     },
-    proxy::types::{AgentEvent, DeployAppData, DeployAppState},
+    proxy::types::{AgentEvent, DeployAppData},
 };
 
 static ALLOCATED_PORTS: LazyLock<RwLock<HashSet<u16>>> =
@@ -73,6 +74,7 @@ struct PullImageOptions<'cfg, 'dep> {
     pub deployment_id: &'dep str,
 }
 
+// TODO: When deploying multiple apps within the same project image is pulled on each app's deployment separately
 async fn pull_image(
     tx: &StreamSender,
     docker: &bollard::Docker,
@@ -129,7 +131,7 @@ async fn run_container(
     docker: &bollard::Docker,
     deployment: &Deployment,
     app_config: &AppPayload,
-    port: u16,
+    new_port: Option<u16>,
 ) -> Result<String> {
     let container_name = format!("{}-{}", app_config.name, deployment.id);
     let options = CreateContainerOptionsBuilder::new()
@@ -148,7 +150,7 @@ async fn run_container(
 
     let mut port_bindings = PortMap::new();
 
-    if let Some(web_app) = &app_config.web_app {
+    if let (Some(web_app), Some(port)) = (&app_config.web_app, new_port) {
         port_bindings.insert(
             format!("{}/tcp", web_app.port),
             Some(vec![PortBinding {
@@ -187,7 +189,7 @@ async fn run_container(
 
 struct _DeployAppOptions<'cfg, 'tx> {
     db_tx: &'tx mut toasty::Transaction<'cfg>,
-    port: u16,
+    new_port: Option<u16>,
     app_config: &'cfg AppPayload,
 }
 
@@ -224,11 +226,14 @@ async fn _deploy_app(
         write_tls_file(tls.key.as_bytes(), TlsType::Key, tls_options)?;
     }
 
-    let container_id = run_container(docker, &deployment, options.app_config, options.port).await;
+    let container_id =
+        run_container(docker, &deployment, options.app_config, options.new_port).await;
 
     let res = match container_id {
         Err(err) => {
-            clear_port(&options.port).await;
+            if let Some(port) = options.new_port {
+                clear_port(&port).await;
+            }
 
             emit(
                 tx,
@@ -272,11 +277,12 @@ async fn _deploy_app(
     Ok(res)
 }
 
-async fn drain_app(
+pub async fn drain_app(
     state: &SharedApiState,
     db: &mut toasty::Db,
     mut deployment: Deployment,
-    app_data: DeployAppData,
+    container_id: String,
+    web_app: Option<WebApp>,
 ) -> Result<()> {
     toasty::update!(deployment {
         status: DeploymentStatus::Drained
@@ -286,7 +292,7 @@ async fn drain_app(
 
     state
         .proxy_socket
-        .send(AgentEvent::DrainApp(app_data))
+        .send(AgentEvent::DrainApp(container_id, web_app))
         .await?;
 
     Ok(())
@@ -362,17 +368,21 @@ async fn deploy_app(
     )
     .await;
 
-    // TODO: Fix port is not necessary on 'worker' applications
-    let port = get_free_port().await?;
+    let new_port = match app_config.web_app {
+        Some(_) => Some(get_free_port().await?),
+        _ => None,
+    };
 
-    emit(
-        tx,
-        StreamEvent::log(format!(
-            "[{}] Starting running a container on port {}",
-            app_config.name, port
-        )),
-    )
-    .await;
+    if let Some(port) = new_port {
+        emit(
+            tx,
+            StreamEvent::log(format!(
+                "[{}] Starting running a container on port {}",
+                app_config.name, port
+            )),
+        )
+        .await;
+    }
 
     let db_app = App::get_or_create(&mut db, &app_config).await?;
 
@@ -381,20 +391,22 @@ async fn deploy_app(
     let deployment = match deployment_to_run {
         Some(v) => v,
         None => {
+            let deployment_web = match (&app_config.web_app, new_port) {
+                (Some(web_app), Some(new_port)) => Some(DeploymentWeb {
+                    domain: web_app.domain.clone(),
+                    port: new_port,
+                }),
+                _ => None,
+            };
+
             let deployment = toasty::create!(Deployment {
                 app_id: db_app.id,
-                port: port
+                web: deployment_web
             })
             .exec(&mut db_tx)
             .await?;
 
-            let deployment_runtime_options =
-                DeploymentRuntimeOptions::from(&app_config.runtime_options);
-
-            let options = DeploymentRuntimeOptions {
-                port: app_config.web_app.as_ref().map(|w| w.port),
-                ..deployment_runtime_options
-            };
+            let options = DeploymentRuntimeOptions::from(&app_config.runtime_options);
 
             toasty::create!(DeploymentRuntimeOption {
                 deployment_id: deployment.id,
@@ -407,9 +419,10 @@ async fn deploy_app(
         }
     };
 
+    let web_deployment = deployment.web.clone();
     let deploy_app_options = _DeployAppOptions {
         db_tx: &mut db_tx,
-        port,
+        new_port,
         app_config: &app_config,
     };
 
@@ -421,10 +434,10 @@ async fn deploy_app(
         project: app_config.project.to_string(),
         name: app_config.name.to_string(),
         container_id: new_container_id,
-        web_app: match (&app_config.runtime_options.role, &app_config.web_app) {
-            (AppRole::Web, Some(web_app)) => Some(WebApp {
-                port,
-                domain: web_app.domain.clone(),
+        web_app: match web_deployment {
+            Some(web) => Some(WebApp {
+                port: web.port,
+                domain: web.domain,
             }),
             _ => None,
         },
@@ -470,14 +483,14 @@ async fn deploy_app(
         )
         .await;
 
-        let current_app_data = DeployAppData {
-            id: deployment_to_drain.id.to_string(),
+        drain_app(
+            &state,
+            &mut db,
+            deployment_to_drain,
             container_id,
-            state: DeployAppState::Draining,
-            ..app_data
-        };
-
-        drain_app(&state, &mut db, deployment_to_drain, current_app_data).await?;
+            app_data.web_app,
+        )
+        .await?;
     }
 
     if !is_rollback
@@ -577,17 +590,10 @@ pub async fn rollback_apps(
             image_ref: image_ref.to_string(),
             keep_releases: previous_deployment.app.get().keep_releases,
             runtime_options: runtime_options.clone(),
-            web_app: match (
-                &runtime_options.role,
-                &deployment_runtime_options.options.port,
-                &previous_deployment.app.get().domain,
-            ) {
-                (AppRole::Web, Some(port), Some(domain)) => Some(WebApp {
-                    port: *port,
-                    domain: domain.clone(),
-                }),
-                _ => None,
-            },
+            web_app: previous_deployment.web.as_ref().map(|web| WebApp {
+                port: web.port,
+                domain: web.domain.clone(),
+            }),
             ..Default::default()
         };
 
