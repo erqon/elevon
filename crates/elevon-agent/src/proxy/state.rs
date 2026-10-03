@@ -10,6 +10,7 @@ use std::{
 use anyhow::Result;
 use arc_swap::ArcSwap;
 use dashmap::DashMap;
+use elevon_contracts::deploy::WebApp;
 use pingora::lb::{LoadBalancer, health_check::TcpHealthCheck, selection::RoundRobin};
 
 use crate::{
@@ -222,20 +223,20 @@ impl ProxyState {
         });
     }
 
-    pub fn drain_app(&self, app: DeployAppData) {
+    pub fn drain_app(&self, container_id: String, web_app: Option<WebApp>) {
         let mut backend_runtime = BackendRuntime {
-            container_id: app.container_id.clone(),
+            container_id: container_id.clone(),
             state: DeployAppState::Draining,
             ..Default::default()
         };
 
-        if let Some(web_app) = app.web_app {
+        if let Some(web_app) = web_app {
             self.routes.rcu(|current| {
                 let mut next = current.as_ref().clone();
                 let backends = next.entry(web_app.domain.clone()).or_default();
 
                 for backend in backends.iter_mut() {
-                    if backend.container_id == app.container_id.clone() {
+                    if backend.container_id == container_id {
                         backend.state = DeployAppState::Draining;
                     }
                 }
@@ -246,7 +247,7 @@ impl ProxyState {
 
             let inflight = self
                 .runtime
-                .get(&app.container_id)
+                .get(&container_id)
                 .map(|r| {
                     r.route
                         .as_ref()
@@ -265,9 +266,9 @@ impl ProxyState {
         }
 
         self.runtime
-            .insert(app.container_id.clone(), Arc::new(backend_runtime));
+            .insert(container_id.clone(), Arc::new(backend_runtime));
 
-        tracing::info!(%app.container_id, "route marked as draining");
+        tracing::info!(%container_id, "route marked as draining");
     }
 
     pub fn get_backend_by_port(&self, port: u16) -> Option<Arc<BackendRuntime>> {

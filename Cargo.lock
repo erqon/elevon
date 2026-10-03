@@ -1581,6 +1581,7 @@ dependencies = [
  "serde_json",
  "strum 0.28.0",
  "strum_macros 0.28.0",
+ "toasty 0.10.0",
  "tracing",
  "tracing-indicatif",
 ]

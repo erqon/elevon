@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::{Context, Result};
 use elevon_contracts::{
     cli::{
         ListQueryParams,
@@ -8,8 +8,12 @@ use elevon_contracts::{
 };
 
 use crate::{
-    api::db::models::{App, AppTabled, Deployment, TabledView, app::DeploymentTabled},
+    api::{
+        db::models::{App, AppTabled, Deployment, TabledView, deployment::DeploymentTabled},
+        state::SharedApiState,
+    },
     cli::CliCommand,
+    logger::ActionLogger,
     socket::UnixClient,
 };
 
@@ -36,11 +40,17 @@ impl CliCommand for AppCommands {
                 DeploymentCommands::run(subcommand).await?;
             }
 
-            AppCommands::Remove(_args) => {
-                // api_socket
-                //     .send(ApiSocketEvent::AppCommands(AppCommands::Remove(args)))
-                //     .await
-                //     .context("failed to remove app")?;
+            AppCommands::Remove(args) => {
+                let path = format!("{BASE_PATH}/remove");
+                let stream = unix_client
+                    .client
+                    .post(unix_client.resolve_url(&path))
+                    .json(&args)
+                    .send()
+                    .await?
+                    .bytes_stream();
+
+                log_stream_events(stream).await?;
             }
         }
 
@@ -100,12 +110,48 @@ pub async fn handle_deployment_list(
     Ok(rows)
 }
 
-pub async fn handle_app_removal(db: &mut toasty::Db, app_name: String) -> Result<()> {
-    let app = App::get_by_name(db, app_name).await.ok();
+/// Removes running apps from traffic and stops their containers
+pub async fn handle_app_removal(
+    apps: Vec<String>,
+    force: bool,
+    state: SharedApiState,
+    logger: &impl ActionLogger,
+) -> Result<()> {
+    let mut db = state.db.get();
 
-    let Some(_app) = app else {
-        bail!("app not found");
-    };
+    for app in apps {
+        let app = App::get_by_name_or_id(&mut db, &app)
+            .await
+            .context("failed to find key")?;
+
+        let active_deployment = Deployment::get_latest_deployment(&mut db, &app.id).await?;
+        let Some(_active_deployment) = active_deployment else {
+            logger
+                .log(format!("App '{}' is not running, skipping", app.name))
+                .await?;
+            continue;
+        };
+
+        if !force {
+            logger
+                .log(format!(
+                    "App '{}' is running and cant be removed without being forced",
+                    app.name
+                ))
+                .await?;
+            continue;
+        }
+
+        // let web_app = match active_deployment.port {
+        //     Some(port) => Some(WebApp {
+        //         port,
+        //         domain: active_deployment.app.get().domain,
+        //     }),
+        //     _ => None,
+        // };
+
+        // drain_app(&state, &mut db, active_deployment, container_id, web_app)
+    }
 
     Ok(())
 }

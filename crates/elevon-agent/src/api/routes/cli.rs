@@ -5,7 +5,10 @@ use axum::{
     response::Result,
     routing::{get, post},
 };
-use elevon_contracts::{cli::ListQueryParams, deploy::StreamEvent};
+use elevon_contracts::{
+    cli::{ListQueryParams, app::RemoveAppCommandArgs},
+    deploy::StreamEvent,
+};
 use elevon_http::error::AppError;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -13,12 +16,17 @@ use serde_json::Value;
 
 use crate::{
     api::{
-        db::models::{App, AppTabled, AuthKey, Deployment, TabledView, app::DeploymentTabled},
+        db::models::{
+            App, AppTabled, AuthKey, Deployment, TabledView, deployment::DeploymentTabled,
+        },
         middleware::{auth_middleware, require_unix_socket},
         state::SharedApiState,
         stream::{StreamResponse, emit, spawn_streaming_task},
     },
-    cli::key::{handle_key_delete, handle_key_list, handle_key_revoke},
+    cli::{
+        app::handle_app_removal,
+        key::{handle_key_delete, handle_key_list, handle_key_revoke},
+    },
 };
 
 pub fn router(state: SharedApiState) -> Router<SharedApiState> {
@@ -120,8 +128,7 @@ impl KeyCommands {
         Json(payload): Json<KeyListPayload>,
     ) -> StreamResponse {
         spawn_streaming_task(move |tx| async move {
-            handle_key_revoke(payload.data, &mut state.db.get(), &tx).await?;
-            Ok(())
+            handle_key_revoke(payload.data, &mut state.db.get(), &tx).await
         })
     }
 
@@ -130,8 +137,7 @@ impl KeyCommands {
         Json(payload): Json<KeyListPayload>,
     ) -> StreamResponse {
         spawn_streaming_task(move |tx| async move {
-            handle_key_delete(payload.data, &mut state.db.get(), &tx).await?;
-            Ok(())
+            handle_key_delete(payload.data, &mut state.db.get(), &tx).await
         })
     }
 }
@@ -179,7 +185,14 @@ impl AppCommands {
         })
     }
 
-    async fn remove(State(_state): State<SharedApiState>) {}
+    async fn remove(
+        State(state): State<SharedApiState>,
+        Json(payload): Json<RemoveAppCommandArgs>,
+    ) -> StreamResponse {
+        spawn_streaming_task(move |tx| async move {
+            handle_app_removal(payload.apps, payload.force, state, &tx).await
+        })
+    }
 }
 
 impl CommandsTrait for AppCommands {
