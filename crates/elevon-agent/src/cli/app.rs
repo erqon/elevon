@@ -4,7 +4,7 @@ use elevon_contracts::{
         ListQueryParams,
         app::{AppCommands, DeploymentCommands},
     },
-    deploy::log_stream_events,
+    deploy::{WebApp, log_stream_events},
 };
 
 use crate::{
@@ -13,6 +13,7 @@ use crate::{
         state::SharedApiState,
     },
     cli::CliCommand,
+    image::drain_app,
     logger::ActionLogger,
     socket::UnixClient,
 };
@@ -125,7 +126,7 @@ pub async fn handle_app_removal(
             .context("failed to find key")?;
 
         let active_deployment = Deployment::get_latest_deployment(&mut db, &app.id).await?;
-        let Some(_active_deployment) = active_deployment else {
+        let Some(active_deployment) = active_deployment else {
             logger
                 .log(format!("App '{}' is not running, skipping", app.name))
                 .await?;
@@ -142,15 +143,36 @@ pub async fn handle_app_removal(
             continue;
         }
 
-        // let web_app = match active_deployment.port {
-        //     Some(port) => Some(WebApp {
-        //         port,
-        //         domain: active_deployment.app.get().domain,
-        //     }),
-        //     _ => None,
-        // };
+        let Some(container_id) = active_deployment.container_id.clone() else {
+            logger
+                .log(format!(
+                    "App '{}' doesn't have valid container id",
+                    app.name
+                ))
+                .await?;
+            continue;
+        };
 
-        // drain_app(&state, &mut db, active_deployment, container_id, web_app)
+        let web_app = active_deployment.web.as_ref().map(WebApp::from);
+
+        drain_app(
+            &state,
+            &mut db,
+            active_deployment,
+            container_id,
+            web_app.clone(),
+        )
+        .await?;
+
+        if web_app.is_some() {
+            logger
+                .log(format!("App '{}' was marked to be drained", app.name))
+                .await?;
+        } else {
+            logger
+                .log(format!("App '{}' was removed", app.name))
+                .await?;
+        }
     }
 
     Ok(())

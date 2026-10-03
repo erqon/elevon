@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use bollard::plugin::RestartPolicyNameEnum;
-use elevon_contracts::deploy::{AppRole, AppRuntimeOptions};
+use elevon_contracts::deploy::{AppRole, AppRuntimeOptions, WebApp};
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use tabled::Tabled;
@@ -109,6 +109,15 @@ pub enum DeploymentStatus {
 pub struct DeploymentWeb {
     pub domain: String,
     pub port: u16,
+}
+
+impl From<&DeploymentWeb> for WebApp {
+    fn from(value: &DeploymentWeb) -> Self {
+        Self {
+            domain: value.domain.clone(),
+            port: value.port,
+        }
+    }
 }
 
 #[derive(Debug, Default, toasty::Embed)]
