@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use elevon_contracts::deploy::{AppPayload, AppRole};
+use elevon_contracts::deploy::AppPayload;
 use serde::{Deserialize, Serialize};
 use tabled::Tabled;
 
@@ -22,8 +22,8 @@ pub struct App {
     #[default(5)]
     pub keep_releases: u8,
 
-    #[default(AppRole::Web)]
-    pub role: AppRole,
+    #[default(AppRoleDb::Web)]
+    pub role: AppRoleDb,
 
     #[has_many]
     pub deployments: toasty::Deferred<Vec<Deployment>>,
@@ -67,9 +67,9 @@ impl App {
         }
 
         let role = if payload.web_app.is_some() {
-            AppRole::Web
+            AppRoleDb::Web
         } else {
-            AppRole::Worker
+            AppRoleDb::Worker
         };
 
         let app = toasty::create!(App {
@@ -106,6 +106,12 @@ impl App {
             }
         }
     }
+}
+
+#[derive(Debug, toasty::Embed)]
+pub enum AppRoleDb {
+    Web,
+    Worker,
 }
 
 #[derive(Clone, Tabled, Serialize, Deserialize)]
