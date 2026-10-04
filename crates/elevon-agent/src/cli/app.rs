@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use elevon_contracts::{
     cli::app::{AppCommands, DeploymentCommands},
     cli_verify_action_with_items,
@@ -93,9 +93,7 @@ pub async fn handle_app_stop(
     let mut db = state.db.get();
 
     for app in apps {
-        let app = App::get_by_name_or_id(&mut db, &app)
-            .await
-            .context("failed to find key")?;
+        let app = App::get_by_name_or_id(&mut db, &app).await?;
 
         let active_deployment = Deployment::get_latest_deployment(&mut db, &app.id).await?;
         let Some(active_deployment) = active_deployment else {
@@ -108,7 +106,7 @@ pub async fn handle_app_stop(
         if !force {
             logger
                 .log(format!(
-                    "App '{}' is running and cant be stopped without being forced",
+                    "App '{}' is running and cant be stopped without being forced, use --force to force  it",
                     app.name
                 ))
                 .await?;

@@ -6,7 +6,7 @@ use axum::{
     routing::{get, post},
 };
 use elevon_contracts::{
-    cli::{ListQueryParams, app::RemoveAppCommandArgs},
+    cli::{ListQueryParams, app::AppStopCommandArgs},
     deploy::StreamEvent,
 };
 use elevon_http::error::AppError;
@@ -214,7 +214,7 @@ impl AppCommands {
 
     async fn stop(
         State(state): State<SharedApiState>,
-        Json(payload): Json<RemoveAppCommandArgs>,
+        Json(payload): Json<AppStopCommandArgs>,
     ) -> StreamResponse {
         spawn_streaming_task(move |tx| async move {
             handle_app_stop(payload.apps, payload.force, state, &tx).await

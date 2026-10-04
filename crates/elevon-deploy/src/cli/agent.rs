@@ -3,7 +3,7 @@ use clap::{Args, Subcommand};
 use elevon_contracts::{
     cli::{
         ListQueryParams,
-        app::{AppCommands, DeploymentCommands, RemoveAppCommandArgs},
+        app::{AppCommands, AppStopCommandArgs, DeploymentCommands},
     },
     cli_verify_action_with_items,
     deploy::log_stream_events,
@@ -201,7 +201,7 @@ impl KeyCommands {
 }
 
 trait AppCommandsTrait {
-    async fn stop(agent_client: &AgentClient, args: &RemoveAppCommandArgs) -> Result<()> {
+    async fn stop(agent_client: &AgentClient, args: &AppStopCommandArgs) -> Result<()> {
         cli_verify_action_with_items(
             args.force,
             &args.apps,
