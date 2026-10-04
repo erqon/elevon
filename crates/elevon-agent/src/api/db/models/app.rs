@@ -96,11 +96,9 @@ impl App {
                 let (project, app_name) = key.split_once(':').unwrap_or((key, ""));
                 match Self::get_by_name_and_project(db, app_name, project).await {
                     Ok(k) => Ok(k),
-                    Err(err) => {
-                        Err(err).with_context(|| {
-                            format!("no app found with name '{key}' (and it is not a valid UUID)")
-                        })
-                    }
+                    Err(err) => Err(err).with_context(|| {
+                        format!("no app found with name '{key}' (and it is not a valid UUID)")
+                    }),
                 }
             }
         }
