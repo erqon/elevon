@@ -15,7 +15,7 @@ pub enum AppCommands {
     },
 
     #[command(about = "Stop application")]
-    Stop(RemoveAppCommandArgs),
+    Stop(AppStopCommandArgs),
 }
 
 #[derive(Subcommand, Serialize, Deserialize)]
@@ -25,14 +25,14 @@ pub enum DeploymentCommands {
 }
 
 #[derive(Args, Serialize, Deserialize)]
-pub struct RemoveAppCommandArgs {
+pub struct AppStopCommandArgs {
     #[arg(
         value_name = "APP",
         required = true,
-        help = "An app ID/name or list of app IDs/names to remove"
+        help = "App ID or <project-name:app-name> (or a list of them) to stop."
     )]
     pub apps: Vec<String>,
 
-    #[arg(short, long, help = "Forces removal when the app is running")]
+    #[arg(short, long, help = "Forces stop when the app is running")]
     pub force: bool,
 }
