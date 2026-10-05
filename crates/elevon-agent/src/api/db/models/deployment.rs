@@ -120,6 +120,47 @@ impl From<&DeploymentWeb> for WebApp {
     }
 }
 
+#[derive(Clone, Tabled, Serialize, Deserialize)]
+pub struct DeploymentTabled {
+    pub id: String,
+    pub app: String,
+    pub container_id: String,
+    pub domain: String,
+    pub port: String,
+    pub status: String,
+    pub updated_at: String,
+    pub created_at: String,
+}
+
+impl TabledView for Deployment {
+    type TabledType = DeploymentTabled;
+
+    fn to_tabled(&self) -> Self::TabledType {
+        Self::TabledType {
+            id: self.id.to_string(),
+            app: self.app.get().name.clone(),
+            container_id: self
+                .container_id
+                .as_deref()
+                .map(|s| s[..12.min(s.len())].to_string())
+                .unwrap_or_else(Self::default_value),
+            domain: self
+                .web
+                .as_ref()
+                .map(|w| w.domain.clone())
+                .unwrap_or_else(Self::default_value),
+            port: self
+                .web
+                .as_ref()
+                .map(|w| w.port.to_string())
+                .unwrap_or_else(Self::default_value),
+            status: self.status.to_string(),
+            updated_at: self.updated_at.to_string(),
+            created_at: self.created_at.to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Default, toasty::Embed)]
 pub struct DeploymentRuntimeOptions {
     pub role: String,
@@ -176,45 +217,4 @@ pub struct DeploymentRuntimeOption {
 
     #[belongs_to(key = deployment_id, references = id)]
     pub deployment: toasty::Deferred<Deployment>,
-}
-
-#[derive(Clone, Tabled, Serialize, Deserialize)]
-pub struct DeploymentTabled {
-    pub id: String,
-    pub app: String,
-    pub container_id: String,
-    pub domain: String,
-    pub port: String,
-    pub status: String,
-    pub updated_at: String,
-    pub created_at: String,
-}
-
-impl TabledView for Deployment {
-    type TabledType = DeploymentTabled;
-
-    fn to_tabled(&self) -> Self::TabledType {
-        Self::TabledType {
-            id: self.id.to_string(),
-            app: self.app.get().name.clone(),
-            container_id: self
-                .container_id
-                .as_deref()
-                .map(|s| s[..12.min(s.len())].to_string())
-                .unwrap_or_else(Self::default_value),
-            domain: self
-                .web
-                .as_ref()
-                .map(|w| w.domain.clone())
-                .unwrap_or_else(Self::default_value),
-            port: self
-                .web
-                .as_ref()
-                .map(|w| w.port.to_string())
-                .unwrap_or_else(Self::default_value),
-            status: self.status.to_string(),
-            updated_at: self.updated_at.to_string(),
-            created_at: self.created_at.to_string(),
-        }
-    }
 }

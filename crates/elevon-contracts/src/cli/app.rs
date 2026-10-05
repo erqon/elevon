@@ -14,7 +14,7 @@ pub enum AppCommands {
         subcommand: DeploymentCommands,
     },
 
-    #[command(about = "Stop application")]
+    #[command(about = "Stop the applications")]
     Stop(AppStopCommandArgs),
 }
 
@@ -29,7 +29,7 @@ pub struct AppStopCommandArgs {
     #[arg(
         value_name = "APP",
         required = true,
-        help = "App ID or <project-name:app-name> (or a list of them) to stop."
+        help = "App ID or name (or a list of them) to stop."
     )]
     pub apps: Vec<String>,
 

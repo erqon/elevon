@@ -2,17 +2,17 @@ use anyhow::Result;
 use elevon_contracts::{
     cli::app::{AppCommands, DeploymentCommands},
     cli_verify_action_with_items,
-    deploy::{WebApp, log_stream_events},
+    deploy::{AppStopPayload, WebApp, log_stream_events},
 };
 
 use crate::{
     api::{
         db::models::{App, Deployment},
         state::SharedApiState,
+        stream::ActionLogger,
     },
     cli::CliCommand,
     image::drain_app,
-    logger::ActionLogger,
     socket::UnixClient,
 };
 
@@ -85,15 +85,14 @@ impl CliCommand for DeploymentCommands {
 
 /// Marks running apps to be drained
 pub async fn handle_app_stop(
-    apps: Vec<String>,
-    force: bool,
+    payload: AppStopPayload,
     state: SharedApiState,
     logger: &impl ActionLogger,
 ) -> Result<()> {
     let mut db = state.db.get();
 
-    for app in apps {
-        let app = App::get_by_name_or_id(&mut db, &app).await?;
+    for app in payload.apps {
+        let app = App::get_by_name_or_id(&mut db, &app, payload.project.clone()).await?;
 
         let active_deployment = Deployment::get_latest_deployment(&mut db, &app.id).await?;
         let Some(active_deployment) = active_deployment else {
@@ -103,7 +102,7 @@ pub async fn handle_app_stop(
             continue;
         };
 
-        if !force {
+        if !payload.force {
             logger
                 .log(format!(
                     "App '{}' is running and cant be stopped without being forced, use --force to force  it",

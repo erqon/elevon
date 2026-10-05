@@ -7,9 +7,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::{
-    api::{db::models::AuthKey, routes::cli::KeyListPayload},
+    api::{db::models::AuthKey, routes::cli::KeyListPayload, stream::ActionLogger},
     cli::CliCommand,
-    logger::ActionLogger,
     socket::UnixClient,
 };
 

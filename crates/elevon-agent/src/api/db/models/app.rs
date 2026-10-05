@@ -84,7 +84,11 @@ impl App {
         Ok(app)
     }
 
-    pub async fn get_by_name_or_id(db: &mut toasty::Db, key: &str) -> Result<Self> {
+    pub async fn get_by_name_or_id(
+        db: &mut toasty::Db,
+        key: &str,
+        project: String,
+    ) -> Result<Self> {
         match uuid::Uuid::parse_str(key) {
             Ok(id) => match Self::get_by_id(db, id).await {
                 Ok(k) => Ok(k),
@@ -92,15 +96,12 @@ impl App {
                     anyhow::bail!("app '{key}' not found by ID ({id_err:#})")
                 }
             },
-            Err(_) => {
-                let (project, app_name) = key.split_once(':').unwrap_or((key, ""));
-                match Self::get_by_name_and_project(db, app_name, project).await {
-                    Ok(k) => Ok(k),
-                    Err(err) => Err(err).with_context(|| {
-                        format!("no app found with name '{key}' (and it is not a valid UUID)")
-                    }),
-                }
-            }
+            Err(_) => match Self::get_by_name_and_project(db, key, project).await {
+                Ok(k) => Ok(k),
+                Err(err) => Err(err).with_context(|| {
+                    format!("no app found with name '{key}' (and it is not a valid UUID)")
+                }),
+            },
         }
     }
 }

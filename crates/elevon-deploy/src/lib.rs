@@ -81,10 +81,10 @@ pub async fn run_deploy_cli(
                 .await?;
         }
         Commands::Rollback(args) => {
-            config.run_rollback(&agent_client, &args.apps).await?;
+            config.run_rollback(&agent_client, args).await?;
         }
         Commands::Agent { command } => {
-            command.handle(agent_client).await?;
+            command.handle(agent_client, config).await?;
         }
     }
 
