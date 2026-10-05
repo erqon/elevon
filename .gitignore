@@ -1,6 +1,9 @@
 /target
 /node_modules
 
+.env
+!.env.example
+
 .vscode/
 .zed/
 
