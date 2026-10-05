@@ -51,6 +51,6 @@ Markers for features before the release
 ## Elevon Deploy
 
 - [x] Upgrade the binary
-- [ ] Interactive rollback selector (choose previous release) **(M)**
+- [x] Interactive rollback selector (choose previous release) **(M)**
 - [ ] Health-check gated promotion (switch traffic only after new container is healthy) **(M)**
 - [ ] Rollback-on-failure policy (auto rollback on health-check failure or deploy timeout) **(N)**
