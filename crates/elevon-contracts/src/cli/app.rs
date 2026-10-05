@@ -14,7 +14,7 @@ pub enum AppCommands {
         subcommand: DeploymentCommands,
     },
 
-    #[command(about = "Stop application")]
+    #[command(about = "Stop the applications")]
     Stop(AppStopCommandArgs),
 }
 
