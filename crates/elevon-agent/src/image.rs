@@ -17,6 +17,7 @@ use elevon_fs::agent::{
 };
 use futures_util::TryStreamExt;
 use tokio::sync::RwLock;
+use uuid::Uuid;
 
 use crate::{
     api::{
@@ -211,7 +212,7 @@ async fn _deploy_app(
     };
 
     pull_image(tx, docker, pull_image_options).await.inspect_err(
-        |err| tracing::error!(app = %options.app_config.name, error = %err, "failed to get or create app"),
+        |err| tracing::error!(app = %options.app_config.name, error = %err, "failed to pull image"),
     )?;
 
     // TODO: During rollbacks previous deployment might have been running on a different
@@ -532,80 +533,156 @@ pub async fn rollback_apps(
     state: SharedApiState,
     payload: AppRollbackPayload,
 ) -> Result<()> {
-    let mut db = state.db.get();
+    // Prevents executing with both 'apps' and 'deployment_ids' present
+    if !payload.apps.is_empty() && !payload.deployment_ids.is_empty() {
+        emit(
+            tx,
+            StreamEvent::Error {
+                message: "Both apps and deployment ids can't be present".to_string(),
+            },
+        )
+        .await;
+        return Ok(());
+    }
 
     for app in payload.apps {
-        let db_app = App::get_by_project_and_name(&mut db, &app.project, &app.name).await?;
-
-        let Some(db_app) = db_app else {
-            emit(
-                tx,
-                StreamEvent::log(format!("[{}] App not found, skipping...", app.name)),
-            )
-            .await;
-
-            continue;
-        };
-
-        let previous_deployment = Deployment::get_previous_deployment(&mut db, &db_app.id).await?;
-
-        // Prevous deployment must exist since what are you trying to rollback to, right?
-        // Also current deployment might not be active because of a failure or something,
-        // so rollback can still happen.
-        let Some(previous_deployment) = previous_deployment else {
-            emit(
-                tx,
-                StreamEvent::log(format!(
-                    "[{}] Previous deployment doesn't exist, skipping...",
-                    app.name
-                )),
-            )
-            .await;
-
-            continue;
-        };
-
-        let (Some(image_ref), Some(deployment_runtime_options)) = (
-            &previous_deployment.image_ref,
-            &previous_deployment.runtime_options.get(),
-        ) else {
-            emit(
-                tx,
-                StreamEvent::log(format!(
-                    "[{}] Previous deployment doesn't have image properties, skipping...",
-                    app.name
-                )),
-            )
-            .await;
-
-            continue;
-        };
-
-        let runtime_options = AppRuntimeOptions::from(&deployment_runtime_options.options);
-        let deployment_to_drain = Deployment::get_latest_deployment(&mut db, &db_app.id).await?;
-
-        let app_payload = AppPayload {
-            project: app.project.clone(),
-            name: app.name.clone(),
-            image_ref: image_ref.to_string(),
-            keep_releases: previous_deployment.app.get().keep_releases,
-            runtime_options: runtime_options.clone(),
-            web_app: previous_deployment.web.as_ref().map(|web| WebApp {
-                port: web.port,
-                domain: web.domain.clone(),
-            }),
-            ..Default::default()
-        };
-
-        deploy_app(
-            tx,
-            state.clone(),
-            app_payload,
-            Some(previous_deployment),
-            deployment_to_drain,
-        )
-        .await?;
+        rollback_with_app(tx, state.clone(), &app.project, &app.name).await?;
     }
+
+    for deployment_id_str in payload.deployment_ids {
+        rollback_with_deployment(tx, state.clone(), deployment_id_str).await?;
+    }
+
+    Ok(())
+}
+
+async fn rollback_with_app(
+    tx: &StreamSender,
+    state: SharedApiState,
+    project: &str,
+    app_name: &str,
+) -> Result<()> {
+    let mut db = state.db.get();
+
+    let Some(app) = App::get_by_project_and_name(&mut db, project, app_name).await? else {
+        emit(
+            tx,
+            StreamEvent::log(format!("[{}] App not found, skipping...", app_name)),
+        )
+        .await;
+        return Ok(());
+    };
+
+    let previous_deployment = Deployment::get_previous_deployment(&mut db, &app.id).await?;
+
+    let Some(previous_deployment) = previous_deployment else {
+        emit(
+            tx,
+            StreamEvent::log(format!(
+                "[{}] Previous deployment doesn't exist, skipping...",
+                app.name
+            )),
+        )
+        .await;
+        return Ok(());
+    };
+
+    rollback_deployment(tx, state, previous_deployment, Some(&app)).await?;
+
+    Ok(())
+}
+
+async fn rollback_with_deployment(
+    tx: &StreamSender,
+    state: SharedApiState,
+    deployment_id_str: String,
+) -> Result<()> {
+    let mut db = state.db.get();
+
+    let Ok(deployment_id) = Uuid::parse_str(&deployment_id_str) else {
+        emit(
+            tx,
+            StreamEvent::log(format!("[{}] Invalid UUID, skipping...", deployment_id_str)),
+        )
+        .await;
+        return Ok(());
+    };
+
+    let deployment = Deployment::filter(Deployment::fields().id().eq(deployment_id))
+        .include(Deployment::fields().app())
+        .include(Deployment::fields().runtime_options())
+        .first()
+        .exec(&mut db)
+        .await?;
+
+    let Some(deployment) = deployment else {
+        emit(
+            tx,
+            StreamEvent::log(format!(
+                "[{}] Deployment not found, skipping...",
+                deployment_id
+            )),
+        )
+        .await;
+        return Ok(());
+    };
+
+    rollback_deployment(tx, state, deployment, None).await?;
+
+    Ok(())
+}
+
+async fn rollback_deployment(
+    tx: &StreamSender,
+    state: SharedApiState,
+    target_deployment: Deployment,
+    app: Option<&App>,
+) -> Result<()> {
+    let mut db = state.db.get();
+    let app = match app {
+        Some(v) => v,
+        _ => target_deployment.app.get(),
+    };
+
+    let (Some(image_ref), Some(deployment_runtime_options)) = (
+        &target_deployment.image_ref,
+        &target_deployment.runtime_options.get(),
+    ) else {
+        emit(
+            tx,
+            StreamEvent::log(format!(
+                "[{}] Previous deployment doesn't have image properties, skipping...",
+                app.name
+            )),
+        )
+        .await;
+        return Ok(());
+    };
+
+    let runtime_options = AppRuntimeOptions::from(&deployment_runtime_options.options);
+    let deployment_to_drain = Deployment::get_latest_deployment(&mut db, &app.id).await?;
+
+    let app_payload = AppPayload {
+        project: app.project.clone(),
+        name: app.name.clone(),
+        image_ref: image_ref.to_string(),
+        keep_releases: app.keep_releases,
+        runtime_options: runtime_options.clone(),
+        web_app: target_deployment.web.as_ref().map(|web| WebApp {
+            port: web.port,
+            domain: web.domain.clone(),
+        }),
+        ..Default::default()
+    };
+
+    deploy_app(
+        tx,
+        state.clone(),
+        app_payload,
+        Some(target_deployment),
+        deployment_to_drain,
+    )
+    .await?;
 
     Ok(())
 }

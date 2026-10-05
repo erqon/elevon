@@ -165,13 +165,16 @@ impl AgentClient {
         tracing::Span::current().pb_set_message(&format!("rolling back {}", config.name));
         tracing::info!("Rolling back apps: {:?}", app_names);
 
-        let apps_payload: Vec<AppRollback> = apps
-            .iter()
-            .map(|(name, _)| AppRollback {
-                project: config.name.clone(),
-                name: name.clone(),
-            })
-            .collect::<Vec<_>>();
+        let apps_payload: Vec<AppRollback> = if deployment_ids.is_empty() {
+            apps.iter()
+                .map(|(name, _)| AppRollback {
+                    project: config.name.clone(),
+                    name: name.clone(),
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
 
         let payload = serde_json::json!(AppRollbackPayload {
             apps: apps_payload,

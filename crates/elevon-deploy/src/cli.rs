@@ -98,19 +98,27 @@ pub struct AppArgs {
 }
 
 #[derive(Debug, Args)]
+#[command(group(
+    clap::ArgGroup::new("rollback_target")
+        .required(true) // Forces the user to pick at least one path
+        .args(["apps", "ids"]),
+))]
 pub struct AppRollbackArgs {
     #[arg(
+        long = "app",
         value_name = "APP",
         help = "Limit the operation to the specified app(s)",
-        conflicts_with = "ids"
+        num_args = 1..,
+        help_heading = "Targets" 
     )]
     pub apps: Vec<String>,
 
     #[arg(
         long = "id",
-        value_name = "IDs",
+        value_name = "ID",
         help = "Specific deployment ID or list of them to rollback app(s) to",
-        conflicts_with = "apps"
+        num_args = 1..,
+        help_heading = "Targets" 
     )]
     pub ids: Vec<String>,
 }

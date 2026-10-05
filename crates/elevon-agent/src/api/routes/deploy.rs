@@ -2,10 +2,12 @@ use axum::{
     Json, Router,
     extract::State,
     middleware,
+    response::Result,
     routing::{get, post},
 };
 use elevon_contracts::deploy::{AppDeployPayload, AppRollbackPayload};
 use elevon_http::error::{AppError, AppJson};
+use reqwest::StatusCode;
 
 use crate::{
     api::{
@@ -44,11 +46,19 @@ async fn rollback(
     _: AuthKey,
     State(state): State<SharedApiState>,
     Json(payload): Json<AppRollbackPayload>,
-) -> StreamResponse {
-    spawn_streaming_task(move |tx| async move {
+) -> Result<StreamResponse, AppError> {
+    if !payload.apps.is_empty() && !payload.deployment_ids.is_empty() {
+        return Err(AppError::client(
+            StatusCode::BAD_REQUEST,
+            "bad_request",
+            "Both apps and deployment IDs can't be passed",
+        ));
+    }
+
+    Ok(spawn_streaming_task(move |tx| async move {
         let _lock_file = lock_action()?;
         rollback_apps(&tx, state, payload).await
-    })
+    }))
 }
 
 async fn local_containers(

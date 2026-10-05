@@ -183,3 +183,10 @@ impl TlsType {
         }
     }
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct AppStopPayload {
+    pub project: String,
+    pub apps: Vec<String>,
+    pub force: bool,
+}

@@ -6,10 +6,10 @@ use elevon_contracts::{
         app::{AppCommands, AppStopCommandArgs, DeploymentCommands},
     },
     cli_verify_action_with_items,
-    deploy::log_stream_events,
+    deploy::{AppStopPayload, log_stream_events},
 };
 
-use crate::agent::AgentClient;
+use crate::{agent::AgentClient, config::Config};
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -27,7 +27,7 @@ pub enum Commands {
 }
 
 impl Commands {
-    pub async fn handle(&self, agent_client: AgentClient) -> Result<()> {
+    pub async fn handle(&self, agent_client: AgentClient, config: Config) -> Result<()> {
         match self {
             Commands::Key { command } => match command {
                 KeyCommands::Create(args) => KeyCommands::create(&agent_client, args).await?,
@@ -51,7 +51,7 @@ impl Commands {
                 },
 
                 AppCommands::Stop(args) => {
-                    AppCommands::stop(&agent_client, args).await?;
+                    AppCommands::stop(&agent_client, &config, args).await?;
                 }
             },
         }
@@ -201,7 +201,11 @@ impl KeyCommands {
 }
 
 trait AppCommandsTrait {
-    async fn stop(agent_client: &AgentClient, args: &AppStopCommandArgs) -> Result<()> {
+    async fn stop(
+        agent_client: &AgentClient,
+        config: &Config,
+        args: &AppStopCommandArgs,
+    ) -> Result<()> {
         cli_verify_action_with_items(
             args.force,
             &args.apps,
@@ -211,11 +215,17 @@ trait AppCommandsTrait {
         let url = agent_client.absolute_url("/cli/apps/stop");
         let headers = agent_client.headers();
 
+        let payload = AppStopPayload {
+            project: config.name.clone(),
+            apps: args.apps.clone(),
+            force: args.force,
+        };
+
         let event_stream = agent_client
             .client
             .post(url)
             .headers(headers)
-            .json(&args)
+            .json(&payload)
             .send()
             .await?
             .bytes_stream();
