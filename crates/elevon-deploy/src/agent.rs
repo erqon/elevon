@@ -156,6 +156,7 @@ impl AgentClient {
         &self,
         config: &Config,
         apps: Vec<(String, AppConfig)>,
+        deployment_ids: Vec<String>,
     ) -> Result<()> {
         let url = self.absolute_url("/deploy/rollback");
         let headers = self.headers();
@@ -172,7 +173,10 @@ impl AgentClient {
             })
             .collect::<Vec<_>>();
 
-        let payload = serde_json::json!(AppRollbackPayload { apps: apps_payload });
+        let payload = serde_json::json!(AppRollbackPayload {
+            apps: apps_payload,
+            deployment_ids
+        });
 
         let event_stream = self
             .client

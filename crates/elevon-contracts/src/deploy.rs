@@ -166,6 +166,7 @@ pub struct AppRollback {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AppRollbackPayload {
     pub apps: Vec<AppRollback>,
+    pub deployment_ids: Vec<String>,
 }
 
 #[derive(Clone, PartialEq, Eq)]

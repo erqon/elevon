@@ -70,7 +70,7 @@ pub enum Commands {
     Deploy(AppArgs),
 
     #[command(about = "Rollback applications to previous deployment")]
-    Rollback(AppArgs),
+    Rollback(AppRollbackArgs),
 
     #[command(about = "Agent related commands")]
     Agent {
@@ -95,4 +95,22 @@ pub struct BuildArgs {
 pub struct AppArgs {
     #[arg(long = "app", help = "Limit the operation to the specified app(s)")]
     pub apps: Vec<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct AppRollbackArgs {
+    #[arg(
+        value_name = "APP",
+        help = "Limit the operation to the specified app(s)",
+        conflicts_with = "ids"
+    )]
+    pub apps: Vec<String>,
+
+    #[arg(
+        long = "id",
+        value_name = "IDs",
+        help = "Specific deployment ID or list of them to rollback app(s) to",
+        conflicts_with = "apps"
+    )]
+    pub ids: Vec<String>,
 }

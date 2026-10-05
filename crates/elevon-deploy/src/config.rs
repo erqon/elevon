@@ -12,6 +12,7 @@ use serde::Deserialize;
 
 use crate::{
     agent::AgentClient,
+    cli::AppRollbackArgs,
     config::{app::AppConfig, env::EnvConfig, registry::RegistryConfig},
 };
 
@@ -233,10 +234,10 @@ impl Config {
     pub async fn run_rollback(
         &self,
         agent_client: &AgentClient,
-        app_names: &[String],
+        args: AppRollbackArgs,
     ) -> Result<()> {
-        let selected = self.get_selected_apps(app_names)?;
-        agent_client.push_rollback(self, selected).await?;
+        let selected = self.get_selected_apps(&args.apps)?;
+        agent_client.push_rollback(self, selected, args.ids).await?;
         Ok(())
     }
 }

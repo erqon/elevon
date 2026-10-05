@@ -9,10 +9,10 @@ use crate::{
     api::{
         db::models::{App, Deployment},
         state::SharedApiState,
+        stream::ActionLogger,
     },
     cli::CliCommand,
     image::drain_app,
-    logger::ActionLogger,
     socket::UnixClient,
 };
 
