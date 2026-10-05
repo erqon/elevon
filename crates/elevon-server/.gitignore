@@ -1,2 +1,5 @@
 data.db*
 elevon.yml
+
+.env
+!.env.example
