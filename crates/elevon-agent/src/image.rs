@@ -342,7 +342,7 @@ async fn _deploy_app(
 
 // async fn contianer_health_check(docker: &bollard::Docker, container_id: String) -> Result<()> {
 //     let info = docker.inspect_container(&container_id, options)
-//     
+//
 //     Ok(())
 // }
 

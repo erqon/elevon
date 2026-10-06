@@ -96,13 +96,17 @@ impl Deployment {
     }
 }
 
-#[derive(Debug, toasty::Embed, PartialEq, Eq, Display, EnumString)]
+#[derive(
+    Debug, Clone, Default, Serialize, Deserialize, toasty::Embed, PartialEq, Eq, Display, EnumString,
+)]
 #[strum(serialize_all = "lowercase")]
 pub enum DeploymentStatus {
+    #[default]
     Pending,
     Active,
     Drained,
     Failed,
+    Restarting,
 }
 
 #[derive(Debug, Clone, toasty::Embed)]
