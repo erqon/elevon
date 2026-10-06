@@ -34,6 +34,67 @@ use crate::{
 static ALLOCATED_PORTS: LazyLock<RwLock<HashSet<u16>>> =
     LazyLock::new(|| RwLock::new(HashSet::new()));
 
+pub async fn deploy_apps(
+    tx: &StreamSender,
+    state: SharedApiState,
+    payload: AppDeployPayload,
+) -> Result<()> {
+    for app in payload.apps {
+        deploy_app(tx, state.clone(), app, None, None).await?;
+    }
+
+    Ok(())
+}
+
+pub async fn drain_app(
+    state: &SharedApiState,
+    db: &mut toasty::Db,
+    mut deployment: Deployment,
+    container_id: String,
+    web_app: Option<WebApp>,
+) -> Result<()> {
+    toasty::update!(deployment {
+        status: DeploymentStatus::Drained
+    })
+    .exec(db)
+    .await?;
+
+    state
+        .proxy_socket
+        .send(AgentEvent::DrainApp(container_id, web_app))
+        .await?;
+
+    Ok(())
+}
+
+pub async fn rollback_apps(
+    tx: &StreamSender,
+    state: SharedApiState,
+    payload: AppRollbackPayload,
+) -> Result<()> {
+    // Prevents executing with both 'apps' and 'deployment_ids' present
+    if !payload.apps.is_empty() && !payload.deployment_ids.is_empty() {
+        emit(
+            tx,
+            StreamEvent::Error {
+                message: "Both apps and deployment ids can't be present".to_string(),
+            },
+        )
+        .await;
+        return Ok(());
+    }
+
+    for app in payload.apps {
+        rollback_with_app(tx, state.clone(), &app.project, &app.name).await?;
+    }
+
+    for deployment_id_str in payload.deployment_ids {
+        rollback_with_deployment(tx, state.clone(), deployment_id_str).await?;
+    }
+
+    Ok(())
+}
+
 fn find_free_port() -> Option<u16> {
     for port in 3334..=9998 {
         match elevon_http::check_port(port) {
@@ -255,6 +316,7 @@ async fn _deploy_app(
             Err(err)
         }
         Ok(container_id) => {
+            // TODO: Add health check
             emit(
                 tx,
                 StreamEvent::log(format!(
@@ -278,26 +340,11 @@ async fn _deploy_app(
     Ok(res)
 }
 
-pub async fn drain_app(
-    state: &SharedApiState,
-    db: &mut toasty::Db,
-    mut deployment: Deployment,
-    container_id: String,
-    web_app: Option<WebApp>,
-) -> Result<()> {
-    toasty::update!(deployment {
-        status: DeploymentStatus::Drained
-    })
-    .exec(db)
-    .await?;
-
-    state
-        .proxy_socket
-        .send(AgentEvent::DrainApp(container_id, web_app))
-        .await?;
-
-    Ok(())
-}
+// async fn contianer_health_check(docker: &bollard::Docker, container_id: String) -> Result<()> {
+//     let info = docker.inspect_container(&container_id, options)
+//     
+//     Ok(())
+// }
 
 async fn prune_old_releases(
     docker: &bollard::Docker,
@@ -512,46 +559,6 @@ async fn deploy_app(
     }
 
     db_tx.commit().await?;
-
-    Ok(())
-}
-
-pub async fn deploy_apps(
-    tx: &StreamSender,
-    state: SharedApiState,
-    payload: AppDeployPayload,
-) -> Result<()> {
-    for app in payload.apps {
-        deploy_app(tx, state.clone(), app, None, None).await?;
-    }
-
-    Ok(())
-}
-
-pub async fn rollback_apps(
-    tx: &StreamSender,
-    state: SharedApiState,
-    payload: AppRollbackPayload,
-) -> Result<()> {
-    // Prevents executing with both 'apps' and 'deployment_ids' present
-    if !payload.apps.is_empty() && !payload.deployment_ids.is_empty() {
-        emit(
-            tx,
-            StreamEvent::Error {
-                message: "Both apps and deployment ids can't be present".to_string(),
-            },
-        )
-        .await;
-        return Ok(());
-    }
-
-    for app in payload.apps {
-        rollback_with_app(tx, state.clone(), &app.project, &app.name).await?;
-    }
-
-    for deployment_id_str in payload.deployment_ids {
-        rollback_with_deployment(tx, state.clone(), deployment_id_str).await?;
-    }
 
     Ok(())
 }

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use bollard::plugin::ContainerStateStatusEnum;
 use bollard::query_parameters::InspectContainerOptionsBuilder;
 use elevon_contracts::deploy::WebApp;
 use tokio::sync::RwLock;
@@ -98,55 +99,87 @@ impl ApiState {
                 .size(false)
                 .build();
 
-            let container = match self
+            let Ok(container) = self
                 .docker
                 .inspect_container(&container_id, Some(options))
                 .await
-            {
-                Ok(container) => Some(container),
-                Err(_) => {
-                    toasty::update!(deployment {
-                        status: DeploymentStatus::Drained
-                    })
+            else {
+                deployment
+                    .update()
+                    .status(DeploymentStatus::Failed)
                     .exec(&mut db)
                     .await?;
 
-                    None
-                }
+                continue;
             };
 
-            if let Some(container) = container {
-                let Some(state) = container.state.and_then(|s| s.running).map(|running| {
-                    if running {
-                        DeployAppState::Active
-                    } else {
-                        DeployAppState::Draining
-                    }
-                }) else {
-                    continue;
-                };
+            println!("state: {:?}", container.state);
 
-                if state == DeployAppState::Draining {
-                    continue;
-                }
+            let Some(state) = container.state else {
+                continue;
+            };
+            let Some(status) = state.status else { continue };
 
-                let web_app = Some(WebApp {
-                    domain: web_deployment.domain,
-                    port: web_deployment.port,
-                });
+            // TODO: Somehow find a way to replace DeployAppState with DeploymentStatus throughout the code
 
-                let route_config = DeployAppData {
-                    id: deployment.id.to_string(),
-                    project: project_name,
-                    name: app_name,
-                    state,
-                    container_id,
-                    web_app,
-                };
-                routes.push(route_config);
-            } else {
+            let (app_state, app_status) = match status {
+                ContainerStateStatusEnum::RUNNING => (DeployAppState::Active, DeploymentStatus::Active),
+                ContainerStateStatusEnum::PAUSED => (DeployAppState::Paused, DeploymentStatus::Pending),
+                ContainerStateStatusEnum::EXITED => (DeployAppState::Draining, DeploymentStatus::Failed),
+                _ => (DeployAppState::Draining, DeploymentStatus::Drained),
+            };
+
+            if matches!(app_state, DeployAppState::Draining | DeployAppState::Paused) {
+                deployment
+                    .update()
+                    .status(app_status)
+                    .exec(&mut db)
+                    .await?;
+
                 continue;
             }
+
+            //             let Some(state) = container.state.and_then(|s| s.running).map(|running| {
+            //                 if running {
+            //                     DeployAppState::Active
+            //                 } else {
+            //                     DeployAppState::Draining
+            //                 }
+            //             }) else {
+            //                 deployment
+            //                     .update()
+            //                     .status(DeploymentStatus::Failed)
+            //                     .exec(&mut db)
+            //                     .await?;
+            //
+            //                 continue;
+            //             };
+
+            //             if state == DeployAppState::Draining {
+            //                 deployment
+            //                     .update()
+            //                     .status(DeploymentStatus::Drained)
+            //                     .exec(&mut db)
+            //                     .await?;
+            //
+            //                 continue;
+            //             }
+
+            let web_app = Some(WebApp {
+                domain: web_deployment.domain,
+                port: web_deployment.port,
+            });
+
+            let route_config = DeployAppData {
+                id: deployment.id.to_string(),
+                project: project_name,
+                name: app_name,
+                state: app_state,
+                container_id,
+                web_app,
+            };
+
+            routes.push(route_config);
         }
 
         Ok(routes)

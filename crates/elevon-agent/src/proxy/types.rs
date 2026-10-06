@@ -15,6 +15,7 @@ pub enum DeployAppState {
     #[default]
     Active,
     Draining,
+    Paused,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
