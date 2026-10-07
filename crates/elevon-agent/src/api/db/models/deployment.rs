@@ -2,12 +2,12 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use bollard::plugin::RestartPolicyNameEnum;
-use elevon_contracts::deploy::{AppRole, AppRuntimeOptions, WebApp};
+use elevon_contracts::deploy::{AppHealthCheckConfig, AppRuntimeOptions, WebApp};
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use tabled::Tabled;
 
-use crate::api::db::models::{App, TabledView};
+use crate::api::db::models::{App, TabledView, app::AppRoleDb};
 
 #[derive(Debug, toasty::Model)]
 pub struct Deployment {
@@ -33,7 +33,7 @@ pub struct Deployment {
     pub app: toasty::Deferred<App>,
 
     #[has_one]
-    pub runtime_options: toasty::Deferred<Option<DeploymentRuntimeOption>>,
+    pub options: toasty::Deferred<Option<DeploymentOption>>,
 
     #[auto]
     pub created_at: jiff::Timestamp,
@@ -56,7 +56,7 @@ impl Deployment {
                 .and(Deployment::fields().status().eq(status)),
         )
         .include(Deployment::fields().app())
-        .include(Deployment::fields().runtime_options())
+        .include(Deployment::fields().options())
         .latest_by(Deployment::fields().updated_at())
         .first()
         .exec(db)
@@ -106,7 +106,6 @@ pub enum DeploymentStatus {
     Active,
     Drained,
     Failed,
-    Restarting,
 }
 
 #[derive(Debug, Clone, toasty::Embed)]
@@ -165,9 +164,29 @@ impl TabledView for Deployment {
     }
 }
 
+#[derive(Debug, toasty::Model)]
+pub struct DeploymentOption {
+    #[key]
+    #[auto]
+    pub id: uuid::Uuid,
+
+    #[unique]
+    pub deployment_id: uuid::Uuid,
+
+    #[default(AppRoleDb::Web)]
+    pub role: AppRoleDb,
+
+    pub runtime: DeploymentRuntimeOptions,
+
+    #[default(DeploymentHealthCheck::default())]
+    pub healthcheck: DeploymentHealthCheck,
+
+    #[belongs_to(key = deployment_id, references = id)]
+    pub deployment: toasty::Deferred<Deployment>,
+}
+
 #[derive(Debug, Default, toasty::Embed)]
 pub struct DeploymentRuntimeOptions {
-    pub role: String,
     /// Comma separated string
     pub cmd: Option<String>,
     pub restart: Option<String>,
@@ -179,7 +198,6 @@ pub struct DeploymentRuntimeOptions {
 impl From<&AppRuntimeOptions> for DeploymentRuntimeOptions {
     fn from(value: &AppRuntimeOptions) -> Self {
         Self {
-            role: value.role.to_string(),
             cmd: value.cmd.clone().map(|c| c.join(",")),
             restart: value.restart.as_ref().map(ToString::to_string),
             memory_limit: value.memory_limit,
@@ -192,7 +210,6 @@ impl From<&AppRuntimeOptions> for DeploymentRuntimeOptions {
 impl From<&DeploymentRuntimeOptions> for AppRuntimeOptions {
     fn from(value: &DeploymentRuntimeOptions) -> Self {
         Self {
-            role: AppRole::from_str(&value.role).unwrap(),
             cmd: value
                 .cmd
                 .clone()
@@ -208,17 +225,39 @@ impl From<&DeploymentRuntimeOptions> for AppRuntimeOptions {
     }
 }
 
-#[derive(Debug, toasty::Model)]
-pub struct DeploymentRuntimeOption {
-    #[key]
-    #[auto]
-    pub id: uuid::Uuid,
+#[derive(Debug, toasty::Embed)]
+pub struct DeploymentHealthCheck {
+    pub interval: u64,
+    pub timeout: u64,
+    pub retries: usize,
+    pub endpoint: Option<String>,
+}
 
-    #[unique]
-    pub deployment_id: uuid::Uuid,
+impl Default for DeploymentHealthCheck {
+    fn default() -> Self {
+        let default_config = AppHealthCheckConfig::default();
+        DeploymentHealthCheck::from(&default_config)
+    }
+}
 
-    pub options: DeploymentRuntimeOptions,
+impl From<&AppHealthCheckConfig> for DeploymentHealthCheck {
+    fn from(value: &AppHealthCheckConfig) -> Self {
+        Self {
+            interval: value.interval,
+            timeout: value.timeout,
+            retries: value.retries,
+            endpoint: value.endpoint.clone(),
+        }
+    }
+}
 
-    #[belongs_to(key = deployment_id, references = id)]
-    pub deployment: toasty::Deferred<Deployment>,
+impl From<&DeploymentHealthCheck> for AppHealthCheckConfig {
+    fn from(value: &DeploymentHealthCheck) -> Self {
+        Self {
+            interval: value.interval,
+            timeout: value.timeout,
+            retries: value.retries,
+            endpoint: value.endpoint.clone(),
+        }
+    }
 }

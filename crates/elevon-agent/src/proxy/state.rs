@@ -126,6 +126,8 @@ impl ProxyState {
             return;
         }
 
+        println!("[upsert_route]: route {:?}", route);
+
         if route.status != DeploymentStatus::Active {
             tracing::debug!(
                 domain = %web_app.domain,

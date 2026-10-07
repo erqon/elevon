@@ -1,11 +1,11 @@
 use bollard::plugin::RestartPolicyNameEnum;
 use bytesize::ByteSize;
-use elevon_contracts::deploy::{AppRole, TlsConfig};
+use elevon_contracts::deploy::{AppHealthCheckConfig, AppRole, TlsConfig};
 use serde::{Deserialize, Deserializer};
 
 use crate::config::env::EnvConfig;
 
-#[derive(Debug, Default, Deserialize, Clone)]
+#[derive(Debug, Default, Clone, Deserialize)]
 #[serde(default)]
 pub struct AppConfig {
     pub role: AppRole,
@@ -16,11 +16,13 @@ pub struct AppConfig {
 
     pub env: Option<EnvConfig>,
 
+    pub healthcheck: AppHealthCheckConfig,
+
     #[serde(skip)]
     pub tls: Option<TlsConfig>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct AppRuntimeConfig {
     pub restart: RestartPolicyNameEnum,

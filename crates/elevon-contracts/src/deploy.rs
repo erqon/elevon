@@ -114,7 +114,6 @@ pub struct WebApp {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppRuntimeOptions {
-    pub role: AppRole,
     pub cmd: Option<Vec<String>>,
     pub restart: Option<RestartPolicyNameEnum>,
     pub memory_limit: Option<i64>,
@@ -146,7 +145,9 @@ pub struct AppPayload {
     pub project: String,
     pub name: String,
     pub keep_releases: u8,
+    pub role: AppRole,
     pub runtime_options: AppRuntimeOptions,
+    pub healthcheck: AppHealthCheckConfig,
     pub vars: Option<HashMap<String, String>>,
     pub tls: Option<TlsConfig>,
     pub web_app: Option<WebApp>,
@@ -155,6 +156,25 @@ pub struct AppPayload {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AppDeployPayload {
     pub apps: Vec<AppPayload>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppHealthCheckConfig {
+    pub interval: u64,
+    pub timeout: u64,
+    pub retries: usize,
+    pub endpoint: Option<String>,
+}
+
+impl Default for AppHealthCheckConfig {
+    fn default() -> Self {
+        Self {
+            interval: 5,
+            timeout: 30,
+            retries: 3,
+            endpoint: None,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -186,7 +206,7 @@ impl TlsType {
 
 #[derive(Serialize, Deserialize)]
 pub struct AppStopPayload {
-    pub project: String,
+    pub project: Option<String>,
     pub apps: Vec<String>,
     pub force: bool,
 }

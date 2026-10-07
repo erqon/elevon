@@ -104,7 +104,6 @@ impl AgentClient {
                 let runtime_config = cfg.runtime.clone().unwrap_or_default();
 
                 let runtime_options = AppRuntimeOptions {
-                    role: cfg.role.clone(),
                     cmd,
                     restart: Some(runtime_config.restart),
                     cpu_limit: runtime_config.cpu.as_ref().map(|c| c.nano_cpus()),
@@ -120,6 +119,8 @@ impl AgentClient {
                     ),
                     project: config.name.clone(),
                     name: name.to_string(),
+                    role: cfg.role.clone(),
+                    healthcheck: cfg.healthcheck.clone(),
                     keep_releases: config
                         .keep_releases
                         .unwrap_or_else(|| Config::default_keep_releases().unwrap()),

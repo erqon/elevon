@@ -4,7 +4,7 @@ version = 1
 
 [[schema.tables]]
 id = 0
-name = "deployments"
+name = "deployment_options"
 primary_key = { columns = [{ table = 0, index = 0 }], index = { table = 0, index = 0 } }
 
 [[schema.tables.columns]]
@@ -15,66 +15,79 @@ storage_ty = "Blob"
 
 [[schema.tables.columns]]
 id = { table = 0, index = 1 }
-name = "app_id"
+name = "deployment_id"
 ty = "Bytes"
 storage_ty = "Blob"
 
 [[schema.tables.columns]]
 id = { table = 0, index = 2 }
-name = "image_ref"
+name = "role"
 ty = "String"
-storage_ty = "Text"
-nullable = true
+storage_ty = { Enum = { name = "app_role_db", variants = [{ name = "web" }, { name = "worker" }] } }
 
 [[schema.tables.columns]]
 id = { table = 0, index = 3 }
-name = "container_id"
+name = "runtime_cmd"
 ty = "String"
 storage_ty = "Text"
 nullable = true
 
 [[schema.tables.columns]]
 id = { table = 0, index = 4 }
-name = "web"
-ty = "Bool"
-storage_ty = "Boolean"
+name = "runtime_restart"
+ty = "String"
+storage_ty = "Text"
 nullable = true
 
 [[schema.tables.columns]]
 id = { table = 0, index = 5 }
-name = "web_domain"
-ty = "String"
-storage_ty = "Text"
+name = "runtime_memory_limit"
+ty = "I64"
+storage_ty = { Integer = 8 }
 nullable = true
 
 [[schema.tables.columns]]
 id = { table = 0, index = 6 }
-name = "web_port"
-ty = "U16"
-storage_ty = { UnsignedInteger = 2 }
+name = "runtime_cpu_limit"
+ty = "I64"
+storage_ty = { Integer = 8 }
 nullable = true
 
 [[schema.tables.columns]]
 id = { table = 0, index = 7 }
-name = "status"
+name = "runtime_network"
 ty = "String"
-storage_ty = { Enum = { name = "deployment_status", variants = [{ name = "pending" }, { name = "active" }, { name = "drained" }, { name = "failed" }, { name = "restarting" }] } }
+storage_ty = "Text"
+nullable = true
 
 [[schema.tables.columns]]
 id = { table = 0, index = 8 }
-name = "created_at"
-ty = "String"
-storage_ty = "Text"
+name = "healthcheck_interval"
+ty = "U64"
+storage_ty = { UnsignedInteger = 8 }
 
 [[schema.tables.columns]]
 id = { table = 0, index = 9 }
-name = "updated_at"
+name = "healthcheck_timeout"
+ty = "U64"
+storage_ty = { UnsignedInteger = 8 }
+
+[[schema.tables.columns]]
+id = { table = 0, index = 10 }
+name = "healthcheck_retries"
+ty = "U64"
+storage_ty = { UnsignedInteger = 8 }
+
+[[schema.tables.columns]]
+id = { table = 0, index = 11 }
+name = "healthcheck_endpoint"
 ty = "String"
 storage_ty = "Text"
+nullable = true
 
 [[schema.tables.indices]]
 id = { table = 0, index = 0 }
-name = "index_deployments_by_id"
+name = "index_deployment_options_by_id"
 on = 0
 columns = [{ column = { table = 0, index = 0 }, op = "Eq", scope = "Partition" }]
 unique = true
@@ -82,25 +95,14 @@ primary_key = true
 
 [[schema.tables.indices]]
 id = { table = 0, index = 1 }
-name = "index_deployments_by_app_id"
+name = "index_deployment_options_by_deployment_id"
 on = 0
 columns = [{ column = { table = 0, index = 1 }, op = "Eq", scope = "Partition" }]
-
-[[schema.tables.indices]]
-id = { table = 0, index = 2 }
-name = "index_deployments_by_image_ref"
-on = 0
-columns = [{ column = { table = 0, index = 2 }, op = "Eq", scope = "Partition" }]
-
-[[schema.tables.indices]]
-id = { table = 0, index = 3 }
-name = "index_deployments_by_container_id"
-on = 0
-columns = [{ column = { table = 0, index = 3 }, op = "Eq", scope = "Partition" }]
+unique = true
 
 [[schema.tables]]
 id = 1
-name = "apps"
+name = "deployments"
 primary_key = { columns = [{ table = 1, index = 0 }], index = { table = 1, index = 0 } }
 
 [[schema.tables.columns]]
@@ -111,43 +113,66 @@ storage_ty = "Blob"
 
 [[schema.tables.columns]]
 id = { table = 1, index = 1 }
-name = "name"
-ty = "String"
-storage_ty = { VarChar = 32 }
+name = "app_id"
+ty = "Bytes"
+storage_ty = "Blob"
 
 [[schema.tables.columns]]
 id = { table = 1, index = 2 }
-name = "project"
+name = "image_ref"
 ty = "String"
 storage_ty = "Text"
+nullable = true
 
 [[schema.tables.columns]]
 id = { table = 1, index = 3 }
-name = "keep_releases"
-ty = "U8"
-storage_ty = { UnsignedInteger = 1 }
+name = "container_id"
+ty = "String"
+storage_ty = "Text"
+nullable = true
 
 [[schema.tables.columns]]
 id = { table = 1, index = 4 }
-name = "role"
-ty = "String"
-storage_ty = { Enum = { name = "app_role_db", variants = [{ name = "web" }, { name = "worker" }] } }
+name = "web"
+ty = "Bool"
+storage_ty = "Boolean"
+nullable = true
 
 [[schema.tables.columns]]
 id = { table = 1, index = 5 }
+name = "web_domain"
+ty = "String"
+storage_ty = "Text"
+nullable = true
+
+[[schema.tables.columns]]
+id = { table = 1, index = 6 }
+name = "web_port"
+ty = "U16"
+storage_ty = { UnsignedInteger = 2 }
+nullable = true
+
+[[schema.tables.columns]]
+id = { table = 1, index = 7 }
+name = "status"
+ty = "String"
+storage_ty = { Enum = { name = "deployment_status", variants = [{ name = "pending" }, { name = "active" }, { name = "drained" }, { name = "failed" }] } }
+
+[[schema.tables.columns]]
+id = { table = 1, index = 8 }
 name = "created_at"
 ty = "String"
 storage_ty = "Text"
 
 [[schema.tables.columns]]
-id = { table = 1, index = 6 }
+id = { table = 1, index = 9 }
 name = "updated_at"
 ty = "String"
 storage_ty = "Text"
 
 [[schema.tables.indices]]
 id = { table = 1, index = 0 }
-name = "index_apps_by_id"
+name = "index_deployments_by_id"
 on = 1
 columns = [{ column = { table = 1, index = 0 }, op = "Eq", scope = "Partition" }]
 unique = true
@@ -155,26 +180,25 @@ primary_key = true
 
 [[schema.tables.indices]]
 id = { table = 1, index = 1 }
-name = "index_apps_by_name_and_project"
-on = 1
-columns = [{ column = { table = 1, index = 1 }, op = "Eq", scope = "Partition" }, { column = { table = 1, index = 2 }, op = "Eq", scope = "Local" }]
-unique = true
-
-[[schema.tables.indices]]
-id = { table = 1, index = 2 }
-name = "index_apps_by_name"
+name = "index_deployments_by_app_id"
 on = 1
 columns = [{ column = { table = 1, index = 1 }, op = "Eq", scope = "Partition" }]
 
 [[schema.tables.indices]]
-id = { table = 1, index = 3 }
-name = "index_apps_by_project"
+id = { table = 1, index = 2 }
+name = "index_deployments_by_image_ref"
 on = 1
 columns = [{ column = { table = 1, index = 2 }, op = "Eq", scope = "Partition" }]
 
+[[schema.tables.indices]]
+id = { table = 1, index = 3 }
+name = "index_deployments_by_container_id"
+on = 1
+columns = [{ column = { table = 1, index = 3 }, op = "Eq", scope = "Partition" }]
+
 [[schema.tables]]
 id = 2
-name = "deployment_runtime_options"
+name = "apps"
 primary_key = { columns = [{ table = 2, index = 0 }], index = { table = 2, index = 0 } }
 
 [[schema.tables.columns]]
@@ -185,54 +209,37 @@ storage_ty = "Blob"
 
 [[schema.tables.columns]]
 id = { table = 2, index = 1 }
-name = "deployment_id"
-ty = "Bytes"
-storage_ty = "Blob"
+name = "name"
+ty = "String"
+storage_ty = { VarChar = 32 }
 
 [[schema.tables.columns]]
 id = { table = 2, index = 2 }
-name = "options_role"
+name = "project"
 ty = "String"
 storage_ty = "Text"
 
 [[schema.tables.columns]]
 id = { table = 2, index = 3 }
-name = "options_cmd"
-ty = "String"
-storage_ty = "Text"
-nullable = true
+name = "keep_releases"
+ty = "U8"
+storage_ty = { UnsignedInteger = 1 }
 
 [[schema.tables.columns]]
 id = { table = 2, index = 4 }
-name = "options_restart"
+name = "created_at"
 ty = "String"
 storage_ty = "Text"
-nullable = true
 
 [[schema.tables.columns]]
 id = { table = 2, index = 5 }
-name = "options_memory_limit"
-ty = "I64"
-storage_ty = { Integer = 8 }
-nullable = true
-
-[[schema.tables.columns]]
-id = { table = 2, index = 6 }
-name = "options_cpu_limit"
-ty = "I64"
-storage_ty = { Integer = 8 }
-nullable = true
-
-[[schema.tables.columns]]
-id = { table = 2, index = 7 }
-name = "options_network"
+name = "updated_at"
 ty = "String"
 storage_ty = "Text"
-nullable = true
 
 [[schema.tables.indices]]
 id = { table = 2, index = 0 }
-name = "index_deployment_runtime_options_by_id"
+name = "index_apps_by_id"
 on = 2
 columns = [{ column = { table = 2, index = 0 }, op = "Eq", scope = "Partition" }]
 unique = true
@@ -240,10 +247,22 @@ primary_key = true
 
 [[schema.tables.indices]]
 id = { table = 2, index = 1 }
-name = "index_deployment_runtime_options_by_deployment_id"
+name = "index_apps_by_name_and_project"
+on = 2
+columns = [{ column = { table = 2, index = 1 }, op = "Eq", scope = "Partition" }, { column = { table = 2, index = 2 }, op = "Eq", scope = "Local" }]
+unique = true
+
+[[schema.tables.indices]]
+id = { table = 2, index = 2 }
+name = "index_apps_by_name"
 on = 2
 columns = [{ column = { table = 2, index = 1 }, op = "Eq", scope = "Partition" }]
-unique = true
+
+[[schema.tables.indices]]
+id = { table = 2, index = 3 }
+name = "index_apps_by_project"
+on = 2
+columns = [{ column = { table = 2, index = 2 }, op = "Eq", scope = "Partition" }]
 
 [[schema.tables]]
 id = 3

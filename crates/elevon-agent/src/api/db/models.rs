@@ -4,9 +4,7 @@ pub mod deployment;
 
 pub use app::{App, AppTabled};
 pub use auth::{AuthKey, AuthKeyTabled};
-pub use deployment::{
-    Deployment, DeploymentRuntimeOption, DeploymentRuntimeOptions, DeploymentStatus,
-};
+pub use deployment::{Deployment, DeploymentOption, DeploymentRuntimeOptions, DeploymentStatus};
 
 pub trait TabledView {
     type TabledType;

@@ -42,11 +42,17 @@ impl CliCommand for AppCommands {
             AppCommands::Stop(args) => {
                 cli_verify_action_with_items(args.force, &args.apps, "This stops running app(s)")?;
 
+                let payload = AppStopPayload {
+                    project: None,
+                    apps: args.apps,
+                    force: args.force,
+                };
+
                 let path = format!("{BASE_PATH}/stop");
                 let stream = unix_client
                     .client
                     .post(unix_client.resolve_url(&path))
-                    .json(&args)
+                    .json(&payload)
                     .send()
                     .await?
                     .bytes_stream();

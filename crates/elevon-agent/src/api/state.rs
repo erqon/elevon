@@ -1,11 +1,13 @@
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use bollard::plugin::ContainerStateStatusEnum;
+use bollard::plugin::{ContainerStateStatusEnum, HealthStatusEnum};
 use elevon_contracts::deploy::WebApp;
 use tokio::sync::RwLock;
 
 use crate::api::db::AgentDb;
+use crate::api::db::models::deployment::DeploymentHealthCheck;
 use crate::api::db::models::{Deployment, DeploymentStatus};
 use crate::env::ElevonEnv;
 use crate::proxy::types::DeployAppData;
@@ -58,12 +60,10 @@ impl ApiState {
             Deployment::fields()
                 .status()
                 .eq(DeploymentStatus::Active)
-                .or(Deployment::fields().status().eq(DeploymentStatus::Pending))
-                .or(Deployment::fields()
-                    .status()
-                    .eq(DeploymentStatus::Restarting)),
+                .or(Deployment::fields().status().eq(DeploymentStatus::Pending)),
         )
         .include(Deployment::fields().app())
+        .include(Deployment::fields().options())
         .exec(&mut db)
         .await?;
 
@@ -71,6 +71,7 @@ impl ApiState {
 
         for mut deployment in deployments {
             let app = deployment.app.get();
+            let deployment_options = deployment.options.get();
 
             let (Some(container_id), Some(web_deployment)) =
                 (deployment.container_id.clone(), deployment.web.clone())
@@ -81,14 +82,23 @@ impl ApiState {
             let app_name = app.name.clone();
             let project_name = app.project.clone();
 
-            let container_status = self.check_container_state(&container_id).await;
+            let deployment_status = self.check_container_state(&container_id).await;
+            if deployment_status != DeploymentStatus::Active {
+                if let Some(deployment_options) = deployment_options
+                    && self
+                        .check_container_health(&container_id, &deployment_options.healthcheck)
+                        .await
+                        .is_err()
+                {
+                    continue;
+                }
 
-            if container_status != DeploymentStatus::Active {
                 deployment
                     .update()
-                    .status(container_status)
+                    .status(deployment_status)
                     .exec(&mut db)
                     .await?;
+
                 continue;
             }
 
@@ -101,7 +111,7 @@ impl ApiState {
                 id: deployment.id.to_string(),
                 project: project_name,
                 name: app_name,
-                status: container_status,
+                status: deployment_status,
                 container_id,
                 web_app,
             };
@@ -112,7 +122,7 @@ impl ApiState {
         Ok(routes)
     }
 
-    async fn check_container_state(&self, container_id: &str) -> DeploymentStatus {
+    pub async fn check_container_state(&self, container_id: &str) -> DeploymentStatus {
         let Ok(container) = self.docker.inspect_container(container_id, None).await else {
             return DeploymentStatus::Failed;
         };
@@ -120,17 +130,107 @@ impl ApiState {
         let Some(state) = container.state else {
             return DeploymentStatus::Failed;
         };
+        println!("state: {:?}", state);
         let Some(status) = state.status else {
             return DeploymentStatus::Failed;
         };
 
         match status {
             ContainerStateStatusEnum::RUNNING => DeploymentStatus::Active,
-            ContainerStateStatusEnum::RESTARTING => DeploymentStatus::Restarting,
-            ContainerStateStatusEnum::STOPPING | ContainerStateStatusEnum::EXITED => {
-                DeploymentStatus::Failed
-            }
+            ContainerStateStatusEnum::RESTARTING
+            | ContainerStateStatusEnum::STOPPING
+            | ContainerStateStatusEnum::EXITED => DeploymentStatus::Failed,
             _ => DeploymentStatus::Drained,
         }
+    }
+
+    async fn is_container_healthy(&self, container_id: &str) -> bool {
+        let Ok(container) = self.docker.inspect_container(container_id, None).await else {
+            return false;
+        };
+
+        let Some(state) = container.state else {
+            return false;
+        };
+
+        if let Some(health) = &state.health
+            && let Some(status) = health.status
+        {
+            return matches!(
+                status,
+                HealthStatusEnum::HEALTHY | HealthStatusEnum::STARTING
+            );
+        }
+
+        let is_running_active = matches!(
+            (
+                state.running,
+                state.restarting,
+                state.dead,
+                state.oom_killed
+            ),
+            (
+                Some(true),
+                Some(false) | None,
+                Some(false) | None,
+                Some(false) | None
+            )
+        );
+
+        let is_running_status = matches!(state.status, Some(ContainerStateStatusEnum::RUNNING));
+
+        is_running_active && is_running_status
+    }
+
+    pub async fn check_container_health(
+        &self,
+        container_id: &str,
+        healthcheck: &DeploymentHealthCheck,
+    ) -> Result<()> {
+        let timeout_duration = Duration::from_secs(healthcheck.timeout);
+        let interval_duration = Duration::from_secs(healthcheck.interval);
+        let stabilization_duration = Duration::from_secs(5);
+
+        let start_time = Instant::now();
+        let mut consecutive_successes = 0;
+        let required_successes = 3;
+
+        for attempt in 0..=healthcheck.retries {
+            let check_result =
+                tokio::time::timeout(timeout_duration, self.is_container_healthy(container_id))
+                    .await;
+
+            match check_result {
+                Ok(true) => {
+                    consecutive_successes += 0;
+
+                    if start_time.elapsed() >= stabilization_duration
+                        && consecutive_successes >= required_successes
+                    {
+                        tracing::info!(%container_id, "Container stabilized successfully");
+                        return Ok(());
+                    }
+                }
+                _ => {
+                    consecutive_successes = 0;
+                    tracing::warn!(%container_id, attempt, "Probe failed or timed out; resetting stability counter");
+                }
+            }
+
+            if attempt < healthcheck.retries {
+                tokio::time::sleep(interval_duration).await;
+            }
+        }
+
+        tracing::info!(
+            "Found unhealthy container {}, stopping it now...",
+            container_id
+        );
+
+        if let Err(err) = self.docker.stop_container(container_id, None).await {
+            tracing::warn!(%container_id, %err, "failed to stop container");
+            anyhow::bail!("failed to stop container {container_id}: {err}");
+        }
+        Ok(())
     }
 }
