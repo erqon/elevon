@@ -89,6 +89,7 @@ impl ApiState {
                     && self
                         .check_container_health(
                             &container_id,
+                            None,
                             &deployment_options.healthcheck,
                             None,
                         )
@@ -190,9 +191,12 @@ impl ApiState {
     pub async fn check_container_health(
         &self,
         container_id: &str,
+        app_name: Option<&str>,
         healthcheck: &DeploymentHealthCheck,
         logger: Option<&(dyn ActionLogger + Send + Sync)>,
     ) -> Result<()> {
+        let log_id = app_name.unwrap_or_else(|| container_id);
+
         let timeout_duration = Duration::from_secs(healthcheck.timeout);
         let interval_duration = Duration::from_secs(healthcheck.interval);
         let stabilization_duration = Duration::from_secs(5);
@@ -213,7 +217,10 @@ impl ApiState {
                         && consecutive_successes >= healthcheck.required_successes
                     {
                         logger
-                            .log_event("Container stabilized successfully", StreamLogLevel::Info)
+                            .log_event(
+                                format!("[{log_id}] Container stabilized successfully",),
+                                StreamLogLevel::Info,
+                            )
                             .await?;
                         return Ok(());
                     }
@@ -221,7 +228,7 @@ impl ApiState {
                 _ => {
                     consecutive_successes = 0;
                     logger.log_event(
-                        format!("Probe failed or timed out; resetting stability counter (attempt {attempt}/{})", healthcheck.retries),
+                        format!("[{log_id}] Health check failed or timed out; resetting stability counter (attempt {attempt}/{})", healthcheck.retries),
                         StreamLogLevel::Warn,
                     ).await?;
                 }
@@ -235,7 +242,7 @@ impl ApiState {
         logger
             .log_event(
                 format!(
-                    "Container achieved stability threshold ({consecutive_successes}/{})",
+                    "[{log_id}] Container achieved stability threshold ({consecutive_successes}/{})",
                     healthcheck.required_successes
                 ),
                 StreamLogLevel::Info,
@@ -245,7 +252,7 @@ impl ApiState {
         if let Err(err) = self.docker.stop_container(container_id, None).await {
             logger
                 .log_event(
-                    format!("Failed to stop container {container_id}: {err}",),
+                    format!("[{log_id}] Failed to stop container {container_id}: {err}",),
                     StreamLogLevel::Warn,
                 )
                 .await?;

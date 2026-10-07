@@ -562,6 +562,7 @@ async fn pull_image_and_run_container(
             state
                 .check_container_health(
                     &container_id,
+                    Some(&options.app_config.name),
                     &DeploymentHealthCheck::from(&options.app_config.healthcheck),
                     Some(tx),
                 )
