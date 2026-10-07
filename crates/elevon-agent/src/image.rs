@@ -418,7 +418,6 @@ async fn deploy_app(
 
         // TODO: In case of any failure in here the container is kept running,
         // need to be deleted.
-        println!("[deploy_app]: app_data: {:?}", app_data);
 
         state
             .proxy_socket
@@ -569,7 +568,6 @@ async fn pull_image_and_run_container(
                 .await?;
 
             let deployment_status = state.check_container_state(&container_id).await;
-            println!("deployment_status, {}", deployment_status);
             //             if deployment_status != DeploymentStatus::Active {
             //                 let deployment_healthcheck =
             //                     DeploymentHealthCheck::from(&options.app_config.healthcheck);

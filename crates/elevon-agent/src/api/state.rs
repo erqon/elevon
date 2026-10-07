@@ -136,7 +136,6 @@ impl ApiState {
         let Some(state) = container.state else {
             return DeploymentStatus::Failed;
         };
-        println!("state: {:?}", state);
         let Some(status) = state.status else {
             return DeploymentStatus::Failed;
         };
