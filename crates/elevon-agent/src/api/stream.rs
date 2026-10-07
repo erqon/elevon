@@ -4,11 +4,13 @@ use std::{
     time::Duration,
 };
 
+use anyhow::Result;
+use async_trait::async_trait;
 use axum::response::{
     Sse,
     sse::{Event, KeepAlive, KeepAliveStream},
 };
-use elevon_contracts::deploy::StreamEvent;
+use elevon_contracts::deploy::{StreamEvent, StreamLogLevel};
 use elevon_fs::agent::AgentPath;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio_stream::wrappers::ReceiverStream;
@@ -27,12 +29,14 @@ pub async fn emit(tx: &StreamSender, event: StreamEvent) {
     let _ = tx.send(Ok(Event::default().data(line))).await;
 }
 
-pub trait ActionLogger {
-    fn log(&self, message: String) -> impl Future<Output = anyhow::Result<()>> + Send;
+#[async_trait]
+pub trait ActionLogger: Send + Sync {
+    async fn log(&self, message: String) -> Result<()>;
 }
 
+#[async_trait]
 impl ActionLogger for StreamSender {
-    async fn log(&self, message: String) -> anyhow::Result<()> {
+    async fn log(&self, message: String) -> Result<()> {
         emit(self, StreamEvent::log(message)).await;
         Ok(())
     }
@@ -90,5 +94,27 @@ pub fn lock_action() -> anyhow::Result<std::fs::File> {
             anyhow::bail!("another deployment is already running")
         }
         Err(TryLockError::Error(err)) => Err(err.into()),
+    }
+}
+
+#[async_trait]
+pub trait OptionLoggerExt {
+    async fn log_event(&self, msg: impl Into<String> + Send, level: StreamLogLevel) -> Result<()>;
+}
+
+#[async_trait]
+impl<'a> OptionLoggerExt for Option<&'a (dyn ActionLogger + Send + Sync)> {
+    async fn log_event(&self, msg: impl Into<String> + Send, level: StreamLogLevel) -> Result<()> {
+        let msg = msg.into();
+        if let Some(logger) = self {
+            logger.log(msg).await?;
+        } else {
+            match level {
+                StreamLogLevel::Info => tracing::info!(%msg),
+                StreamLogLevel::Warn => tracing::warn!(%msg),
+                StreamLogLevel::Error => tracing::error!(%msg),
+            }
+        }
+        Ok(())
     }
 }

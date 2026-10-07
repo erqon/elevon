@@ -163,6 +163,7 @@ pub struct AppHealthCheckConfig {
     pub interval: u64,
     pub timeout: u64,
     pub retries: usize,
+    pub required_successes: u64,
     pub endpoint: Option<String>,
 }
 
@@ -172,6 +173,7 @@ impl Default for AppHealthCheckConfig {
             interval: 5,
             timeout: 30,
             retries: 3,
+            required_successes: 1,
             endpoint: None,
         }
     }

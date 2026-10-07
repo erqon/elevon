@@ -230,6 +230,7 @@ pub struct DeploymentHealthCheck {
     pub interval: u64,
     pub timeout: u64,
     pub retries: usize,
+    pub required_successes: u64,
     pub endpoint: Option<String>,
 }
 
@@ -246,6 +247,7 @@ impl From<&AppHealthCheckConfig> for DeploymentHealthCheck {
             interval: value.interval,
             timeout: value.timeout,
             retries: value.retries,
+            required_successes: value.required_successes,
             endpoint: value.endpoint.clone(),
         }
     }
@@ -257,6 +259,7 @@ impl From<&DeploymentHealthCheck> for AppHealthCheckConfig {
             interval: value.interval,
             timeout: value.timeout,
             retries: value.retries,
+            required_successes: value.required_successes,
             endpoint: value.endpoint.clone(),
         }
     }

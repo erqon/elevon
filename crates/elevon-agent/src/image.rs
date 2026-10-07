@@ -9,8 +9,8 @@ use bollard::{
     },
 };
 use elevon_contracts::deploy::{
-    AppDeployPayload, AppPayload, AppRole, AppRollbackPayload, AppRuntimeOptions, StreamEvent,
-    StreamLogLevel, TlsType, WebApp,
+    AppDeployPayload, AppHealthCheckConfig, AppPayload, AppRole, AppRollbackPayload,
+    AppRuntimeOptions, StreamEvent, StreamLogLevel, TlsType, WebApp,
 };
 use elevon_fs::agent::{
     AppEnvOptions, TlsOptions, add_app_env, load_app_env, load_app_string_env, write_tls_file,
@@ -378,14 +378,12 @@ async fn deploy_app(
     let Ok((new_deployment, new_container_id)) =
         pull_image_and_run_container(tx, &state, deployment, options).await
     else {
+        // TODO: FEAT For multi project deployments add a linked way of stopping on either apps failure
         emit(
             tx,
             StreamEvent::Log {
                 level: StreamLogLevel::Warn,
-                message: format!(
-                    "[{}] Failed to start, stopping the deployment...",
-                    app_config.name
-                ),
+                message: format!("[{}] Failed to start, skipping", app_config.name),
             },
         )
         .await;
@@ -552,31 +550,42 @@ async fn pull_image_and_run_container(
             Err(err)
         }
         Ok(container_id) => {
-            if let Some(deployment_options) = deployment.options.get() {
-                if let Err(err) = state
-                    .check_container_health(&container_id, &deployment_options.healthcheck)
-                    .await
-                {}
-            }
+            emit(
+                tx,
+                StreamEvent::log(format!(
+                    "[{}] Checking container health",
+                    options.app_config.name
+                )),
+            )
+            .await;
+
+            state
+                .check_container_health(
+                    &container_id,
+                    &DeploymentHealthCheck::from(&options.app_config.healthcheck),
+                    Some(tx),
+                )
+                .await?;
 
             let deployment_status = state.check_container_state(&container_id).await;
-            if deployment_status != DeploymentStatus::Active {
-                let deployment_healthcheck =
-                    DeploymentHealthCheck::from(&options.app_config.healthcheck);
-
-                state
-                    .check_container_health(&container_id, &deployment_healthcheck)
-                    .await?
-            } else {
-                emit(
-                    tx,
-                    StreamEvent::log(format!(
-                        "[{}] Container started running",
-                        options.app_config.name
-                    )),
-                )
-                .await;
-            }
+            println!("deployment_status, {}", deployment_status);
+            //             if deployment_status != DeploymentStatus::Active {
+            //                 let deployment_healthcheck =
+            //                     DeploymentHealthCheck::from(&options.app_config.healthcheck);
+            //
+            //                 state
+            //                     .check_container_health(&container_id, &deployment_healthcheck)
+            //                     .await?
+            //             } else {
+            //                 emit(
+            //                     tx,
+            //                     StreamEvent::log(format!(
+            //                         "[{}] Container started running",
+            //                         options.app_config.name
+            //                     )),
+            //                 )
+            //                 .await;
+            //             }
 
             deployment
                 .update()
@@ -709,6 +718,7 @@ async fn rollback_deployment(
             port: web.port,
             domain: web.domain.clone(),
         }),
+        healthcheck: AppHealthCheckConfig::from(&deployment_options.healthcheck),
         ..Default::default()
     };
 

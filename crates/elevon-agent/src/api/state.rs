@@ -3,12 +3,13 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use bollard::plugin::{ContainerStateStatusEnum, HealthStatusEnum};
-use elevon_contracts::deploy::WebApp;
+use elevon_contracts::deploy::{StreamLogLevel, WebApp};
 use tokio::sync::RwLock;
 
 use crate::api::db::AgentDb;
 use crate::api::db::models::deployment::DeploymentHealthCheck;
 use crate::api::db::models::{Deployment, DeploymentStatus};
+use crate::api::stream::{ActionLogger, OptionLoggerExt};
 use crate::env::ElevonEnv;
 use crate::proxy::types::DeployAppData;
 use crate::socket::{Socket, SocketType};
@@ -86,7 +87,11 @@ impl ApiState {
             if deployment_status != DeploymentStatus::Active {
                 if let Some(deployment_options) = deployment_options
                     && self
-                        .check_container_health(&container_id, &deployment_options.healthcheck)
+                        .check_container_health(
+                            &container_id,
+                            &deployment_options.healthcheck,
+                            None,
+                        )
                         .await
                         .is_err()
                 {
@@ -186,6 +191,7 @@ impl ApiState {
         &self,
         container_id: &str,
         healthcheck: &DeploymentHealthCheck,
+        logger: Option<&(dyn ActionLogger + Send + Sync)>,
     ) -> Result<()> {
         let timeout_duration = Duration::from_secs(healthcheck.timeout);
         let interval_duration = Duration::from_secs(healthcheck.interval);
@@ -193,7 +199,6 @@ impl ApiState {
 
         let start_time = Instant::now();
         let mut consecutive_successes = 0;
-        let required_successes = 3;
 
         for attempt in 0..=healthcheck.retries {
             let check_result =
@@ -202,18 +207,23 @@ impl ApiState {
 
             match check_result {
                 Ok(true) => {
-                    consecutive_successes += 0;
+                    consecutive_successes += 1;
 
                     if start_time.elapsed() >= stabilization_duration
-                        && consecutive_successes >= required_successes
+                        && consecutive_successes >= healthcheck.required_successes
                     {
-                        tracing::info!(%container_id, "Container stabilized successfully");
+                        logger
+                            .log_event("Container stabilized successfully", StreamLogLevel::Info)
+                            .await?;
                         return Ok(());
                     }
                 }
                 _ => {
                     consecutive_successes = 0;
-                    tracing::warn!(%container_id, attempt, "Probe failed or timed out; resetting stability counter");
+                    logger.log_event(
+                        format!("Probe failed or timed out; resetting stability counter (attempt {attempt}/{})", healthcheck.retries),
+                        StreamLogLevel::Warn,
+                    ).await?;
                 }
             }
 
@@ -222,15 +232,26 @@ impl ApiState {
             }
         }
 
-        tracing::info!(
-            "Found unhealthy container {}, stopping it now...",
-            container_id
-        );
+        logger
+            .log_event(
+                format!(
+                    "Container achieved stability threshold ({consecutive_successes}/{})",
+                    healthcheck.required_successes
+                ),
+                StreamLogLevel::Info,
+            )
+            .await?;
 
         if let Err(err) = self.docker.stop_container(container_id, None).await {
-            tracing::warn!(%container_id, %err, "failed to stop container");
+            logger
+                .log_event(
+                    format!("Failed to stop container {container_id}: {err}",),
+                    StreamLogLevel::Warn,
+                )
+                .await?;
             anyhow::bail!("failed to stop container {container_id}: {err}");
         }
-        Ok(())
+
+        anyhow::bail!("Container failed to pass health check")
     }
 }
