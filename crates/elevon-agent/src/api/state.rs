@@ -194,7 +194,7 @@ impl ApiState {
         healthcheck: &DeploymentHealthCheck,
         logger: Option<&(dyn ActionLogger + Send + Sync)>,
     ) -> Result<()> {
-        let log_id = app_name.unwrap_or_else(|| container_id);
+        let log_id = app_name.unwrap_or(container_id);
 
         let timeout_duration = Duration::from_secs(healthcheck.timeout);
         let interval_duration = Duration::from_secs(healthcheck.interval);

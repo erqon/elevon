@@ -103,7 +103,7 @@ pub trait OptionLoggerExt {
 }
 
 #[async_trait]
-impl<'a> OptionLoggerExt for Option<&'a (dyn ActionLogger + Send + Sync)> {
+impl OptionLoggerExt for Option<&(dyn ActionLogger + Send + Sync)> {
     async fn log_event(&self, msg: impl Into<String> + Send, level: StreamLogLevel) -> Result<()> {
         let msg = msg.into();
         if let Some(logger) = self {
