@@ -52,5 +52,5 @@ Markers for features before the release
 
 - [x] Upgrade the binary
 - [x] Interactive rollback selector (choose previous release) **(M)**
-- [ ] Health-check gated promotion (switch traffic only after new container is healthy) **(M)**
-- [ ] Rollback-on-failure policy (auto rollback on health-check failure or deploy timeout) **(N)**
+- [x] Health-check gated promotion (switch traffic only after new container is healthy) **(M)**
+- [x] Rollback-on-failure policy (auto rollback on health-check failure or deploy timeout) **(N)**
