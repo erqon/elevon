@@ -241,3 +241,15 @@ impl Config {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_template() -> Result<()> {
+        let template_str = include_str!("../templates/config.yml");
+        Config::from_str(template_str)?;
+        Ok(())
+    }
+}

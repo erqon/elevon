@@ -198,7 +198,7 @@ impl ApiState {
 
         let timeout_duration = Duration::from_secs(healthcheck.timeout);
         let interval_duration = Duration::from_secs(healthcheck.interval);
-        let stabilization_duration = Duration::from_secs(5);
+        let stabilization_duration = Duration::from_secs(healthcheck.stabilization);
 
         let start_time = Instant::now();
         let mut consecutive_successes = 0;
@@ -248,6 +248,7 @@ impl ApiState {
             )
             .await?;
 
+        // TODO: This might hang or leave resources if Docker is unresponsive.
         if let Err(err) = self.docker.stop_container(container_id, None).await {
             logger
                 .log_event(
