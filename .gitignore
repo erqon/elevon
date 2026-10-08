@@ -6,5 +6,6 @@
 
 .vscode/
 .zed/
+.delta/
 
 devroot/

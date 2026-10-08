@@ -112,3 +112,77 @@ impl<'de> Deserialize<'de> for MemoryLimit {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use elevon_config::ElevonConfig;
+
+    const TEMPLATE_STR: &str = include_str!("../../templates/config.yml");
+
+    impl ElevonConfig for AppConfig {}
+
+    fn get_apps_section(yaml_str: &str) -> Option<String> {
+        let mut in_apps = false;
+        let mut result = Vec::new();
+
+        for line in yaml_str.lines() {
+            // Find the start of the `apps:` section
+            if !in_apps {
+                let trimmed = line.trim();
+                if trimmed.starts_with("# apps:") {
+                    in_apps = true;
+                    result.push(line);
+                }
+                continue;
+            }
+
+            // Stop when hitting the next unindented top-level key or block
+            let is_comment = line.trim_start().starts_with('#');
+            let leading_spaces = line.len() - line.trim_start().len();
+
+            if !line.trim().is_empty() && leading_spaces == 0 && !is_comment && line.contains(':') {
+                break;
+            }
+
+            result.push(line);
+        }
+
+        if result.is_empty() {
+            None
+        } else {
+            Some(result.join("\n"))
+        }
+    }
+
+    fn uncomment_yaml_block(commented_str: &str) -> String {
+        commented_str
+            .lines()
+            .map(|line| {
+                let trimmed = line.trim_start();
+                if let Some(stripped) = trimmed.strip_prefix('#') {
+                    // If there's a space after '#', strip it to preserve exact nested indentation
+                    if stripped.starts_with(' ') {
+                        &stripped[1..]
+                    } else {
+                        stripped
+                    }
+                } else {
+                    line
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn test_apps_from_template() -> anyhow::Result<()> {
+        let app_section = get_apps_section(TEMPLATE_STR).unwrap();
+        let app_block = uncomment_yaml_block(&app_section);
+
+        AppConfig::from_str(&app_block)?;
+
+        Ok(())
+    }
+}
