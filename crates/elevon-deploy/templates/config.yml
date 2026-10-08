@@ -62,7 +62,6 @@ env:
 #       retries: 3
 #       stabilization: 5
 #       required_successes: 1
-#       endpoint: /health
 #   worker:
 #     role: worker
 #     cmd: "deno run worker.ts"
