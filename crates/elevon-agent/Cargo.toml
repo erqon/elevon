@@ -18,7 +18,7 @@ bytes.workspace = true
 clap.workspace = true
 futures-util.workspace = true
 jiff.workspace = true
-pingora = { version = "0.8.1", features = ["lb", "proxy", "boringssl"] }
+pingora = { version = "0.9.0", features = ["lb", "proxy", "boringssl"] }
 reqwest = { workspace = true, features = ["stream", "query"] }
 serde.workspace = true
 serde_json.workspace = true

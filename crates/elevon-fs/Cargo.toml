@@ -8,7 +8,7 @@ default = ["agent"]
 agent = []
 
 [dependencies]
-flate2 = "1.1.5"
+flate2 = "1.1.10"
 tar.workspace = true
 tempfile = "3.27.0"
 
