@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 base64 = "0.23.1"
-rand = "0.10.2"
+rand = "0.10.3"
 tracing-subscriber = { version = "0.3.23", features = ["ansi", "json", "env-filter"] }
 
 anyhow.workspace = true
