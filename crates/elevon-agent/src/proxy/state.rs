@@ -14,10 +14,11 @@ use elevon_contracts::deploy::WebApp;
 use pingora::lb::{LoadBalancer, health_check::TcpHealthCheck, selection::RoundRobin};
 
 use crate::{
+    api::db::models::DeploymentStatus,
     env::ElevonEnv,
     proxy::{
         tls::DynamicCert,
-        types::{BackendRuntime, DeployAppData, DeployAppState, RouteBackendRuntime},
+        types::{BackendRuntime, DeployAppData, RouteBackendRuntime},
     },
     socket::{Socket, SocketType, UnixClient},
 };
@@ -125,10 +126,10 @@ impl ProxyState {
             return;
         }
 
-        if route.state != DeployAppState::Active {
+        if route.status != DeploymentStatus::Active {
             tracing::debug!(
                 domain = %web_app.domain,
-                state = ?route.state,
+                status = ?route.status,
                 "skipping inactive application route"
             );
             return;
@@ -143,7 +144,7 @@ impl ProxyState {
                 .unwrap_or_else(|err| {
                     tracing::error!(
                         domain = %web_app.domain,
-                        state = ?route.state,
+                        status = ?route.status,
                         error = %err,
                         "failed to save/update certificates"
                     )
@@ -163,7 +164,7 @@ impl ProxyState {
 
         let addrs: Vec<String> = backends
             .iter()
-            .filter(|b| b.state == DeployAppState::Active)
+            .filter(|b| b.status == DeploymentStatus::Active)
             .map(|_| format!("127.0.0.1:{}", web_app.port))
             .collect();
 
@@ -191,7 +192,7 @@ impl ProxyState {
             .filter_map(|route| {
                 let web_app = route.web_app.clone()?;
 
-                if route.state != DeployAppState::Active {
+                if route.status != DeploymentStatus::Active {
                     return None;
                 }
 
@@ -226,7 +227,7 @@ impl ProxyState {
     pub fn drain_app(&self, container_id: String, web_app: Option<WebApp>) {
         let mut backend_runtime = BackendRuntime {
             container_id: container_id.clone(),
-            state: DeployAppState::Draining,
+            status: DeploymentStatus::Drained,
             ..Default::default()
         };
 
@@ -237,7 +238,7 @@ impl ProxyState {
 
                 for backend in backends.iter_mut() {
                     if backend.container_id == container_id {
-                        backend.state = DeployAppState::Draining;
+                        backend.status = DeploymentStatus::Drained;
                     }
                 }
 
@@ -305,7 +306,7 @@ impl ProxyState {
             .iter()
             .filter_map(|r| {
                 let runtime = r.value();
-                if runtime.state != DeployAppState::Draining {
+                if runtime.status != DeploymentStatus::Drained {
                     return None;
                 }
 

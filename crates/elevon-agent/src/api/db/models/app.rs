@@ -22,9 +22,6 @@ pub struct App {
     #[default(5)]
     pub keep_releases: u8,
 
-    #[default(AppRoleDb::Web)]
-    pub role: AppRoleDb,
-
     #[has_many]
     pub deployments: toasty::Deferred<Vec<Deployment>>,
 
@@ -49,13 +46,14 @@ impl App {
     }
 
     pub async fn get_or_create(db: &mut toasty::Db, payload: &AppPayload) -> Result<Self> {
-        let app = Self::filter(Self::fields().name().eq(&payload.name))
-            .order_by(Self::fields().updated_at().asc())
-            .first()
-            .exec(db)
-            .await?;
+        let app = Self::get_by_name_and_project(db, &payload.name, &payload.project)
+            .await
+            .ok();
 
         if let Some(mut app) = app {
+            // TODO: There might be some edge case when changing the role,
+            // it wont get updated in here which could cause some issues
+            // Will need to be handled after adding unit and integration tests
             if app.keep_releases != payload.keep_releases {
                 app.update()
                     .keep_releases(payload.keep_releases)
@@ -65,17 +63,17 @@ impl App {
 
             return Ok(app);
         }
-
-        let role = if payload.web_app.is_some() {
-            AppRoleDb::Web
-        } else {
-            AppRoleDb::Worker
-        };
+        //
+        //         let role = if payload.web_app.is_some() {
+        //             AppRoleDb::Web
+        //         } else {
+        //             AppRoleDb::Worker
+        //         };
 
         let app = toasty::create!(App {
             name: payload.name.to_string(),
             project: payload.project.to_string(),
-            role,
+            // role,
             keep_releases: payload.keep_releases
         })
         .exec(db)
@@ -87,7 +85,7 @@ impl App {
     pub async fn get_by_name_or_id(
         db: &mut toasty::Db,
         key: &str,
-        project: String,
+        project: Option<String>,
     ) -> Result<Self> {
         match uuid::Uuid::parse_str(key) {
             Ok(id) => match Self::get_by_id(db, id).await {
@@ -96,12 +94,18 @@ impl App {
                     anyhow::bail!("app '{key}' not found by ID ({id_err:#})")
                 }
             },
-            Err(_) => match Self::get_by_name_and_project(db, key, project).await {
-                Ok(k) => Ok(k),
-                Err(err) => Err(err).with_context(|| {
-                    format!("no app found with name '{key}' (and it is not a valid UUID)")
-                }),
-            },
+            Err(err) => {
+                if let Some(project) = project {
+                    match Self::get_by_name_and_project(db, key, project).await {
+                        Ok(k) => Ok(k),
+                        Err(err) => Err(err).with_context(|| {
+                            format!("no app found with name '{key}' (and it is not a valid UUID)")
+                        }),
+                    }
+                } else {
+                    Err(err).with_context(|| format!("invalid UUID no app found with ID '{key}'"))
+                }
+            }
         }
     }
 }

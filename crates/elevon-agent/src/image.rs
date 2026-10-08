@@ -9,8 +9,8 @@ use bollard::{
     },
 };
 use elevon_contracts::deploy::{
-    AppDeployPayload, AppPayload, AppRole, AppRollbackPayload, AppRuntimeOptions, StreamEvent,
-    StreamLogLevel, TlsType, WebApp,
+    AppDeployPayload, AppHealthCheckConfig, AppPayload, AppRole, AppRollbackPayload,
+    AppRuntimeOptions, StreamEvent, StreamLogLevel, TlsType, WebApp,
 };
 use elevon_fs::agent::{
     AppEnvOptions, TlsOptions, add_app_env, load_app_env, load_app_string_env, write_tls_file,
@@ -22,8 +22,8 @@ use uuid::Uuid;
 use crate::{
     api::{
         db::models::{
-            App, Deployment, DeploymentRuntimeOption, DeploymentRuntimeOptions, DeploymentStatus,
-            deployment::DeploymentWeb,
+            App, Deployment, DeploymentOption, DeploymentRuntimeOptions, DeploymentStatus,
+            deployment::{DeploymentHealthCheck, DeploymentWeb},
         },
         state::SharedApiState,
         stream::{StreamSender, emit},
@@ -33,6 +33,67 @@ use crate::{
 
 static ALLOCATED_PORTS: LazyLock<RwLock<HashSet<u16>>> =
     LazyLock::new(|| RwLock::new(HashSet::new()));
+
+pub async fn deploy_apps(
+    tx: &StreamSender,
+    state: SharedApiState,
+    payload: AppDeployPayload,
+) -> Result<()> {
+    for app in payload.apps {
+        deploy_app(tx, state.clone(), app, None, None).await?;
+    }
+
+    Ok(())
+}
+
+pub async fn drain_app(
+    state: &SharedApiState,
+    db: &mut toasty::Db,
+    mut deployment: Deployment,
+    container_id: String,
+    web_app: Option<WebApp>,
+) -> Result<()> {
+    toasty::update!(deployment {
+        status: DeploymentStatus::Drained
+    })
+    .exec(db)
+    .await?;
+
+    state
+        .proxy_socket
+        .send(AgentEvent::DrainApp(container_id, web_app))
+        .await?;
+
+    Ok(())
+}
+
+pub async fn rollback_apps(
+    tx: &StreamSender,
+    state: SharedApiState,
+    payload: AppRollbackPayload,
+) -> Result<()> {
+    // Prevents executing with both 'apps' and 'deployment_ids' present
+    if !payload.apps.is_empty() && !payload.deployment_ids.is_empty() {
+        emit(
+            tx,
+            StreamEvent::Error {
+                message: "Both apps and deployment ids can't be present".to_string(),
+            },
+        )
+        .await;
+        return Ok(());
+    }
+
+    for app in payload.apps {
+        rollback_with_app(tx, state.clone(), &app.project, &app.name).await?;
+    }
+
+    for deployment_id_str in payload.deployment_ids {
+        rollback_with_deployment(tx, state.clone(), deployment_id_str).await?;
+    }
+
+    Ok(())
+}
 
 fn find_free_port() -> Option<u16> {
     for port in 3334..=9998 {
@@ -188,117 +249,6 @@ async fn run_container(
     Ok(container.id)
 }
 
-struct _DeployAppOptions<'cfg, 'tx> {
-    db_tx: &'tx mut toasty::Transaction<'cfg>,
-    new_port: Option<u16>,
-    app_config: &'cfg AppPayload,
-}
-
-/// Creates Deployment, sets TLS files, sets Environment variables,
-/// and then runs the container. Afterwards updates Deployment's status.
-async fn _deploy_app(
-    tx: &StreamSender,
-    docker: &bollard::Docker,
-    mut deployment: Deployment,
-    options: _DeployAppOptions<'_, '_>,
-) -> Result<(Deployment, String)> {
-    prepare_env_variables(options.app_config, &deployment.id.to_string())?;
-
-    let pull_image_options = PullImageOptions {
-        project: &options.app_config.project,
-        name: &options.app_config.name,
-        image_ref: &options.app_config.image_ref,
-        deployment_id: &deployment.id.to_string(),
-    };
-
-    pull_image(tx, docker, pull_image_options).await.inspect_err(
-        |err| tracing::error!(app = %options.app_config.name, error = %err, "failed to pull image"),
-    )?;
-
-    // TODO: During rollbacks previous deployment might have been running on a different
-    // domain, with different certificates, so the requests will fail due to the certs missmatch.
-    if let Some(tls) = options.app_config.tls.as_ref() {
-        let tls_options = TlsOptions {
-            project: options.app_config.project.clone(),
-            app: Some(options.app_config.name.clone()),
-        };
-
-        write_tls_file(tls.cert.as_bytes(), TlsType::Cert, tls_options.clone())?;
-        write_tls_file(tls.key.as_bytes(), TlsType::Key, tls_options)?;
-    }
-
-    let container_id =
-        run_container(docker, &deployment, options.app_config, options.new_port).await;
-
-    let res = match container_id {
-        Err(err) => {
-            if let Some(port) = options.new_port {
-                clear_port(&port).await;
-            }
-
-            emit(
-                tx,
-                StreamEvent::log(format!(
-                    "[{}] Container failed to start",
-                    options.app_config.name
-                )),
-            )
-            .await;
-
-            deployment
-                .update()
-                .image_ref(Some(options.app_config.image_ref.clone()))
-                .status(DeploymentStatus::Failed)
-                .exec(options.db_tx)
-                .await?;
-
-            Err(err)
-        }
-        Ok(container_id) => {
-            emit(
-                tx,
-                StreamEvent::log(format!(
-                    "[{}] Container started running",
-                    options.app_config.name
-                )),
-            )
-            .await;
-
-            deployment
-                .update()
-                .image_ref(Some(options.app_config.image_ref.clone()))
-                .container_id(container_id.clone())
-                .status(DeploymentStatus::Active)
-                .exec(options.db_tx)
-                .await?;
-
-            Ok((deployment, container_id))
-        }
-    }?;
-    Ok(res)
-}
-
-pub async fn drain_app(
-    state: &SharedApiState,
-    db: &mut toasty::Db,
-    mut deployment: Deployment,
-    container_id: String,
-    web_app: Option<WebApp>,
-) -> Result<()> {
-    toasty::update!(deployment {
-        status: DeploymentStatus::Drained
-    })
-    .exec(db)
-    .await?;
-
-    state
-        .proxy_socket
-        .send(AgentEvent::DrainApp(container_id, web_app))
-        .await?;
-
-    Ok(())
-}
-
 async fn prune_old_releases(
     docker: &bollard::Docker,
     db: &mut toasty::Db,
@@ -400,35 +350,46 @@ async fn deploy_app(
                 _ => None,
             };
 
-            let deployment = toasty::create!(Deployment {
-                app_id: db_app.id,
-                web: deployment_web
-            })
-            .exec(&mut db_tx)
-            .await?;
+            let deployment = Deployment::create()
+                .app_id(db_app.id)
+                .web(deployment_web)
+                .exec(&mut db_tx)
+                .await?;
 
-            let options = DeploymentRuntimeOptions::from(&app_config.runtime_options);
+            let runtime_options = DeploymentRuntimeOptions::from(&app_config.runtime_options);
 
-            toasty::create!(DeploymentRuntimeOption {
-                deployment_id: deployment.id,
-                options
-            })
-            .exec(&mut db_tx)
-            .await?;
+            DeploymentOption::create()
+                .deployment_id(deployment.id)
+                .runtime(runtime_options)
+                .exec(&mut db_tx)
+                .await?;
 
             deployment
         }
     };
 
     let web_deployment = deployment.web.clone();
-    let deploy_app_options = _DeployAppOptions {
+    let options = PullImageAndRunContainerOptions {
         db_tx: &mut db_tx,
         new_port,
         app_config: &app_config,
     };
 
-    let (new_deployment, new_container_id) =
-        _deploy_app(tx, &state.docker, deployment, deploy_app_options).await?;
+    let Ok((new_deployment, new_container_id)) =
+        pull_image_and_run_container(tx, &state, deployment, options).await
+    else {
+        // TODO: FEAT For multi project deployments add a linked way of stopping on either apps failure
+        emit(
+            tx,
+            StreamEvent::Log {
+                level: StreamLogLevel::Warn,
+                message: format!("[{}] Failed to start, skipping", app_config.name),
+            },
+        )
+        .await;
+
+        return Ok(());
+    };
 
     let app_data = DeployAppData {
         id: new_deployment.id.to_string(),
@@ -442,10 +403,10 @@ async fn deploy_app(
             }),
             _ => None,
         },
-        ..Default::default()
+        status: DeploymentStatus::Active,
     };
 
-    if AppRole::Web == app_config.runtime_options.role {
+    if AppRole::Web == app_config.role {
         emit(
             tx,
             StreamEvent::log(format!(
@@ -516,44 +477,127 @@ async fn deploy_app(
     Ok(())
 }
 
-pub async fn deploy_apps(
-    tx: &StreamSender,
-    state: SharedApiState,
-    payload: AppDeployPayload,
-) -> Result<()> {
-    for app in payload.apps {
-        deploy_app(tx, state.clone(), app, None, None).await?;
-    }
-
-    Ok(())
+struct PullImageAndRunContainerOptions<'cfg, 'tx> {
+    db_tx: &'tx mut toasty::Transaction<'cfg>,
+    new_port: Option<u16>,
+    app_config: &'cfg AppPayload,
 }
 
-pub async fn rollback_apps(
+/// Creates Deployment, sets TLS files, sets Environment variables,
+/// and then runs the container. Afterwards updates Deployment's status.
+async fn pull_image_and_run_container(
     tx: &StreamSender,
-    state: SharedApiState,
-    payload: AppRollbackPayload,
-) -> Result<()> {
-    // Prevents executing with both 'apps' and 'deployment_ids' present
-    if !payload.apps.is_empty() && !payload.deployment_ids.is_empty() {
-        emit(
-            tx,
-            StreamEvent::Error {
-                message: "Both apps and deployment ids can't be present".to_string(),
-            },
-        )
-        .await;
-        return Ok(());
+    state: &SharedApiState,
+    mut deployment: Deployment,
+    options: PullImageAndRunContainerOptions<'_, '_>,
+) -> Result<(Deployment, String)> {
+    prepare_env_variables(options.app_config, &deployment.id.to_string())?;
+
+    let pull_image_options = PullImageOptions {
+        project: &options.app_config.project,
+        name: &options.app_config.name,
+        image_ref: &options.app_config.image_ref,
+        deployment_id: &deployment.id.to_string(),
+    };
+
+    pull_image(tx, &state.docker, pull_image_options).await.inspect_err(
+        |err| tracing::error!(app = %options.app_config.name, error = %err, "failed to pull image"),
+    )?;
+
+    // TODO: During rollbacks previous deployment might have been running on a different
+    // domain, with different certificates, so the requests will fail due to the certs missmatch.
+    if let Some(tls) = options.app_config.tls.as_ref() {
+        let tls_options = TlsOptions {
+            project: options.app_config.project.clone(),
+            app: Some(options.app_config.name.clone()),
+        };
+
+        write_tls_file(tls.cert.as_bytes(), TlsType::Cert, tls_options.clone())?;
+        write_tls_file(tls.key.as_bytes(), TlsType::Key, tls_options)?;
     }
 
-    for app in payload.apps {
-        rollback_with_app(tx, state.clone(), &app.project, &app.name).await?;
-    }
+    let container_id = run_container(
+        &state.docker,
+        &deployment,
+        options.app_config,
+        options.new_port,
+    )
+    .await;
 
-    for deployment_id_str in payload.deployment_ids {
-        rollback_with_deployment(tx, state.clone(), deployment_id_str).await?;
-    }
+    let res = match container_id {
+        Err(err) => {
+            if let Some(port) = options.new_port {
+                clear_port(&port).await;
+            }
 
-    Ok(())
+            emit(
+                tx,
+                StreamEvent::log(format!(
+                    "[{}] Container failed to start",
+                    options.app_config.name
+                )),
+            )
+            .await;
+
+            deployment
+                .update()
+                .image_ref(Some(options.app_config.image_ref.clone()))
+                .status(DeploymentStatus::Failed)
+                .exec(options.db_tx)
+                .await?;
+
+            Err(err)
+        }
+        Ok(container_id) => {
+            emit(
+                tx,
+                StreamEvent::log(format!(
+                    "[{}] Checking container health",
+                    options.app_config.name
+                )),
+            )
+            .await;
+
+            state
+                .check_container_health(
+                    &container_id,
+                    Some(&options.app_config.name),
+                    &DeploymentHealthCheck::from(&options.app_config.healthcheck),
+                    Some(tx),
+                )
+                .await?;
+
+            let deployment_status = state.check_container_state(&container_id).await;
+            //             if deployment_status != DeploymentStatus::Active {
+            //                 let deployment_healthcheck =
+            //                     DeploymentHealthCheck::from(&options.app_config.healthcheck);
+            //
+            //                 state
+            //                     .check_container_health(&container_id, &deployment_healthcheck)
+            //                     .await?
+            //             } else {
+            //                 emit(
+            //                     tx,
+            //                     StreamEvent::log(format!(
+            //                         "[{}] Container started running",
+            //                         options.app_config.name
+            //                     )),
+            //                 )
+            //                 .await;
+            //             }
+
+            deployment
+                .update()
+                .image_ref(Some(options.app_config.image_ref.clone()))
+                .container_id(container_id.clone())
+                .status(deployment_status)
+                .exec(options.db_tx)
+                .await?;
+
+            Ok((deployment, container_id))
+        }
+    }?;
+    Ok(res)
 }
 
 async fn rollback_with_app(
@@ -610,7 +654,7 @@ async fn rollback_with_deployment(
 
     let deployment = Deployment::filter(Deployment::fields().id().eq(deployment_id))
         .include(Deployment::fields().app())
-        .include(Deployment::fields().runtime_options())
+        .include(Deployment::fields().options())
         .first()
         .exec(&mut db)
         .await?;
@@ -644,10 +688,11 @@ async fn rollback_deployment(
         _ => target_deployment.app.get(),
     };
 
-    let (Some(image_ref), Some(deployment_runtime_options)) = (
-        &target_deployment.image_ref,
-        &target_deployment.runtime_options.get(),
-    ) else {
+    let deployment_options = target_deployment.options.get();
+
+    let (Some(image_ref), Some(deployment_options)) =
+        (&target_deployment.image_ref, deployment_options)
+    else {
         emit(
             tx,
             StreamEvent::log(format!(
@@ -659,7 +704,7 @@ async fn rollback_deployment(
         return Ok(());
     };
 
-    let runtime_options = AppRuntimeOptions::from(&deployment_runtime_options.options);
+    let runtime_options = AppRuntimeOptions::from(&deployment_options.runtime);
     let deployment_to_drain = Deployment::get_latest_deployment(&mut db, &app.id).await?;
 
     let app_payload = AppPayload {
@@ -672,6 +717,7 @@ async fn rollback_deployment(
             port: web.port,
             domain: web.domain.clone(),
         }),
+        healthcheck: AppHealthCheckConfig::from(&deployment_options.healthcheck),
         ..Default::default()
     };
 

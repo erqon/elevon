@@ -3,6 +3,8 @@ use std::{sync::atomic::AtomicUsize, time::Instant};
 use elevon_contracts::deploy::WebApp;
 use serde::{Deserialize, Serialize};
 
+use crate::api::db::models::DeploymentStatus;
+
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "event", content = "data")]
 pub enum AgentEvent {
@@ -10,19 +12,12 @@ pub enum AgentEvent {
     DrainApp(String, Option<WebApp>),
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-pub enum DeployAppState {
-    #[default]
-    Active,
-    Draining,
-}
-
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DeployAppData {
     pub id: String,
     pub project: String,
     pub name: String,
-    pub state: DeployAppState,
+    pub status: DeploymentStatus,
     pub container_id: String,
     pub web_app: Option<WebApp>,
 }
@@ -37,6 +32,6 @@ pub struct RouteBackendRuntime {
 #[derive(Debug, Default)]
 pub struct BackendRuntime {
     pub container_id: String,
-    pub state: DeployAppState,
+    pub status: DeploymentStatus,
     pub route: Option<RouteBackendRuntime>,
 }

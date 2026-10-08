@@ -56,6 +56,11 @@ env:
 # apps:
 #   api:
 #     role: web
+#     healthcheck:
+#       interval: 5
+#       timeout: 30
+#       retries: 3
+#       endpoint: /health
 #   worker:
 #     role: worker
 #     cmd: "deno run worker.ts"
@@ -64,4 +69,3 @@ env:
 #       cpu: 2
 #       memory: 512mb
 #       network: my-network
-

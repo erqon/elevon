@@ -4,7 +4,7 @@ version = 1
 
 [[schema.tables]]
 id = 0
-name = "deployment_runtime_options"
+name = "deployment_options"
 primary_key = { columns = [{ table = 0, index = 0 }], index = { table = 0, index = 0 } }
 
 [[schema.tables.columns]]
@@ -21,48 +21,79 @@ storage_ty = "Blob"
 
 [[schema.tables.columns]]
 id = { table = 0, index = 2 }
-name = "options_role"
+name = "role"
 ty = "String"
-storage_ty = "Text"
+storage_ty = { Enum = { name = "app_role_db", variants = [{ name = "web" }, { name = "worker" }] } }
 
 [[schema.tables.columns]]
 id = { table = 0, index = 3 }
-name = "options_cmd"
+name = "runtime_cmd"
 ty = "String"
 storage_ty = "Text"
 nullable = true
 
 [[schema.tables.columns]]
 id = { table = 0, index = 4 }
-name = "options_restart"
+name = "runtime_restart"
 ty = "String"
 storage_ty = "Text"
 nullable = true
 
 [[schema.tables.columns]]
 id = { table = 0, index = 5 }
-name = "options_memory_limit"
+name = "runtime_memory_limit"
 ty = "I64"
 storage_ty = { Integer = 8 }
 nullable = true
 
 [[schema.tables.columns]]
 id = { table = 0, index = 6 }
-name = "options_cpu_limit"
+name = "runtime_cpu_limit"
 ty = "I64"
 storage_ty = { Integer = 8 }
 nullable = true
 
 [[schema.tables.columns]]
 id = { table = 0, index = 7 }
-name = "options_network"
+name = "runtime_network"
+ty = "String"
+storage_ty = "Text"
+nullable = true
+
+[[schema.tables.columns]]
+id = { table = 0, index = 8 }
+name = "healthcheck_interval"
+ty = "U64"
+storage_ty = { UnsignedInteger = 8 }
+
+[[schema.tables.columns]]
+id = { table = 0, index = 9 }
+name = "healthcheck_timeout"
+ty = "U64"
+storage_ty = { UnsignedInteger = 8 }
+
+[[schema.tables.columns]]
+id = { table = 0, index = 10 }
+name = "healthcheck_retries"
+ty = "U64"
+storage_ty = { UnsignedInteger = 8 }
+
+[[schema.tables.columns]]
+id = { table = 0, index = 11 }
+name = "healthcheck_required_successes"
+ty = "U64"
+storage_ty = { UnsignedInteger = 8 }
+
+[[schema.tables.columns]]
+id = { table = 0, index = 12 }
+name = "healthcheck_endpoint"
 ty = "String"
 storage_ty = "Text"
 nullable = true
 
 [[schema.tables.indices]]
 id = { table = 0, index = 0 }
-name = "index_deployment_runtime_options_by_id"
+name = "index_deployment_options_by_id"
 on = 0
 columns = [{ column = { table = 0, index = 0 }, op = "Eq", scope = "Partition" }]
 unique = true
@@ -70,7 +101,7 @@ primary_key = true
 
 [[schema.tables.indices]]
 id = { table = 0, index = 1 }
-name = "index_deployment_runtime_options_by_deployment_id"
+name = "index_deployment_options_by_deployment_id"
 on = 0
 columns = [{ column = { table = 0, index = 1 }, op = "Eq", scope = "Partition" }]
 unique = true
@@ -202,18 +233,12 @@ storage_ty = { UnsignedInteger = 1 }
 
 [[schema.tables.columns]]
 id = { table = 2, index = 4 }
-name = "role"
-ty = "String"
-storage_ty = { Enum = { name = "app_role_db", variants = [{ name = "web" }, { name = "worker" }] } }
-
-[[schema.tables.columns]]
-id = { table = 2, index = 5 }
 name = "created_at"
 ty = "String"
 storage_ty = "Text"
 
 [[schema.tables.columns]]
-id = { table = 2, index = 6 }
+id = { table = 2, index = 5 }
 name = "updated_at"
 ty = "String"
 storage_ty = "Text"

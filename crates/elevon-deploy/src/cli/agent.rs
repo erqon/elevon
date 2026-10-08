@@ -216,7 +216,7 @@ trait AppCommandsTrait {
         let headers = agent_client.headers();
 
         let payload = AppStopPayload {
-            project: config.name.clone(),
+            project: Some(config.name.clone()),
             apps: args.apps.clone(),
             force: args.force,
         };
