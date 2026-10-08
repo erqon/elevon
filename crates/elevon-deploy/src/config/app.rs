@@ -128,7 +128,7 @@ mod tests {
         let mut result = Vec::new();
 
         for line in yaml_str.lines() {
-            // Find the start of the `apps:` section
+            // Find the start of the 'apps:' section
             if !in_apps {
                 let trimmed = line.trim();
                 if trimmed.starts_with("# apps:") {

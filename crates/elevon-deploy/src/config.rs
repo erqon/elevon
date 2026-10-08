@@ -246,10 +246,25 @@ impl Config {
 mod tests {
     use super::*;
 
+    impl ElevonConfig for BuildConfig {}
+
     #[test]
     fn test_template() -> Result<()> {
         let template_str = include_str!("../templates/config.yml");
         Config::from_str(template_str)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_build_config() -> Result<()> {
+        let build_config_str = r#"
+            build:
+                path: ./dev
+                dockerfile: ./Dockerfile.dev
+        "#;
+
+        BuildConfig::from_str(build_config_str)?;
+
         Ok(())
     }
 }
