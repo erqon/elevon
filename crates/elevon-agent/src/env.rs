@@ -22,6 +22,7 @@ impl Default for ElevonEnv {
             agent_domain: None,
             agent_port: 3333,
             proxy_http_port: 80,
+            // by doing Self::default at 56 this stays 443 even if it is not present in config
             proxy_https_port: Some(443),
             turso_remote_url: None,
         }
@@ -35,6 +36,9 @@ impl ElevonEnv {
             .as_ref()
             .map(|c| parse_port(c.port.clone()))
             .unwrap_or(Ok((80, Some(443))))?;
+
+        tracing::info!("config: {:?}", config);
+        tracing::info!("proxy_ports: {:?}", proxy_ports);
 
         let mut elevon_env = Self {
             agent_domain: Some(config.agent.domain.clone()),

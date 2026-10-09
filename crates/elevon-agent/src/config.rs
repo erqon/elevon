@@ -4,7 +4,7 @@ use elevon_contracts::deploy::{TlsConfig, TlsType};
 use elevon_fs::agent::{TlsOptions, write_tls_file};
 use serde::{Deserialize, Deserializer};
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct AgentConfig {
     pub domain: String,
     pub port: u16,
@@ -15,7 +15,7 @@ fn default_ports() -> String {
     "80:443".to_string()
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct ProxyConfig {
     #[serde(default = "default_ports", deserialize_with = "coerce_string_port")]
     pub port: String,
@@ -55,7 +55,7 @@ pub fn parse_port(ports: String) -> Result<(u16, Option<u16>)> {
     Ok((http, https))
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Config {
     pub agent: AgentConfig,
     pub proxy: Option<ProxyConfig>,
@@ -100,8 +100,13 @@ mod tests {
     #[test]
     fn test_config_tests() -> Result<()> {
         Config::from_file("tests/config_test_1.yml").context("config_test_1")?;
-        Config::from_file("tests/config_test_2.yml").context("config_test_2")?;
+        let config = Config::from_file("tests/config_test_2.yml").context("config_test_2")?;
 
+        if let Some(proxy_confing) = config.proxy {
+            let proxy_ports = parse_port(proxy_confing.port)?;
+            println!("ports: {:?}", proxy_ports);
+        }
+        
         Ok(())
     }
 }
