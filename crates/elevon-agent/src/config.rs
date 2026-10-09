@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use elevon_config::ElevonConfig;
 use elevon_contracts::deploy::{TlsConfig, TlsType};
 use elevon_fs::agent::{TlsOptions, write_tls_file};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 #[derive(Deserialize)]
 pub struct AgentConfig {
@@ -17,8 +17,25 @@ fn default_ports() -> String {
 
 #[derive(Deserialize)]
 pub struct ProxyConfig {
-    #[serde(default = "default_ports")]
+    #[serde(default = "default_ports", deserialize_with = "coerce_string_port")]
     pub port: String,
+}
+
+fn coerce_string_port<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrInt {
+        String(String),
+        Int(u64),
+    }
+
+    match StringOrInt::deserialize(deserializer)? {
+        StringOrInt::String(s) => Ok(s),
+        StringOrInt::Int(i) => Ok(i.to_string()),
+    }
 }
 
 pub fn parse_port(ports: String) -> Result<(u16, Option<u16>)> {
@@ -65,3 +82,26 @@ impl Config {
 }
 
 impl ElevonConfig for Config {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    impl ElevonConfig for ProxyConfig {}
+
+    #[test]
+    fn test_config_template() -> Result<()> {
+        let template_str = include_str!("templates/config.yml");
+        Config::from_str(template_str)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_config_tests() -> Result<()> {
+        Config::from_file("tests/config_test_1.yml").context("config_test_1")?;
+        Config::from_file("tests/config_test_2.yml").context("config_test_2")?;
+
+        Ok(())
+    }
+}
