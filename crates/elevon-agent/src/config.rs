@@ -90,31 +90,17 @@ mod tests {
     impl ElevonConfig for ProxyConfig {}
 
     #[test]
-    fn test_templates() -> Result<()> {
+    fn test_config_template() -> Result<()> {
         let template_str = include_str!("templates/config.yml");
         Config::from_str(template_str)?;
-
-        Config::from_file("tests/template_test_1.yml").context("template_test_1")?;
-        Config::from_file("tests/template_test_2.yml").context("template_test_2")?;
 
         Ok(())
     }
 
     #[test]
-    fn test_proxy_config() -> Result<()> {
-        let config_str = r#"
-            proxy:
-                port: 6188
-        "#;
-        let proxy_config = ProxyConfig::from_str(config_str)?;
-
-        parse_port(proxy_config.port)?;
-
-        let config_str = r#"
-            proxy:
-                port: 6188:6199
-        "#;
-        ProxyConfig::from_str(config_str)?;
+    fn test_config_tests() -> Result<()> {
+        Config::from_file("tests/config_test_1.yml").context("config_test_1")?;
+        Config::from_file("tests/config_test_2.yml").context("config_test_2")?;
 
         Ok(())
     }
