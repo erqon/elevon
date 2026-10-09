@@ -1,0 +1,6 @@
+agent:
+  domain: agent.example.com
+  port: 3333
+  
+proxy:
+  port: 6188:6189
