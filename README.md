@@ -120,11 +120,6 @@ See the installation and configuration sections above for setup details.
 Install the Elevon CLI in GitHub Actions with
 [`erqon/setup-elevon`](https://github.com/erqon/setup-elevon).
 
-## Project Status
-
-Elevon is beta software and currently targets deployments to individual Linux
-VMs. It is not yet a general-purpose hosted control plane.
-
 See [`DEVELOPMENT.md`](DEVELOPMENT.md) for workspace details and development
 checks. See [`TODO.md`](TODO.md) for planned work.
 
