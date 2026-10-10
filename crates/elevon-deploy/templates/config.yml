@@ -57,10 +57,10 @@ env:
 #   api:
 #     role: web
 #     healthcheck:
-#       interval: 5
-#       timeout: 30
+#       interval: 5  # The number of seconds between container health checks during deployments
+#       timeout: 30  # The number of seconds the deployment waits for a container to respond to the health check
 #       retries: 3
-#       stabilization: 5
+#       stabilization: 5  # The number of seconds deployment waits until the container is considered as healthy
 #       required_successes: 1
 #   worker:
 #     role: worker

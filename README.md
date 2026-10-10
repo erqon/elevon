@@ -9,10 +9,6 @@ It is designed for teams that want a simple, self-hosted deployment workflow
 without adopting a large managed platform or operating a full container
 orchestration system.
 
-> [!IMPORTANT]
-> Elevon is beta software.
-> Only Linux is supported for now.
-
 ## What It Is
 
 Elevon has two components:
@@ -101,8 +97,8 @@ Initialize and deploy an application with:
 ```bash
 elevon init
 elevon check
-elevon deploy --app web
-elevon rollback --app web
+elevon deploy
+elevon rollback
 ```
 
 The CLI uses `.elevon/deploy.yml` by default. Run `elevon --help` for the
@@ -123,11 +119,6 @@ See the installation and configuration sections above for setup details.
 
 Install the Elevon CLI in GitHub Actions with
 [`erqon/setup-elevon`](https://github.com/erqon/setup-elevon).
-
-## Project Status
-
-Elevon is beta software and currently targets deployments to individual Linux
-VMs. It is not yet a general-purpose hosted control plane.
 
 See [`DEVELOPMENT.md`](DEVELOPMENT.md) for workspace details and development
 checks. See [`TODO.md`](TODO.md) for planned work.
