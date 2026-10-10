@@ -106,7 +106,7 @@ mod tests {
     fn test_config_tests() -> Result<()> {
         Config::from_file("tests/config_test_1.yml").context("config_test_1")?;
         Config::from_file("tests/config_test_2.yml").context("config_test_2")?;
-        
+
         Ok(())
     }
 }
