@@ -5,7 +5,7 @@ use elevon_fs::agent::{AppEnvOptions, add_app_env, load_app_env};
 use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, IntoStaticStr};
 
-use crate::config::{Config, parse_port};
+use crate::config::{Config, ProxyConfig, parse_port};
 
 #[derive(Debug, Clone)]
 pub struct ElevonEnv {
@@ -21,9 +21,8 @@ impl Default for ElevonEnv {
         Self {
             agent_domain: None,
             agent_port: 3333,
-            proxy_http_port: 80,
-            // by doing Self::default at 56 this stays 443 even if it is not present in config
-            proxy_https_port: Some(443),
+            proxy_http_port: 6188,
+            proxy_https_port: None,
             turso_remote_url: None,
         }
     }
@@ -34,11 +33,9 @@ impl ElevonEnv {
         let proxy_ports = config
             .proxy
             .as_ref()
-            .map(|c| parse_port(c.port.clone()))
-            .unwrap_or(Ok((80, Some(443))))?;
-
-        tracing::info!("config: {:?}", config);
-        tracing::info!("proxy_ports: {:?}", proxy_ports);
+            .map(|c| c.port.clone())
+            .unwrap_or(ProxyConfig::default_ports());
+        let proxy_ports = parse_port(proxy_ports)?;
 
         let mut elevon_env = Self {
             agent_domain: Some(config.agent.domain.clone()),
@@ -48,6 +45,7 @@ impl ElevonEnv {
             turso_remote_url: config.turso_remote_url,
         };
         elevon_env.set_env_values()?;
+
         Ok(elevon_env)
     }
 
@@ -58,6 +56,15 @@ impl ElevonEnv {
         for key in ElevonEnvKey::all() {
             if let Some(value) = key.read_from(&vars) {
                 env.apply_value(key, value)?;
+            } else if key == ElevonEnvKey::ProxyHttpPort {
+                let default_ports = ProxyConfig::default_ports();
+                let (http_port, https_port) = parse_port(default_ports)?;
+
+                env.apply_value(ElevonEnvKey::ProxyHttpPort, http_port.to_string())?;
+                env.apply_value(
+                    ElevonEnvKey::ProxyHttpsPort,
+                    https_port.unwrap().to_string(),
+                )?;
             }
         }
 
@@ -115,7 +122,7 @@ impl ElevonEnv {
     }
 }
 
-#[derive(Debug, Copy, Clone, EnumIter, IntoStaticStr)]
+#[derive(Debug, Copy, Clone, EnumIter, IntoStaticStr, PartialEq, Eq)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
 pub enum ElevonEnvKey {
     AgentDomain,

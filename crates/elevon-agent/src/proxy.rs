@@ -186,7 +186,6 @@ pub fn run_proxy(env: &ElevonEnv, upgrade: bool) -> anyhow::Result<()> {
     // In development, run HTTP on port 6188.
     // If ports are defined in the config file, they are used.
     // Otherwise, runs HTTP on 80 and HTTPS on 443.
-    tracing::info!("env: {:?}", env);
     let (http_port, https_port): (String, Option<String>) = if cfg!(debug_assertions) {
         ("6188".to_string(), None)
     } else {

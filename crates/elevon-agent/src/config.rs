@@ -11,14 +11,19 @@ pub struct AgentConfig {
     pub tls: Option<TlsConfig>,
 }
 
-fn default_ports() -> String {
-    "80:443".to_string()
-}
-
 #[derive(Debug, Deserialize)]
 pub struct ProxyConfig {
-    #[serde(default = "default_ports", deserialize_with = "coerce_string_port")]
+    #[serde(
+        default = "ProxyConfig::default_ports",
+        deserialize_with = "coerce_string_port"
+    )]
     pub port: String,
+}
+
+impl ProxyConfig {
+    pub fn default_ports() -> String {
+        "80:443".to_string()
+    }
 }
 
 fn coerce_string_port<'de, D>(deserializer: D) -> Result<String, D::Error>
@@ -100,12 +105,7 @@ mod tests {
     #[test]
     fn test_config_tests() -> Result<()> {
         Config::from_file("tests/config_test_1.yml").context("config_test_1")?;
-        let config = Config::from_file("tests/config_test_2.yml").context("config_test_2")?;
-
-        if let Some(proxy_confing) = config.proxy {
-            let proxy_ports = parse_port(proxy_confing.port)?;
-            println!("ports: {:?}", proxy_ports);
-        }
+        Config::from_file("tests/config_test_2.yml").context("config_test_2")?;
         
         Ok(())
     }
