@@ -4,21 +4,26 @@ use elevon_contracts::deploy::{TlsConfig, TlsType};
 use elevon_fs::agent::{TlsOptions, write_tls_file};
 use serde::{Deserialize, Deserializer};
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct AgentConfig {
     pub domain: String,
     pub port: u16,
     pub tls: Option<TlsConfig>,
 }
 
-fn default_ports() -> String {
-    "80:443".to_string()
+#[derive(Debug, Deserialize)]
+pub struct ProxyConfig {
+    #[serde(
+        default = "ProxyConfig::default_ports",
+        deserialize_with = "coerce_string_port"
+    )]
+    pub port: String,
 }
 
-#[derive(Deserialize)]
-pub struct ProxyConfig {
-    #[serde(default = "default_ports", deserialize_with = "coerce_string_port")]
-    pub port: String,
+impl ProxyConfig {
+    pub fn default_ports() -> String {
+        "80:443".to_string()
+    }
 }
 
 fn coerce_string_port<'de, D>(deserializer: D) -> Result<String, D::Error>
@@ -55,7 +60,7 @@ pub fn parse_port(ports: String) -> Result<(u16, Option<u16>)> {
     Ok((http, https))
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Config {
     pub agent: AgentConfig,
     pub proxy: Option<ProxyConfig>,

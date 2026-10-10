@@ -63,6 +63,8 @@ where
             }
 
             if let Some(payload) = line.strip_prefix("data: ") {
+                tracing::debug!("log_stream_events-data: {}", payload);
+
                 if payload == "[DONE]" {
                     tracing::debug!("Stream sent [DONE] payload");
                     continue;
