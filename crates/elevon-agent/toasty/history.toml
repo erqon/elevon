@@ -1,16 +1,6 @@
 version = 1
 
 [[migrations]]
-id = 4908178036267795570
-name = "20261007_203806_migration.sql"
-snapshot_name = "20261007_203806_snapshot.toml"
-
-[[migrations]]
-id = 5199266240570011529
-name = "20261007_220535_migration.sql"
-snapshot_name = "20261007_220535_snapshot.toml"
-
-[[migrations]]
-id = 2367833780870774970
-name = "20261010_061637_migration.sql"
-snapshot_name = "20261010_061637_snapshot.toml"
+id = 5504648529021142369
+name = "20261010_063540_migration.sql"
+snapshot_name = "20261010_063540_snapshot.toml"
