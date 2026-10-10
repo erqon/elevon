@@ -9,10 +9,6 @@ It is designed for teams that want a simple, self-hosted deployment workflow
 without adopting a large managed platform or operating a full container
 orchestration system.
 
-> [!IMPORTANT]
-> Elevon is beta software.
-> Only Linux is supported for now.
-
 ## What It Is
 
 Elevon has two components:
@@ -101,8 +97,8 @@ Initialize and deploy an application with:
 ```bash
 elevon init
 elevon check
-elevon deploy --app web
-elevon rollback --app web
+elevon deploy
+elevon rollback
 ```
 
 The CLI uses `.elevon/deploy.yml` by default. Run `elevon --help` for the

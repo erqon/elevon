@@ -56,7 +56,6 @@ impl ApiState {
     pub async fn get_running_route_containers(&self) -> Result<Vec<DeployAppData>> {
         let mut db = self.db.get();
 
-        // TODO: Add some kind of background checker for Restaring and Pending deployments to check their health and remove on failure.
         let deployments = Deployment::filter(
             Deployment::fields()
                 .status()
