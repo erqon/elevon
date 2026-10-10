@@ -54,7 +54,7 @@ impl Socket {
         let mut writer = FramedWrite::new(stream, LengthDelimitedCodec::new());
 
         let payload_bytes = serde_json::to_vec(&msg)?;
-        writer.send(payload_bytes.into()).await?;
+        writer.send(bytes::Bytes::from(payload_bytes)).await?;
 
         Ok(())
     }
